@@ -99,13 +99,20 @@ func (s *service) mapConfigToStruct(v *viper.Viper) (Config, error) {
 	decoderConfig := &mapstructure.DecoderConfig{
 		Metadata:         nil,
 		Result:           &config,
-		TagName:          "yaml",
+		TagName:          "mapstructure",
 		WeaklyTypedInput: true,
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			mapstructure.StringToTimeDurationHookFunc(),
 			mapstructure.StringToSliceHookFunc(","),
 			envVarDecodeHook(),
 		),
+		MatchName: func(mapKey, fieldName string) bool {
+			snakeToField := strings.Replace(mapKey, "_", "", -1)
+			fieldToSnake := strings.ToLower(fieldName)
+			return strings.EqualFold(snakeToField, fieldToSnake) ||
+				strings.EqualFold(mapKey, fieldName) ||
+				strings.EqualFold(snakeToField, fieldToSnake)
+		},
 	}
 
 	decoder, err := mapstructure.NewDecoder(decoderConfig)
