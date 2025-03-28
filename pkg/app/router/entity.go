@@ -33,14 +33,20 @@ type App struct {
 }
 
 type Config struct {
-	Port            string        `mapstructure:"port"`
-	Name            string        `mapstructure:"name"`
-	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
-	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
-	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
-	EnableCORS      bool          `mapstructure:"enable_cors"`
-	TrustedProxies  []string      `mapstructure:"trusted_proxies"`
+	Port             string        `mapstructure:"port"`
+	Name             string        `mapstructure:"name"`
+	ReadTimeout      time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout     time.Duration `mapstructure:"write_timeout"`
+	IdleTimeout      time.Duration `mapstructure:"idle_timeout"`
+	ShutdownTimeout  time.Duration `mapstructure:"shutdown_timeout"`
+	EnableCORS       bool          `mapstructure:"enable_cors"`
+	AllowOrigins     []string      `mapstructure:"allow_origins"`
+	AllowMethods     []string      `mapstructure:"allow_methods"`
+	AllowHeaders     []string      `mapstructure:"allow_headers"`
+	ExposedHeaders   []string      `mapstructure:"exposed_headers"`
+	AllowCredentials bool          `mapstructure:"allow_credentials"`
+	AllowMaxAge      int           `mapstructure:"allow_max_age"`
+	TrustedProxies   []string      `mapstructure:"trusted_proxies"`
 }
 
 type RouterOption func(*App)
