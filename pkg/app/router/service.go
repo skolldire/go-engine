@@ -106,6 +106,14 @@ func (a *App) Mount(pattern string, handler http.Handler) {
 	a.router.Mount(pattern, handler)
 }
 
+func (a *App) Use(middlewares ...func(http.Handler) http.Handler) {
+	a.router.Use(middlewares...)
+}
+
+func (a *App) HandleFunc(pattern string, handlerFn http.HandlerFunc) {
+	a.router.HandleFunc(pattern, handlerFn)
+}
+
 func (a *App) AddRoute(method, pattern string, handler http.HandlerFunc) {
 	a.router.Method(method, pattern, handler)
 }

@@ -82,101 +82,174 @@ func main() {
 package main
 
 import (
-    "context"
-    "fmt"
-    "os"
-    "os/signal"
-    "syscall"
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-    "github.com/skolldire/go-engine/pkg/app"
-    "miproyecto/internal/handlers"
-    "miproyecto/internal/repositories"
-    "miproyecto/internal/usecases"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+
+	"github.com/skolldire/go-engine/pkg/app"
+	"github.com/skolldire/miapp/internal/handlers"
 )
 
-// Aplicación personalizada
-type Aplicacion struct {
-    engine       *app.Engine
-    repositories *repositories.Container
-    usecases     *usecases.Container
-    handlers     *handlers.Container
-}
-
 func main() {
-    // Crear contexto con cancelación
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
+	// Crear una nueva instancia de la aplicación
+	aplicacion := app.NewApp()
 
-    // Configurar señales
-    configurarSenales(cancel)
+	// Configurar el contexto (opcional)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-    // Construir aplicación
-    app, err := construirAplicacion(ctx)
-    if err != nil {
-        fmt.Printf("Error: %v\n", err)
-        os.Exit(1)
-    }
+	aplicacion = aplicacion.SetContext(ctx)
 
-    // Ejecutar
-    if err := app.Run(); err != nil {
-        fmt.Printf("Error: %v\n", err)
-        os.Exit(1)
-    }
+	// Cargar configuraciones
+	aplicacion = aplicacion.GetConfigs()
+	if len(aplicacion.Engine.GetErrors()) > 0 {
+		log.Fatalf("Error al cargar configuración: %v", aplicacion.Engine.GetErrors())
+	}
+
+	// Inicializar servicios externos (bases de datos, clientes HTTP, etc.)
+	aplicacion = aplicacion.Init()
+	if len(aplicacion.Engine.GetErrors()) > 0 {
+		log.Fatalf("Error al inicializar servicios: %v", aplicacion.Engine.GetErrors())
+	}
+
+	// Inicializar el router
+	aplicacion = aplicacion.InitializeRouter()
+
+	// Configurar middleware común
+	aplicacion = configurarMiddleware(aplicacion)
+
+	// Configurar cierre controlado
+	aplicacion = configurarCierreControlado(aplicacion)
+
+	// Registrar rutas específicas de la aplicación
+	registrarRutas(aplicacion)
+
+	// Construir y ejecutar la aplicación
+	Engine := aplicacion.Build()
+
+	if err := Engine.Run(); err != nil {
+		log.Fatalf("Error al iniciar la aplicación: %v", err)
+	}
 }
 
-func configurarSenales(cancel context.CancelFunc) {
-    sigCh := make(chan os.Signal, 1)
-    signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-    go func() {
-        sig := <-sigCh
-        fmt.Printf("Señal %v recibida, iniciando cierre controlado\n", sig)
-        cancel()
-    }()
+func configurarMiddleware(a *app.App) *app.App {
+	// Añadir middleware para todas las rutas
+	a.Engine.Router.Use(middlewareLogger(a.Engine.Log))
+	a.Engine.Router.Use(middlewareCORS())
+
+	return a
 }
 
-func construirAplicacion(ctx context.Context) (*Aplicacion, error) {
-    // Crear engine
-    builder := app.NewEngineBuilder()
-    builder.SetContext(ctx)
+func configurarCierreControlado(a *app.App) *app.App {
+	go func() {
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-signalChan
 
-    // Inicializar componentes
-    appEngine := builder.LoadConfig().
-        InitRepositories().
-        InitUseCases().
-        InitHandlers().
-        InitRoutes().
-        Build()
+		a.engine.Log.Infof("Señal recibida: %s, iniciando cierre controlado", sig.String())
 
-    // Verificar errores
-    engineObj, ok := appEngine.(*app.Engine)
-    if !ok {
-        return nil, fmt.Errorf("tipo de engine inesperado")
-    }
+		// Tiempo máximo para cierre
+		timeout := 30 * time.Second
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
 
-    if errs := engineObj.GetErrors(); len(errs) > 0 {
-        return nil, errs[0]
-    }
+		// Cerrar conexiones
+		if a.engine.RedisClient != nil {
+			a.engine.RedisClient.Close()
+		}
 
-    // Construir aplicación personalizada
-    aplicacion := &Aplicacion{
-        engine: engineObj,
-    }
+		if a.engine.SqlConnection != nil {
+			a.engine.SqlConnection.Close()
+		}
 
-    // Inicializar componentes
-    if err := aplicacion.inicializarComponentes(); err != nil {
-        return nil, err
-    }
+		a.engine.Log.Info("Cierre controlado completado")
+		os.Exit(0)
+	}()
 
-    return aplicacion, nil
+	return a
 }
 
-func (a *Aplicacion) inicializarComponentes() error {
-    // Implementar inicialización de repositorios, casos de uso y handlers
-    return nil
+func registrarRutas(a *app.App) {
+	usuarioHandler := handlers.NewUsuarioHandler(
+		a.engine.SqlConnection,
+		a.engine.Log,
+	)
+
+	// Registrar rutas
+	router := a.engine.Router
+
+	// Grupo de rutas API
+	api := router.Group("/api")
+	{
+		// Rutas de usuarios
+		usuarios := api.Group("/usuarios")
+		{
+			usuarios.GET("", usuarioHandler.ListarUsuarios)
+			usuarios.GET("/:id", usuarioHandler.ObtenerUsuario)
+			usuarios.POST("", usuarioHandler.CrearUsuario)
+			usuarios.PUT("/:id", usuarioHandler.ActualizarUsuario)
+			usuarios.DELETE("/:id", usuarioHandler.EliminarUsuario)
+		}
+
+		// Otras rutas...
+	}
+
+	// Ruta de health check
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
 }
 
-func (a *Aplicacion) Run() error {
-    return a.engine.Run()
+// middlewareLogger crea un middleware para registrar información sobre cada solicitud HTTP
+func middlewareLogger(log logger.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			path := r.URL.Path
+
+			// Wrapper para capturar el código de estado
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+
+			// Procesa la solicitud
+			next.ServeHTTP(ww, r)
+
+			// Después de procesar
+			latency := time.Since(start)
+			statusCode := ww.Status()
+			if statusCode == 0 {
+				statusCode = http.StatusOK // Por defecto 200 si no se establece
+			}
+
+			// Registrar en el log
+			log.Infof("| %3d | %13v | %15s | %-7s %s",
+				statusCode,
+				latency,
+				r.RemoteAddr,
+				r.Method,
+				path,
+			)
+		})
+	}
+}
+
+// middlewareCORS configura las opciones CORS para la aplicación
+func middlewareCORS() func(http.Handler) http.Handler {
+	return cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"},
+		ExposedHeaders:   []string{"Content-Length", "Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           int((12 * time.Hour).Seconds()),
+	})
 }
 ```
 
@@ -294,7 +367,7 @@ processors:
 │   └── platform
 │       └── description.go
 ├── kit
-│   └���─ description.go
+│   └─ description.go
 ├── pkg
 │   └── description.go
 └── scripts

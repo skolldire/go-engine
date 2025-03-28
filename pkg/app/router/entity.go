@@ -18,6 +18,7 @@ const (
 
 type Service interface {
 	Run() error
+	Use(middlewares ...func(http.Handler) http.Handler)
 	Mount(pattern string, handler http.Handler)
 	AddRoute(method, pattern string, handler http.HandlerFunc)
 	Router() *chi.Mux
