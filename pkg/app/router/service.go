@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -22,12 +23,6 @@ var _ Service = (*App)(nil)
 func WithLogger(logger logger.Service) RouterOption {
 	return func(a *App) {
 		a.logger = logger
-	}
-}
-
-func WithMiddleware(middleware func(http.Handler) http.Handler) RouterOption {
-	return func(a *App) {
-		a.router.Use(middleware)
 	}
 }
 
@@ -79,12 +74,12 @@ func (a *App) configureMiddlewares() {
 	a.router.Use(middleware.Compress(5))
 	if a.config.EnableCORS {
 		a.router.Use(cors.Handler(cors.Options{
-			AllowedOrigins:   a.config.AllowOrigins,
-			AllowedMethods:   a.config.AllowMethods,
-			AllowedHeaders:   a.config.AllowHeaders,
-			ExposedHeaders:   a.config.ExposedHeaders,
-			AllowCredentials: a.config.AllowCredentials,
-			MaxAge:           a.config.AllowMaxAge,
+			AllowedOrigins:   a.config.CorsConfig.AllowOrigins,
+			AllowedMethods:   a.config.CorsConfig.AllowMethods,
+			AllowedHeaders:   a.config.CorsConfig.AllowHeaders,
+			ExposedHeaders:   a.config.CorsConfig.ExposedHeaders,
+			AllowCredentials: a.config.CorsConfig.AllowCredentials,
+			MaxAge:           a.config.CorsConfig.AllowMaxAge,
 		}))
 	}
 
@@ -99,6 +94,12 @@ func (a *App) configureBasicRoutes() {
 	a.router.Get("/ping", ping.NewService().Apply())
 	if !app_profile.IsProdProfile() {
 		registerPprofRoutes(a.router)
+	}
+}
+
+func (a *App) WithMiddleware(middleware func(http.Handler) http.Handler) RouterOption {
+	return func(a *App) {
+		a.router.Use(middleware)
 	}
 }
 
@@ -134,7 +135,7 @@ func (a *App) Run() error {
 		a.logger.Info(ctx, "Iniciando servidor", map[string]interface{}{
 			"address": a.server.Addr,
 		})
-		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errorCh <- err
 		}
 	}()
@@ -165,15 +166,15 @@ func (a *App) Run() error {
 
 func registerPprofRoutes(router chi.Router) {
 	router.Route("/debug/pprof", func(r chi.Router) {
-		r.Get("/", http.HandlerFunc(pprof.Index))
-		r.Get("/cmdline", http.HandlerFunc(pprof.Cmdline))
-		r.Get("/profile", http.HandlerFunc(pprof.Profile))
-		r.Get("/symbol", http.HandlerFunc(pprof.Symbol))
-		r.Get("/trace", http.HandlerFunc(pprof.Trace))
-		r.Get("/goroutine", http.HandlerFunc(pprof.Handler("goroutine").ServeHTTP))
-		r.Get("/heap", http.HandlerFunc(pprof.Handler("heap").ServeHTTP))
-		r.Get("/threadcreate", http.HandlerFunc(pprof.Handler("threadcreate").ServeHTTP))
-		r.Get("/block", http.HandlerFunc(pprof.Handler("block").ServeHTTP))
+		r.Get("/", pprof.Index)
+		r.Get("/cmdline", pprof.Cmdline)
+		r.Get("/profile", pprof.Profile)
+		r.Get("/symbol", pprof.Symbol)
+		r.Get("/trace", pprof.Trace)
+		r.Get("/goroutine", pprof.Handler("goroutine").ServeHTTP)
+		r.Get("/heap", pprof.Handler("heap").ServeHTTP)
+		r.Get("/threadcreate", pprof.Handler("threadcreate").ServeHTTP)
+		r.Get("/block", pprof.Handler("block").ServeHTTP)
 	})
 }
 
