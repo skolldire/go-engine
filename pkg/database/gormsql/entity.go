@@ -4,9 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"gorm.io/gorm"
 )
 
@@ -32,29 +31,28 @@ var (
 )
 
 type Config struct {
-	Type               string                  `mapstructure:"type"`
-	Host               string                  `mapstructure:"host"`
-	Port               int                     `mapstructure:"port"`
-	Username           string                  `mapstructure:"username"`
-	Password           string                  `mapstructure:"password"`
-	Database           string                  `mapstructure:"database"`
-	SSLMode            string                  `mapstructure:"sslmode"`
-	MaxIdleConnections int                     `mapstructure:"max_idle_connections"`
-	MaxOpenConnections int                     `mapstructure:"max_open_connections"`
-	ConnMaxLifetime    time.Duration           `mapstructure:"conn_max_lifetime"`
-	EnableLogging      bool                    `mapstructure:"enable_logging"`
-	LogLevel           string                  `mapstructure:"log_level"`
-	TablePrefix        string                  `mapstructure:"table_prefix"`
-	AutoMigrate        bool                    `mapstructure:"auto_migrate"`
-	RetryConfig        *retry_backoff.Config   `mapstructure:"retry_config"`
-	CircuitBreakerCfg  *circuit_breaker.Config `mapstructure:"circuit_breaker_config"`
+	Type               string            `mapstructure:"type" json:"type"`
+	Host               string            `mapstructure:"host" json:"host"`
+	Port               int               `mapstructure:"port" json:"port"`
+	Username           string            `mapstructure:"username" json:"username"`
+	Password           string            `mapstructure:"password" json:"password"`
+	Database           string            `mapstructure:"database" json:"database"`
+	SSLMode            string            `mapstructure:"ssl_mode" json:"ssl_modeMode"`
+	MaxIdleConnections int               `mapstructure:"max_idle_connections" json:"max_idle_connections"`
+	MaxOpenConnections int               `mapstructure:"max_open_connections" json:"max_open_connections"`
+	ConnMaxLifetime    time.Duration     `mapstructure:"conn_max_lifetime" json:"conn_max_lifetime"`
+	EnableLogging      bool              `mapstructure:"enable_logging" json:"enable_logging"`
+	LogLevel           string            `mapstructure:"log_level" json:"log_level"`
+	TablePrefix        string            `mapstructure:"table_prefix" json:"table_prefix"`
+	AutoMigrate        bool              `mapstructure:"auto_migrate" json:"auto_migrate"`
+	WithResilience     bool              `mapstructure:"with_resilience" json:"with_resilience"`
+	Resilience         resilience.Config `mapstructure:"resilience" json:"resilience"`
 }
 
 type DBClient struct {
-	db             *gorm.DB
-	logger         logger.Service
-	logging        bool
-	retryer        *retry_backoff.Retryer
-	circuitBreaker *circuit_breaker.CircuitBreaker
-	dbType         string
+	db         *gorm.DB
+	logger     logger.Service
+	logging    bool
+	resilience *resilience.Service
+	dbType     string
 }

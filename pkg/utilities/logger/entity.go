@@ -9,13 +9,13 @@ import (
 
 // Config contiene la configuración para el servicio de logger
 type Config struct {
-	Level            string           `mapstructure:"level"`
-	Path             string           `mapstructure:"path"`
-	Format           string           `mapstructure:"format"`
-	ReportCaller     bool             `mapstructure:"report_caller"`
-	ExitFunc         func(int)        `mapstructure:"-"`
-	OutputWriters    []io.Writer      `mapstructure:"-"`
-	ContextExtractor ContextExtractor `mapstructure:"-"`
+	Level            string           `mapstructure:"level" json:"level"`
+	Path             string           `mapstructure:"path" json:"path"`
+	Format           string           `mapstructure:"format" json:"format"`
+	ReportCaller     bool             `mapstructure:"report_caller" json:"report_caller"`
+	ExitFunc         func(int)        `mapstructure:"-" json:"-"`
+	OutputWriters    []io.Writer      `mapstructure:"-" json:"-"`
+	ContextExtractor ContextExtractor `mapstructure:"-" json:"-"`
 }
 
 type ContextExtractor func(ctx context.Context) map[string]interface{}

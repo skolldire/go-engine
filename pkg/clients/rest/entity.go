@@ -4,11 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
-
 	"github.com/go-resty/resty/v2"
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 const (
@@ -19,11 +17,11 @@ const (
 )
 
 type Config struct {
-	BaseURL           string                  `mapstructure:"base_url"`
-	TimeOut           time.Duration           `mapstructure:"timeout"`
-	EnableLogging     bool                    `mapstructure:"enable_logging"`
-	RetryConfig       *retry_backoff.Config   `mapstructure:"retry_config"`
-	CircuitBreakerCfg *circuit_breaker.Config `mapstructure:"circuit_breaker_config"`
+	BaseURL        string            `mapstructure:"base_url" json:"base_url"`
+	TimeOut        time.Duration     `mapstructure:"timeout" json:"time_out"`
+	EnableLogging  bool              `mapstructure:"enable_logging" json:"enable_logging"`
+	WithResilience bool              `mapstructure:"with_resilience" json:"with_resilience"`
+	Resilience     resilience.Config `mapstructure:"resilience" json:"resilience"`
 }
 
 type Service interface {
@@ -36,10 +34,9 @@ type Service interface {
 }
 
 type client struct {
-	baseURL        string
-	httpClient     *resty.Client
-	retryer        *retry_backoff.Retryer
-	circuitBreaker *circuit_breaker.CircuitBreaker
-	logger         logger.Service
-	logging        bool
+	baseURL    string
+	httpClient *resty.Client
+	resilience *resilience.Service
+	logger     logger.Service
+	logging    bool
 }

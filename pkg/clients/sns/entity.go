@@ -7,9 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 const (
@@ -18,36 +17,35 @@ const (
 
 // Errores comunes
 var (
-	ErrPublicacion  = errors.New("error al publicar mensaje")
-	ErrSuscripcion  = errors.New("error al crear suscripción")
-	ErrCrearTema    = errors.New("error al crear tema")
-	ErrEliminarTema = errors.New("error al eliminar tema")
-	ErrListarTemas  = errors.New("error al listar temas")
+	ErrPublication  = errors.New("error al publicar mensaje")
+	ErrSubscription = errors.New("error al crear suscripción")
+	ErrCreateTopic  = errors.New("error al crear tema")
+	ErrDeleteTopic  = errors.New("error al eliminar tema")
+	ErrListTopics   = errors.New("error al listar temas")
 	ErrInvalidInput = errors.New("entrada inválida")
 )
 
 type Config struct {
-	BaseEndpoint      string                  `mapstructure:"base_endpoint"`
-	EnableLogging     bool                    `mapstructure:"enable_logging"`
-	RetryConfig       *retry_backoff.Config   `mapstructure:"retry_config"`
-	CircuitBreakerCfg *circuit_breaker.Config `mapstructure:"circuit_breaker_config"`
+	BaseEndpoint   string            `mapstructure:"base_endpoint" json:"base_endpoint"`
+	EnableLogging  bool              `mapstructure:"enable_logging" json:"enable_logging"`
+	WithResilience bool              `mapstructure:"with_resilience" json:"with_resilience"`
+	Resilience     resilience.Config `mapstructure:"resilience" json:"resilience"`
 }
 
 type Service interface {
-	CrearTema(ctx context.Context, nombre string, atributos map[string]string) (string, error)
-	EliminarTema(ctx context.Context, arn string) error
-	ListarTemas(ctx context.Context) ([]string, error)
-	PublicarMensaje(ctx context.Context, temaArn string, mensaje string, atributos map[string]types.MessageAttributeValue) (string, error)
-	PublicarMensajeJSON(ctx context.Context, temaArn string, mensaje interface{}, atributos map[string]types.MessageAttributeValue) (string, error)
-	CrearSuscripcion(ctx context.Context, temaArn, protocolo, endpoint string) (string, error)
-	EliminarSuscripcion(ctx context.Context, suscripcionArn string) error
-	HabilitarLogging(activar bool)
+	CreateTopic(ctx context.Context, name string, atributos map[string]string) (string, error)
+	DeleteTopic(ctx context.Context, arn string) error
+	GetTopics(ctx context.Context) ([]string, error)
+	PublishMsj(ctx context.Context, temaArn string, msj string, atributos map[string]types.MessageAttributeValue) (string, error)
+	PublishJSON(ctx context.Context, temaArn string, msj interface{}, atributos map[string]types.MessageAttributeValue) (string, error)
+	CreateSubscription(ctx context.Context, temaArn, protocolo, endpoint string) (string, error)
+	DeleteSubscription(ctx context.Context, subscriptionArn string) error
+	EnableLogging(activar bool)
 }
 
 type Cliente struct {
-	cliente        *sns.Client
-	logger         logger.Service
-	logging        bool
-	retryer        *retry_backoff.Retryer
-	circuitBreaker *circuit_breaker.CircuitBreaker
+	cliente    *sns.Client
+	logger     logger.Service
+	logging    bool
+	resilience *resilience.Service
 }

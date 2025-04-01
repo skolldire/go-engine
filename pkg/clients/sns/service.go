@@ -8,12 +8,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
-func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
+func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	snsClient := sns.NewFromConfig(acf, func(o *sns.Options) {
 		if cfg.BaseEndpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.BaseEndpoint)
@@ -22,22 +21,12 @@ func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
 
 	cliente := &Cliente{
 		cliente: snsClient,
-		logger:  l,
+		logger:  log,
 		logging: cfg.EnableLogging,
 	}
 
-	if cfg.RetryConfig != nil {
-		cliente.retryer = retry_backoff.NewRetryer(retry_backoff.Dependencies{
-			RetryConfig: cfg.RetryConfig,
-			Logger:      l,
-		})
-	}
-
-	if cfg.CircuitBreakerCfg != nil {
-		cliente.circuitBreaker = circuit_breaker.NewCircuitBreaker(circuit_breaker.Dependencies{
-			Config: cfg.CircuitBreakerCfg,
-			Log:    l,
-		})
+	if cfg.WithResilience {
+		cliente.resilience = resilience.NewResilienceService(cfg.Resilience, log)
 	}
 
 	if cliente.logging {
@@ -45,13 +34,20 @@ func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
 		if endpoint == "" {
 			endpoint = "AWS predeterminado"
 		}
-		l.Debug(context.Background(), "Cliente SNS inicializado",
+		log.Debug(context.Background(), "Cliente SNS inicializado",
 			map[string]interface{}{
 				"endpoint": endpoint,
 			})
 	}
 
 	return cliente
+}
+
+func (c *Cliente) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	defer cancel()
+
+	return c.executeOperation(ctx, operationName, operation)
 }
 
 func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -61,28 +57,33 @@ func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context
 	return context.WithCancel(ctx)
 }
 
-func (c *Cliente) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
-	defer cancel()
-
-	if c.circuitBreaker != nil && c.retryer != nil {
-		return c.executeWithCircuitBreakerAndRetry(ctx, operationName, operation)
-	}
-
-	if c.circuitBreaker != nil {
-		return c.executeWithCircuitBreaker(ctx, operationName, operation)
-	}
-
-	if c.retryer != nil {
-		return c.executeWithRetry(ctx, operationName, operation)
-	}
-
-	return c.executeWithLogging(ctx, operationName, operation)
-}
-
-func (c *Cliente) executeWithLogging(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+func (c *Cliente) executeOperation(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{"operacion": operationName, "servicio": "SNS"}
 
+	if c.resilience != nil {
+		return c.executeWithResilience(ctx, operationName, operation, logFields)
+	}
+
+	return c.executeWithLogging(ctx, operationName, operation, logFields)
+}
+
+func (c *Cliente) executeWithResilience(ctx context.Context, operationName string, operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	if c.logging {
+		c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación SNS con resiliencia: %s", operationName), logFields)
+	}
+
+	result, err := c.resilience.Execute(ctx, operation)
+
+	if err != nil && c.logging {
+		c.logger.Error(ctx, err, logFields)
+	} else if c.logging {
+		c.logger.Debug(ctx, fmt.Sprintf("Operación SNS completada con resiliencia: %s", operationName), logFields)
+	}
+
+	return result, err
+}
+
+func (c *Cliente) executeWithLogging(ctx context.Context, operationName string, operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación SNS: %s", operationName), logFields)
 	}
@@ -98,37 +99,7 @@ func (c *Cliente) executeWithLogging(ctx context.Context, operationName string, 
 	return result, err
 }
 
-func (c *Cliente) executeWithCircuitBreakerAndRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return c.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return c.executeWithRetryInner(ctx, operationName, operation)
-	})
-}
-
-func (c *Cliente) executeWithCircuitBreaker(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return c.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return c.executeWithLogging(ctx, operationName, operation)
-	})
-}
-
-func (c *Cliente) executeWithRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return c.executeWithRetryInner(ctx, operationName, operation)
-}
-
-func (c *Cliente) executeWithRetryInner(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	var result interface{}
-
-	err := c.retryer.Do(ctx, func() error {
-		res, opErr := c.executeWithLogging(ctx, operationName, operation)
-		if opErr == nil {
-			result = res
-		}
-		return opErr
-	})
-
-	return result, err
-}
-
-func (c *Cliente) CrearTema(ctx context.Context, nombre string, atributos map[string]string) (string, error) {
+func (c *Cliente) CreateTopic(ctx context.Context, nombre string, atributos map[string]string) (string, error) {
 	if nombre == "" {
 		return "", ErrInvalidInput
 	}
@@ -141,43 +112,43 @@ func (c *Cliente) CrearTema(ctx context.Context, nombre string, atributos map[st
 		input.Attributes = atributos
 	}
 
-	result, err := c.execute(ctx, "CrearTema", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreateTopic", func() (interface{}, error) {
 		return c.cliente.CreateTopic(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCrearTema.Error())
+		return "", c.logger.WrapError(err, ErrCreateTopic.Error())
 	}
 
 	response := result.(*sns.CreateTopicOutput)
 	return *response.TopicArn, nil
 }
 
-func (c *Cliente) EliminarTema(ctx context.Context, arn string) error {
+func (c *Cliente) DeleteTopic(ctx context.Context, arn string) error {
 	if arn == "" {
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "EliminarTema", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteTopic", func() (interface{}, error) {
 		return c.cliente.DeleteTopic(ctx, &sns.DeleteTopicInput{
 			TopicArn: aws.String(arn),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, ErrEliminarTema.Error())
+		return c.logger.WrapError(err, ErrDeleteTopic.Error())
 	}
 
 	return nil
 }
 
-func (c *Cliente) ListarTemas(ctx context.Context) ([]string, error) {
-	result, err := c.execute(ctx, "ListarTemas", func() (interface{}, error) {
+func (c *Cliente) GetTopics(ctx context.Context) ([]string, error) {
+	result, err := c.execute(ctx, "GetTopics", func() (interface{}, error) {
 		return c.cliente.ListTopics(ctx, &sns.ListTopicsInput{})
 	})
 
 	if err != nil {
-		return nil, c.logger.WrapError(err, ErrListarTemas.Error())
+		return nil, c.logger.WrapError(err, ErrListTopics.Error())
 	}
 
 	response := result.(*sns.ListTopicsOutput)
@@ -190,7 +161,7 @@ func (c *Cliente) ListarTemas(ctx context.Context) ([]string, error) {
 	return temas, nil
 }
 
-func (c *Cliente) PublicarMensaje(ctx context.Context, temaArn string, mensaje string, atributos map[string]types.MessageAttributeValue) (string, error) {
+func (c *Cliente) PublishMsj(ctx context.Context, temaArn string, mensaje string, atributos map[string]types.MessageAttributeValue) (string, error) {
 	if temaArn == "" || mensaje == "" {
 		return "", ErrInvalidInput
 	}
@@ -201,19 +172,19 @@ func (c *Cliente) PublicarMensaje(ctx context.Context, temaArn string, mensaje s
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "PublicarMensaje", func() (interface{}, error) {
+	result, err := c.execute(ctx, "PublishMsj", func() (interface{}, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublicacion.Error())
+		return "", c.logger.WrapError(err, ErrPublication.Error())
 	}
 
 	response := result.(*sns.PublishOutput)
 	return *response.MessageId, nil
 }
 
-func (c *Cliente) PublicarMensajeJSON(ctx context.Context, temaArn string, mensaje interface{}, atributos map[string]types.MessageAttributeValue) (string, error) {
+func (c *Cliente) PublishJSON(ctx context.Context, temaArn string, mensaje interface{}, atributos map[string]types.MessageAttributeValue) (string, error) {
 	if temaArn == "" || mensaje == nil {
 		return "", ErrInvalidInput
 	}
@@ -230,19 +201,19 @@ func (c *Cliente) PublicarMensajeJSON(ctx context.Context, temaArn string, mensa
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "PublicarMensajeJSON", func() (interface{}, error) {
+	result, err := c.execute(ctx, "PublishJSON", func() (interface{}, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublicacion.Error())
+		return "", c.logger.WrapError(err, ErrPublication.Error())
 	}
 
 	response := result.(*sns.PublishOutput)
 	return *response.MessageId, nil
 }
 
-func (c *Cliente) CrearSuscripcion(ctx context.Context, temaArn, protocolo, endpoint string) (string, error) {
+func (c *Cliente) CreateSubscription(ctx context.Context, temaArn, protocolo, endpoint string) (string, error) {
 	if temaArn == "" || protocolo == "" || endpoint == "" {
 		return "", ErrInvalidInput
 	}
@@ -254,36 +225,36 @@ func (c *Cliente) CrearSuscripcion(ctx context.Context, temaArn, protocolo, endp
 		ReturnSubscriptionArn: true,
 	}
 
-	result, err := c.execute(ctx, "CrearSuscripcion", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreateSubscription", func() (interface{}, error) {
 		return c.cliente.Subscribe(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrSuscripcion.Error())
+		return "", c.logger.WrapError(err, ErrSubscription.Error())
 	}
 
 	response := result.(*sns.SubscribeOutput)
 	return *response.SubscriptionArn, nil
 }
 
-func (c *Cliente) EliminarSuscripcion(ctx context.Context, suscripcionArn string) error {
+func (c *Cliente) DeleteSubscription(ctx context.Context, suscripcionArn string) error {
 	if suscripcionArn == "" {
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "EliminarSuscripcion", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteSubscription", func() (interface{}, error) {
 		return c.cliente.Unsubscribe(ctx, &sns.UnsubscribeInput{
 			SubscriptionArn: aws.String(suscripcionArn),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, ErrSuscripcion.Error())
+		return c.logger.WrapError(err, ErrSubscription.Error())
 	}
 
 	return nil
 }
 
-func (c *Cliente) HabilitarLogging(activar bool) {
+func (c *Cliente) EnableLogging(activar bool) {
 	c.logging = activar
 }

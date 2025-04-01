@@ -14,21 +14,21 @@ var (
 	ErrOperationFailed = errors.New("operación falló después de reintentos y circuit breaker")
 )
 
-func NewResilienceService(config ResilienceConfig, log logger.Service) *ResilienceService {
-	return &ResilienceService{
+func NewResilienceService(config Config, log logger.Service) *Service {
+	return &Service{
 		retryer: retry_backoff.NewRetryer(retry_backoff.Dependencies{
 			RetryConfig: config.RetryConfig,
 			Logger:      log,
 		}),
 		circuitBreaker: circuit_breaker.NewCircuitBreaker(circuit_breaker.Dependencies{
-			Config: config.CBConfig,
+			Config: config.CircuitBreakerConfig,
 			Log:    log,
 		}),
 		logger: log,
 	}
 }
 
-func (rs *ResilienceService) Execute(ctx context.Context,
+func (rs *Service) Execute(ctx context.Context,
 	operation func() (interface{}, error)) (interface{}, error) {
 	result, err := rs.circuitBreaker.Execute(ctx, func() (interface{}, error) {
 		var opResult interface{}
@@ -62,10 +62,10 @@ func (rs *ResilienceService) Execute(ctx context.Context,
 	return result, nil
 }
 
-func (rs *ResilienceService) CircuitBreakerState() string {
+func (rs *Service) CircuitBreakerState() string {
 	return rs.circuitBreaker.StateAsString()
 }
 
-func (rs *ResilienceService) IsCircuitOpen() bool {
+func (rs *Service) IsCircuitOpen() bool {
 	return rs.circuitBreaker.State() == gobreaker.StateOpen
 }

@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -92,18 +91,9 @@ func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
 		dbType:  cfg.Type,
 	}
 
-	if cfg.RetryConfig != nil {
-		client.retryer = retry_backoff.NewRetryer(retry_backoff.Dependencies{
-			RetryConfig: cfg.RetryConfig,
-			Logger:      log,
-		})
-	}
-
-	if cfg.CircuitBreakerCfg != nil {
-		client.circuitBreaker = circuit_breaker.NewCircuitBreaker(circuit_breaker.Dependencies{
-			Config: cfg.CircuitBreakerCfg,
-			Log:    log,
-		})
+	if cfg.WithResilience {
+		resilienceService := resilience.NewResilienceService(cfg.Resilience, log)
+		client.resilience = resilienceService
 	}
 
 	if err := sqlDB.Ping(); err != nil {
@@ -130,27 +120,26 @@ func (dbc *DBClient) execute(ctx context.Context, operationName string, operatio
 	ctx, cancel := dbc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	if dbc.circuitBreaker != nil && dbc.retryer != nil {
-		return dbc.executeWithCircuitBreakerAndRetry(ctx, operationName, operation)
-	}
-
-	if dbc.circuitBreaker != nil {
-		return dbc.executeWithCircuitBreaker(ctx, operationName, operation)
-	}
-
-	if dbc.retryer != nil {
-		return dbc.executeWithRetry(ctx, operationName, operation)
-	}
-
-	return dbc.executeWithLogging(ctx, operationName, operation)
-}
-
-func (dbc *DBClient) executeWithLogging(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{"operation": operationName, "db_type": dbc.dbType}
 
+	if dbc.resilience != nil {
+		if dbc.logging {
+			dbc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DB con resiliencia: %s", operationName), logFields)
+		}
+
+		result, err := dbc.resilience.Execute(ctx, operation)
+
+		if err != nil && dbc.logging {
+			dbc.logger.Error(ctx, fmt.Errorf("error en operación DB: %w", err), logFields)
+		} else if dbc.logging {
+			dbc.logger.Debug(ctx, fmt.Sprintf("Operación DB completada con resiliencia: %s", operationName), logFields)
+		}
+
+		return result, err
+	}
+
 	if dbc.logging {
-		msg := fmt.Sprintf("Iniciando operación DB: %s", operationName)
-		dbc.logger.Debug(ctx, msg, logFields)
+		dbc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DB: %s", operationName), logFields)
 	}
 
 	result, err := operation()
@@ -158,39 +147,8 @@ func (dbc *DBClient) executeWithLogging(ctx context.Context, operationName strin
 	if err != nil && dbc.logging {
 		dbc.logger.Error(ctx, err, logFields)
 	} else if dbc.logging {
-		msg := fmt.Sprintf("Operación DB completada: %s", operationName)
-		dbc.logger.Debug(ctx, msg, logFields)
+		dbc.logger.Debug(ctx, fmt.Sprintf("Operación DB completada: %s", operationName), logFields)
 	}
-
-	return result, err
-}
-
-func (dbc *DBClient) executeWithCircuitBreakerAndRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return dbc.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return dbc.executeWithRetryInner(ctx, operationName, operation)
-	})
-}
-
-func (dbc *DBClient) executeWithCircuitBreaker(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return dbc.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return dbc.executeWithLogging(ctx, operationName, operation)
-	})
-}
-
-func (dbc *DBClient) executeWithRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return dbc.executeWithRetryInner(ctx, operationName, operation)
-}
-
-func (dbc *DBClient) executeWithRetryInner(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	var result interface{}
-
-	err := dbc.retryer.Do(ctx, func() error {
-		res, opErr := dbc.executeWithLogging(ctx, operationName, operation)
-		if opErr == nil {
-			result = res
-		}
-		return opErr
-	})
 
 	return result, err
 }
@@ -245,7 +203,6 @@ func (dbc *DBClient) Delete(ctx context.Context, value interface{}, conditions .
 
 func (dbc *DBClient) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error {
 	_, err := dbc.execute(ctx, "Count", func() (interface{}, error) {
-		// Corrección: Usar la función Where correctamente
 		result := dbc.db.WithContext(ctx).Model(model)
 		if len(conditions) > 0 {
 			result = result.Where(conditions[0], conditions[1:]...)

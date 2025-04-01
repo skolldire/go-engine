@@ -8,9 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
@@ -26,18 +25,8 @@ func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
 		logging: cfg.EnableLogging,
 	}
 
-	if cfg.RetryConfig != nil {
-		cliente.retryer = retry_backoff.NewRetryer(retry_backoff.Dependencies{
-			RetryConfig: cfg.RetryConfig,
-			Logger:      l,
-		})
-	}
-
-	if cfg.CircuitBreakerCfg != nil {
-		cliente.circuitBreaker = circuit_breaker.NewCircuitBreaker(circuit_breaker.Dependencies{
-			Config: cfg.CircuitBreakerCfg,
-			Log:    l,
-		})
+	if cfg.WithResilience {
+		cliente.resilience = resilience.NewResilienceService(cfg.Resilience, l)
 	}
 
 	if cliente.logging {
@@ -66,25 +55,39 @@ func (c *Cliente) execute(ctx context.Context, operationName string,
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	if c.circuitBreaker != nil && c.retryer != nil {
-		return c.executeWithCircuitBreakerAndRetry(ctx, operationName, operation)
-	}
-
-	if c.circuitBreaker != nil {
-		return c.executeWithCircuitBreaker(ctx, operationName, operation)
-	}
-
-	if c.retryer != nil {
-		return c.executeWithRetry(ctx, operationName, operation)
-	}
-
-	return c.executeWithLogging(ctx, operationName, operation)
+	return c.executeOperation(ctx, operationName, operation)
 }
 
-func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
+func (c *Cliente) executeOperation(ctx context.Context, operationName string,
 	operation func() (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{"operacion": operationName, "servicio": "SQS"}
 
+	if c.resilience != nil {
+		return c.executeWithResilience(ctx, operationName, operation, logFields)
+	}
+
+	return c.executeWithLogging(ctx, operationName, operation, logFields)
+}
+
+func (c *Cliente) executeWithResilience(ctx context.Context, operationName string,
+	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	if c.logging {
+		c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación SQS con resiliencia: %s", operationName), logFields)
+	}
+
+	result, err := c.resilience.Execute(ctx, operation)
+
+	if err != nil && c.logging {
+		c.logger.Error(ctx, err, logFields)
+	} else if c.logging {
+		c.logger.Debug(ctx, fmt.Sprintf("Operación SQS completada con resiliencia: %s", operationName), logFields)
+	}
+
+	return result, err
+}
+
+func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
+	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación SQS: %s", operationName), logFields)
 	}
@@ -100,41 +103,7 @@ func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
 	return result, err
 }
 
-func (c *Cliente) executeWithCircuitBreakerAndRetry(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
-	return c.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return c.executeWithRetryInner(ctx, operationName, operation)
-	})
-}
-
-func (c *Cliente) executeWithCircuitBreaker(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
-	return c.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return c.executeWithLogging(ctx, operationName, operation)
-	})
-}
-
-func (c *Cliente) executeWithRetry(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
-	return c.executeWithRetryInner(ctx, operationName, operation)
-}
-
-func (c *Cliente) executeWithRetryInner(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
-	var result interface{}
-
-	err := c.retryer.Do(ctx, func() error {
-		res, opErr := c.executeWithLogging(ctx, operationName, operation)
-		if opErr == nil {
-			result = res
-		}
-		return opErr
-	})
-
-	return result, err
-}
-
-func (c *Cliente) EnviarMensaje(ctx context.Context, queueURL string, mensaje string,
+func (c *Cliente) SendMsj(ctx context.Context, queueURL string, mensaje string,
 	atributos map[string]types.MessageAttributeValue) (string, error) {
 	if queueURL == "" || mensaje == "" {
 		return "", ErrInvalidInput
@@ -146,7 +115,7 @@ func (c *Cliente) EnviarMensaje(ctx context.Context, queueURL string, mensaje st
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "EnviarMensaje", func() (interface{}, error) {
+	result, err := c.execute(ctx, "SendMsj", func() (interface{}, error) {
 		return c.cliente.SendMessage(ctx, input)
 	})
 
@@ -158,7 +127,7 @@ func (c *Cliente) EnviarMensaje(ctx context.Context, queueURL string, mensaje st
 	return *response.MessageId, nil
 }
 
-func (c *Cliente) EnviarMensajeJSON(ctx context.Context, queueURL string, mensaje interface{},
+func (c *Cliente) SendJSON(ctx context.Context, queueURL string, mensaje interface{},
 	atributos map[string]types.MessageAttributeValue) (string, error) {
 	if queueURL == "" || mensaje == nil {
 		return "", ErrInvalidInput
@@ -169,10 +138,10 @@ func (c *Cliente) EnviarMensajeJSON(ctx context.Context, queueURL string, mensaj
 		return "", fmt.Errorf("error al convertir mensaje a JSON: %w", err)
 	}
 
-	return c.EnviarMensaje(ctx, queueURL, string(jsonBytes), atributos)
+	return c.SendMsj(ctx, queueURL, string(jsonBytes), atributos)
 }
 
-func (c *Cliente) RecibirMensajes(ctx context.Context, queueURL string, maxMensajes int32,
+func (c *Cliente) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes int32,
 	tiempoEspera int32) ([]types.Message, error) {
 	if queueURL == "" {
 		return nil, ErrInvalidInput
@@ -201,7 +170,7 @@ func (c *Cliente) RecibirMensajes(ctx context.Context, queueURL string, maxMensa
 	return response.Messages, nil
 }
 
-func (c *Cliente) EliminarMensaje(ctx context.Context, queueURL string, receiptHandle string) error {
+func (c *Cliente) DeleteMsj(ctx context.Context, queueURL string, receiptHandle string) error {
 	if queueURL == "" || receiptHandle == "" {
 		return ErrInvalidInput
 	}
@@ -211,7 +180,7 @@ func (c *Cliente) EliminarMensaje(ctx context.Context, queueURL string, receiptH
 		ReceiptHandle: aws.String(receiptHandle),
 	}
 
-	_, err := c.execute(ctx, "EliminarMensaje", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteMsj", func() (interface{}, error) {
 		return c.cliente.DeleteMessage(ctx, input)
 	})
 
@@ -222,7 +191,7 @@ func (c *Cliente) EliminarMensaje(ctx context.Context, queueURL string, receiptH
 	return nil
 }
 
-func (c *Cliente) CrearCola(ctx context.Context, nombre string, atributos map[string]string) (string, error) {
+func (c *Cliente) CreateQueue(ctx context.Context, nombre string, atributos map[string]string) (string, error) {
 	if nombre == "" {
 		return "", ErrInvalidInput
 	}
@@ -235,7 +204,7 @@ func (c *Cliente) CrearCola(ctx context.Context, nombre string, atributos map[st
 		input.Attributes = atributos
 	}
 
-	result, err := c.execute(ctx, "CrearCola", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreateQueue", func() (interface{}, error) {
 		return c.cliente.CreateQueue(ctx, input)
 	})
 
@@ -247,12 +216,12 @@ func (c *Cliente) CrearCola(ctx context.Context, nombre string, atributos map[st
 	return *response.QueueUrl, nil
 }
 
-func (c *Cliente) EliminarCola(ctx context.Context, queueURL string) error {
+func (c *Cliente) DeleteQueue(ctx context.Context, queueURL string) error {
 	if queueURL == "" {
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "EliminarCola", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteQueue", func() (interface{}, error) {
 		return c.cliente.DeleteQueue(ctx, &sqs.DeleteQueueInput{
 			QueueUrl: aws.String(queueURL),
 		})
@@ -265,13 +234,13 @@ func (c *Cliente) EliminarCola(ctx context.Context, queueURL string) error {
 	return nil
 }
 
-func (c *Cliente) ListarColas(ctx context.Context, prefijo string) ([]string, error) {
+func (c *Cliente) ListQueue(ctx context.Context, prefijo string) ([]string, error) {
 	input := &sqs.ListQueuesInput{}
 	if prefijo != "" {
 		input.QueueNamePrefix = aws.String(prefijo)
 	}
 
-	result, err := c.execute(ctx, "ListarColas", func() (interface{}, error) {
+	result, err := c.execute(ctx, "ListQueue", func() (interface{}, error) {
 		return c.cliente.ListQueues(ctx, input)
 	})
 
@@ -286,12 +255,12 @@ func (c *Cliente) ListarColas(ctx context.Context, prefijo string) ([]string, er
 	return urls, nil
 }
 
-func (c *Cliente) ObtenerURLCola(ctx context.Context, nombre string) (string, error) {
+func (c *Cliente) GetURLQueue(ctx context.Context, nombre string) (string, error) {
 	if nombre == "" {
 		return "", ErrInvalidInput
 	}
 
-	result, err := c.execute(ctx, "ObtenerURLCola", func() (interface{}, error) {
+	result, err := c.execute(ctx, "GetURLQueue", func() (interface{}, error) {
 		return c.cliente.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{
 			QueueName: aws.String(nombre),
 		})
@@ -305,6 +274,6 @@ func (c *Cliente) ObtenerURLCola(ctx context.Context, nombre string) (string, er
 	return *response.QueueUrl, nil
 }
 
-func (c *Cliente) HabilitarLogging(activar bool) {
+func (c *Cliente) EnableLogging(activar bool) {
 	c.logging = activar
 }

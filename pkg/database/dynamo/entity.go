@@ -6,9 +6,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 const (
@@ -39,18 +38,17 @@ type Service interface {
 }
 
 type Config struct {
-	Endpoint          string                  `mapstructure:"endpoint"`
-	TablePrefix       string                  `mapstructure:"table_prefix"`
-	EnableLogging     bool                    `mapstructure:"enable_logging"`
-	RetryConfig       *retry_backoff.Config   `mapstructure:"retry_config"`
-	CircuitBreakerCfg *circuit_breaker.Config `mapstructure:"circuit_breaker_config"`
+	Endpoint       string            `mapstructure:"endpoint" json:"endpoint"`
+	TablePrefix    string            `mapstructure:"table_prefix" json:"table_prefix"`
+	EnableLogging  bool              `mapstructure:"enable_logging" json:"enable_logging"`
+	WithResilience bool              `mapstructure:"with_resilience" json:"with_resilience"`
+	Resilience     resilience.Config `mapstructure:"resilience" json:"resilience"`
 }
 
 type DynamoClient struct {
-	client         Service
-	logger         logger.Service
-	logging        bool
-	retryer        *retry_backoff.Retryer
-	circuitBreaker *circuit_breaker.CircuitBreaker
-	tablePrefix    string
+	client      Service
+	logger      logger.Service
+	logging     bool
+	resilience  *resilience.Service
+	tablePrefix string
 }

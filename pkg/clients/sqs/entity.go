@@ -7,28 +7,27 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 type Service interface {
-	EnviarMensaje(ctx context.Context, queueURL string, mensaje string, atributos map[string]types.MessageAttributeValue) (string, error)
-	EnviarMensajeJSON(ctx context.Context, queueURL string, mensaje interface{}, atributos map[string]types.MessageAttributeValue) (string, error)
-	RecibirMensajes(ctx context.Context, queueURL string, maxMensajes int32, tiempoEspera int32) ([]types.Message, error)
-	EliminarMensaje(ctx context.Context, queueURL string, receiptHandle string) error
-	CrearCola(ctx context.Context, nombre string, atributos map[string]string) (string, error)
-	EliminarCola(ctx context.Context, queueURL string) error
-	ListarColas(ctx context.Context, prefijo string) ([]string, error)
-	ObtenerURLCola(ctx context.Context, nombre string) (string, error)
-	HabilitarLogging(activar bool)
+	SendMsj(ctx context.Context, queueURL string, mensaje string, atributos map[string]types.MessageAttributeValue) (string, error)
+	SendJSON(ctx context.Context, queueURL string, mensaje interface{}, atributos map[string]types.MessageAttributeValue) (string, error)
+	ReceiveMsj(ctx context.Context, queueURL string, maxMensajes int32, tiempoEspera int32) ([]types.Message, error)
+	DeleteMsj(ctx context.Context, queueURL string, receiptHandle string) error
+	CreateQueue(ctx context.Context, nombre string, atributos map[string]string) (string, error)
+	DeleteQueue(ctx context.Context, queueURL string) error
+	ListQueue(ctx context.Context, prefijo string) ([]string, error)
+	GetURLQueue(ctx context.Context, nombre string) (string, error)
+	EnableLogging(activar bool)
 }
 
 type Config struct {
-	Endpoint          string                  `mapstructure:"endpoint"`
-	EnableLogging     bool                    `mapstructure:"enable_logging"`
-	RetryConfig       *retry_backoff.Config   `mapstructure:"retry_config"`
-	CircuitBreakerCfg *circuit_breaker.Config `mapstructure:"circuit_breaker_config"`
+	Endpoint       string            `mapstructure:"endpoint" json:"endpoint"`
+	EnableLogging  bool              `mapstructure:"enable_logging" json:"enable_logging"`
+	WithResilience bool              `mapstructure:"with_resilience" json:"with_resilience"`
+	Resilience     resilience.Config `mapstructure:"resilience" json:"resilience"`
 }
 
 var (
@@ -47,9 +46,8 @@ const (
 )
 
 type Cliente struct {
-	cliente        *sqs.Client
-	logger         logger.Service
-	logging        bool
-	retryer        *retry_backoff.Retryer
-	circuitBreaker *circuit_breaker.CircuitBreaker
+	cliente    *sqs.Client
+	logger     logger.Service
+	logging    bool
+	resilience *resilience.Service
 }

@@ -6,12 +6,12 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
 )
 
-type ResilienceConfig struct {
-	RetryConfig *retry_backoff.Config   `mapstructure:"retry_config"`
-	CBConfig    *circuit_breaker.Config `mapstructure:"circuit_breaker_config"`
+type Config struct {
+	RetryConfig          *retry_backoff.Config   `mapstructure:"retry_config" json:"retry_config"`
+	CircuitBreakerConfig *circuit_breaker.Config `mapstructure:"circuit_breaker_config" json:"circuit_breaker_config"`
 }
 
-type ResilienceService struct {
+type Service struct {
 	retryer        *retry_backoff.Retryer
 	circuitBreaker *circuit_breaker.CircuitBreaker
 	logger         logger.Service

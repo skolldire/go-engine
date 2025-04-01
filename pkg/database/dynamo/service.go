@@ -9,9 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 func (dc *DynamoClient) TableName(name string) string {
@@ -38,18 +37,9 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 		tablePrefix: cfg.TablePrefix,
 	}
 
-	if cfg.RetryConfig != nil {
-		dc.retryer = retry_backoff.NewRetryer(retry_backoff.Dependencies{
-			RetryConfig: cfg.RetryConfig,
-			Logger:      log,
-		})
-	}
-
-	if cfg.CircuitBreakerCfg != nil {
-		dc.circuitBreaker = circuit_breaker.NewCircuitBreaker(circuit_breaker.Dependencies{
-			Config: cfg.CircuitBreakerCfg,
-			Log:    log,
-		})
+	if cfg.WithResilience {
+		resilienceService := resilience.NewResilienceService(cfg.Resilience, log)
+		dc.resilience = resilienceService
 	}
 
 	return dc
@@ -59,23 +49,23 @@ func (dc *DynamoClient) execute(ctx context.Context, operationName string, opera
 	ctx, cancel := dc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	if dc.circuitBreaker != nil && dc.retryer != nil {
-		return dc.executeWithCircuitBreakerAndRetry(ctx, operationName, operation)
-	}
-
-	if dc.circuitBreaker != nil {
-		return dc.executeWithCircuitBreaker(ctx, operationName, operation)
-	}
-
-	if dc.retryer != nil {
-		return dc.executeWithRetry(ctx, operationName, operation)
-	}
-
-	return dc.executeWithLogging(ctx, operationName, operation)
-}
-
-func (dc *DynamoClient) executeWithLogging(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{"operation": operationName}
+
+	if dc.resilience != nil {
+		if dc.logging {
+			dc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DynamoDB con resiliencia: %s", operationName), logFields)
+		}
+
+		result, err := dc.resilience.Execute(ctx, operation)
+
+		if err != nil && dc.logging {
+			dc.logger.Error(ctx, fmt.Errorf("error en operación DynamoDB: %w", err), logFields)
+		} else if dc.logging {
+			dc.logger.Debug(ctx, fmt.Sprintf("Operación DynamoDB completada con resiliencia: %s", operationName), logFields)
+		}
+
+		return result, err
+	}
 
 	if dc.logging {
 		dc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DynamoDB: %s", operationName), logFields)
@@ -88,36 +78,6 @@ func (dc *DynamoClient) executeWithLogging(ctx context.Context, operationName st
 	} else if dc.logging {
 		dc.logger.Debug(ctx, fmt.Sprintf("Operación DynamoDB completada: %s", operationName), logFields)
 	}
-
-	return result, err
-}
-
-func (dc *DynamoClient) executeWithCircuitBreakerAndRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return dc.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return dc.executeWithRetryInner(ctx, operationName, operation)
-	})
-}
-
-func (dc *DynamoClient) executeWithCircuitBreaker(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return dc.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return dc.executeWithLogging(ctx, operationName, operation)
-	})
-}
-
-func (dc *DynamoClient) executeWithRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return dc.executeWithRetryInner(ctx, operationName, operation)
-}
-
-func (dc *DynamoClient) executeWithRetryInner(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	var result interface{}
-
-	err := dc.retryer.Do(ctx, func() error {
-		res, opErr := dc.executeWithLogging(ctx, operationName, operation)
-		if opErr == nil {
-			result = res
-		}
-		return opErr
-	})
 
 	return result, err
 }

@@ -23,12 +23,12 @@ var (
 )
 
 type Config struct {
-	Name                 string        `mapstructure:"name"`
-	MaxRequests          uint32        `mapstructure:"max_requests"`
-	Interval             time.Duration `mapstructure:"interval"`
-	Timeout              time.Duration `mapstructure:"timeout"`
-	RequestThreshold     uint32        `mapstructure:"request_threshold"`
-	FailureRateThreshold float64       `mapstructure:"failure_rate_threshold"`
+	Name                 string        `mapstructure:"name" json:"name"`
+	MaxRequests          uint32        `mapstructure:"max_requests" json:"max_requests"`
+	Interval             time.Duration `mapstructure:"interval" json:"interval"`
+	Timeout              time.Duration `mapstructure:"timeout" json:"timeout"`
+	RequestThreshold     uint32        `mapstructure:"request_threshold" json:"request_threshold"`
+	FailureRateThreshold float64       `mapstructure:"failure_rate_threshold" json:"failure_rate_threshold"`
 }
 
 type CircuitBreaker struct {

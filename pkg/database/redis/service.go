@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
+	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
@@ -31,18 +30,9 @@ func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 		keyPrefix: cfg.Prefix,
 	}
 
-	if cfg.RetryConfig != nil {
-		rc.retryer = retry_backoff.NewRetryer(retry_backoff.Dependencies{
-			RetryConfig: cfg.RetryConfig,
-			Logger:      log,
-		})
-	}
-
-	if cfg.CircuitBreakerCfg != nil {
-		rc.circuitBreaker = circuit_breaker.NewCircuitBreaker(circuit_breaker.Dependencies{
-			Config: cfg.CircuitBreakerCfg,
-			Log:    log,
-		})
+	if cfg.WithResilience {
+		resilienceService := resilience.NewResilienceService(cfg.Resilience, log)
+		rc.resilience = resilienceService
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
@@ -60,7 +50,6 @@ func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 	return rc, nil
 }
 
-// KeyName prefija la clave
 func (rc *RedisClient) KeyName(key string) string {
 	if rc.keyPrefix == "" {
 		return key
@@ -68,7 +57,6 @@ func (rc *RedisClient) KeyName(key string) string {
 	return fmt.Sprintf("%s:%s", rc.keyPrefix, key)
 }
 
-// ensureContextWithTimeout asegura que el contexto tenga un timeout
 func (rc *RedisClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		return context.WithTimeout(ctx, DefaultTimeout)
@@ -80,23 +68,23 @@ func (rc *RedisClient) execute(ctx context.Context, operationName string, operat
 	ctx, cancel := rc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	if rc.circuitBreaker != nil && rc.retryer != nil {
-		return rc.executeWithCircuitBreakerAndRetry(ctx, operationName, operation)
-	}
-
-	if rc.circuitBreaker != nil {
-		return rc.executeWithCircuitBreaker(ctx, operationName, operation)
-	}
-
-	if rc.retryer != nil {
-		return rc.executeWithRetry(ctx, operationName, operation)
-	}
-
-	return rc.executeWithLogging(ctx, operationName, operation)
-}
-
-func (rc *RedisClient) executeWithLogging(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{"operation": operationName}
+
+	if rc.resilience != nil {
+		if rc.logging {
+			rc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación Redis con resiliencia: %s", operationName), logFields)
+		}
+
+		result, err := rc.resilience.Execute(ctx, operation)
+
+		if err != nil && rc.logging {
+			rc.logger.Error(ctx, fmt.Errorf("error en operación Redis: %w", err), logFields)
+		} else if rc.logging {
+			rc.logger.Debug(ctx, fmt.Sprintf("Operación Redis completada con resiliencia: %s", operationName), logFields)
+		}
+
+		return result, err
+	}
 
 	if rc.logging {
 		rc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación Redis: %s", operationName), logFields)
@@ -109,36 +97,6 @@ func (rc *RedisClient) executeWithLogging(ctx context.Context, operationName str
 	} else if rc.logging {
 		rc.logger.Debug(ctx, fmt.Sprintf("Operación Redis completada: %s", operationName), logFields)
 	}
-
-	return result, err
-}
-
-func (rc *RedisClient) executeWithCircuitBreakerAndRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return rc.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return rc.executeWithRetryInner(ctx, operationName, operation)
-	})
-}
-
-func (rc *RedisClient) executeWithCircuitBreaker(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return rc.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		return rc.executeWithLogging(ctx, operationName, operation)
-	})
-}
-
-func (rc *RedisClient) executeWithRetry(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	return rc.executeWithRetryInner(ctx, operationName, operation)
-}
-
-func (rc *RedisClient) executeWithRetryInner(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	var result interface{}
-
-	err := rc.retryer.Do(ctx, func() error {
-		res, opErr := rc.executeWithLogging(ctx, operationName, operation)
-		if opErr == nil {
-			result = res
-		}
-		return opErr
-	})
 
 	return result, err
 }
