@@ -414,3 +414,201 @@ func (rc *RedisClient) TxPipeline() redis.Pipeliner {
 func (rc *RedisClient) Client() *redis.Client {
 	return rc.client
 }
+
+func (rc *RedisClient) ZAdd(ctx context.Context, key string, score float64, member interface{}) (int64, error) {
+	prefixedKey := rc.KeyName(key)
+
+	z := redis.Z{
+		Score:  score,
+		Member: member,
+	}
+
+	result, err := rc.execute(ctx, "ZAdd", func() (interface{}, error) {
+		return rc.client.ZAdd(ctx, prefixedKey, z).Result()
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	count, ok := result.(int64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return count, nil
+}
+
+func (rc *RedisClient) ZAddMulti(ctx context.Context, key string, members ...redis.Z) (int64, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "ZAddMulti", func() (interface{}, error) {
+		return rc.client.ZAdd(ctx, prefixedKey, members...).Result()
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	count, ok := result.(int64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return count, nil
+}
+
+func (rc *RedisClient) ZScore(ctx context.Context, key string, member string) (float64, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "ZScore", func() (interface{}, error) {
+		return rc.client.ZScore(ctx, prefixedKey, member).Result()
+	})
+
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, ErrKeyNotFound
+		}
+		return 0, err
+	}
+
+	score, ok := result.(float64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return score, nil
+}
+
+func (rc *RedisClient) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "ZRem", func() (interface{}, error) {
+		return rc.client.ZRem(ctx, prefixedKey, members...).Result()
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	count, ok := result.(int64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return count, nil
+}
+
+func (rc *RedisClient) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "ZRange", func() (interface{}, error) {
+		return rc.client.ZRange(ctx, prefixedKey, start, stop).Result()
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	members, ok := result.([]string)
+	if !ok {
+		return nil, ErrInvalidValue
+	}
+
+	return members, nil
+}
+
+func (rc *RedisClient) SAdd(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "SAdd", func() (interface{}, error) {
+		return rc.client.SAdd(ctx, prefixedKey, members...).Result()
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	count, ok := result.(int64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return count, nil
+}
+
+func (rc *RedisClient) SMembers(ctx context.Context, key string) ([]string, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "SMembers", func() (interface{}, error) {
+		return rc.client.SMembers(ctx, prefixedKey).Result()
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	members, ok := result.([]string)
+	if !ok {
+		return nil, ErrInvalidValue
+	}
+
+	return members, nil
+}
+
+func (rc *RedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "SIsMember", func() (interface{}, error) {
+		return rc.client.SIsMember(ctx, prefixedKey, member).Result()
+	})
+
+	if err != nil {
+		return false, err
+	}
+
+	isMember, ok := result.(bool)
+	if !ok {
+		return false, ErrInvalidValue
+	}
+
+	return isMember, nil
+}
+
+func (rc *RedisClient) SRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "SRem", func() (interface{}, error) {
+		return rc.client.SRem(ctx, prefixedKey, members...).Result()
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	count, ok := result.(int64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return count, nil
+}
+
+func (rc *RedisClient) SCard(ctx context.Context, key string) (int64, error) {
+	prefixedKey := rc.KeyName(key)
+
+	result, err := rc.execute(ctx, "SCard", func() (interface{}, error) {
+		return rc.client.SCard(ctx, prefixedKey).Result()
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	count, ok := result.(int64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return count, nil
+}
