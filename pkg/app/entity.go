@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/skolldire/go-engine/pkg/app/router"
+	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/sns"
 	"github.com/skolldire/go-engine/pkg/clients/sqs"
@@ -11,6 +12,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/dynamo"
 	"github.com/skolldire/go-engine/pkg/database/gormsql"
 	"github.com/skolldire/go-engine/pkg/database/redis"
+	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
@@ -18,9 +20,11 @@ type Engine struct {
 	ctx                context.Context
 	errors             []error
 	Router             router.Service
+	GrpcServer         grpcServer.Service
 	Log                logger.Service
 	Conf               *viper.Config
 	RestClients        map[string]rest.Service
+	GpcClients         map[string]grpcClient.Service
 	SQSClient          sqs.Service
 	SNSClient          sns.Service
 	DynamoDBClient     dynamo.Service

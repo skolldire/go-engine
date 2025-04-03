@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
+	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/sns"
 	"github.com/skolldire/go-engine/pkg/clients/sqs"
@@ -15,6 +16,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/dynamo"
 	"github.com/skolldire/go-engine/pkg/database/gormsql"
 	"github.com/skolldire/go-engine/pkg/database/redis"
+	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"go.elastic.co/ecslogrus"
 )
@@ -67,7 +69,9 @@ func (c *App) Init() *App {
 		awsConfig: awsConfig,
 	}
 
+	c.Engine.GrpcServer = initializer.createServerGRPC(c.Engine.Conf.GrpcServer)
 	c.Engine.RestClients = initializer.createClientsHttp(c.Engine.Conf.Rest)
+	c.Engine.GpcClients = initializer.createClientGRPC(c.Engine.Conf.GrpcClient)
 	c.Engine.SQSClient = initializer.createClientSQS(c.Engine.Conf.SQS)
 	c.Engine.SNSClient = initializer.createClientSNS(c.Engine.Conf.SNS)
 	c.Engine.DynamoDBClient = initializer.createClientDynamo(c.Engine.Conf.Dynamo)
@@ -108,6 +112,13 @@ func (i *clients) setError(err error) {
 	i.errors = append(i.errors, err)
 }
 
+func (i *clients) createServerGRPC(cfg *grpcServer.Config) grpcServer.Service {
+	if cfg == nil {
+		return nil
+	}
+	return grpcServer.NewServer(*cfg, i.log)
+}
+
 func (i *clients) createClientsHttp(configs []map[string]rest.Config) map[string]rest.Service {
 	httpClients := make(map[string]rest.Service)
 	for _, v := range configs {
@@ -116,6 +127,21 @@ func (i *clients) createClientsHttp(configs []map[string]rest.Config) map[string
 		}
 	}
 	return httpClients
+}
+
+func (i *clients) createClientGRPC(configs []map[string]grpcClient.Config) map[string]grpcClient.Service {
+	grpcClients := make(map[string]grpcClient.Service)
+	for _, v := range configs {
+		for k, cfg := range v {
+			client, err := grpcClient.NewCliente(cfg, i.log)
+			if err != nil {
+				i.setError(err)
+				continue
+			}
+			grpcClients[k] = client
+		}
+	}
+	return grpcClients
 }
 
 func (i *clients) createClientSQS(cfg *sqs.Config) sqs.Service {
