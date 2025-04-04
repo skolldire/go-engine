@@ -12,11 +12,40 @@ import (
 )
 
 func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
-	options := &redis.Options{
-		Addr:        fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		DB:          cfg.DB,
-		DialTimeout: time.Duration(cfg.Timeout) * time.Second,
+	timeoutDuration := cfg.Timeout
+	if timeoutDuration == 0 {
+		timeoutDuration = DefaultTimeout
 	}
+
+	dialTimeout := cfg.DialTimeout
+	if dialTimeout == 0 {
+		dialTimeout = DefaultDialTimeout
+	}
+
+	readTimeout := cfg.ReadTimeout
+	if readTimeout == 0 {
+		readTimeout = DefaultReadTimeout
+	}
+
+	writeTimeout := cfg.WriteTimeout
+	if writeTimeout == 0 {
+		writeTimeout = DefaultWriteTimeout
+	}
+
+	poolSize := cfg.PoolSize
+	if poolSize == 0 {
+		poolSize = DefaultPoolSize
+	}
+
+	options := &redis.Options{
+		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		DB:           cfg.DB,
+		DialTimeout:  dialTimeout,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		PoolSize:     poolSize,
+	}
+
 	if cfg.Password != "" {
 		options.Password = cfg.Password
 	}
@@ -35,7 +64,7 @@ func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 		rc.resilience = resilienceService
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
 	defer cancel()
 
 	if err := rc.Ping(ctx); err != nil {
@@ -44,7 +73,14 @@ func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 
 	if rc.logging {
 		log.Debug(ctx, "Conexión a Redis establecida correctamente",
-			map[string]interface{}{"host": cfg.Host, "port": cfg.Port})
+			map[string]interface{}{
+				"host":          cfg.Host,
+				"port":          cfg.Port,
+				"dial_timeout":  dialTimeout,
+				"read_timeout":  readTimeout,
+				"write_timeout": writeTimeout,
+				"pool_size":     poolSize,
+			})
 	}
 
 	return rc, nil
@@ -57,11 +93,24 @@ func (rc *RedisClient) KeyName(key string) string {
 	return fmt.Sprintf("%s:%s", rc.keyPrefix, key)
 }
 
-func (rc *RedisClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		return context.WithTimeout(ctx, DefaultTimeout)
+func (rc *RedisClient) ensureDefaultExpiration(expiration time.Duration) time.Duration {
+	if expiration == 0 {
+		return DefaultExpiration
 	}
-	return context.WithCancel(ctx)
+	return expiration
+}
+
+func (rc *RedisClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		return context.WithCancel(ctx)
+	}
+
+	timeout := rc.client.Options().ReadTimeout
+	if timeout <= 0 {
+		timeout = DefaultReadTimeout
+	}
+
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (rc *RedisClient) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
@@ -132,6 +181,7 @@ func (rc *RedisClient) Get(ctx context.Context, key string) (string, error) {
 
 func (rc *RedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	prefixedKey := rc.KeyName(key)
+	expiration = rc.ensureDefaultExpiration(expiration)
 
 	_, err := rc.execute(ctx, "Set", func() (interface{}, error) {
 		return rc.client.Set(ctx, prefixedKey, value, expiration).Result()
@@ -142,6 +192,7 @@ func (rc *RedisClient) Set(ctx context.Context, key string, value interface{}, e
 
 func (rc *RedisClient) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
 	prefixedKey := rc.KeyName(key)
+	expiration = rc.ensureDefaultExpiration(expiration)
 
 	result, err := rc.execute(ctx, "SetNX", func() (interface{}, error) {
 		return rc.client.SetNX(ctx, prefixedKey, value, expiration).Result()
@@ -205,6 +256,7 @@ func (rc *RedisClient) Exists(ctx context.Context, keys ...string) (int64, error
 
 func (rc *RedisClient) Expire(ctx context.Context, key string, expiration time.Duration) (bool, error) {
 	prefixedKey := rc.KeyName(key)
+	expiration = rc.ensureDefaultExpiration(expiration)
 
 	result, err := rc.execute(ctx, "Expire", func() (interface{}, error) {
 		return rc.client.Expire(ctx, prefixedKey, expiration).Result()
