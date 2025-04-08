@@ -589,6 +589,36 @@ func (rc *RedisClient) SAdd(ctx context.Context, key string, members ...interfac
 	return count, nil
 }
 
+func (rc *RedisClient) SAddWithExpire(ctx context.Context, key string, expiration time.Duration, members ...interface{}) (int64, error) {
+	prefixedKey := rc.KeyName(key)
+	expiration = rc.ensureDefaultExpiration(expiration)
+
+	count, err := rc.execute(ctx, "SAddWithExpire", func() (interface{}, error) {
+		count, err := rc.client.SAdd(ctx, prefixedKey, members...).Result()
+		if err != nil {
+			return 0, err
+		}
+
+		_, err = rc.client.Expire(ctx, prefixedKey, expiration).Result()
+		if err != nil {
+			return count, err
+		}
+
+		return count, nil
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	countVal, ok := count.(int64)
+	if !ok {
+		return 0, ErrInvalidValue
+	}
+
+	return countVal, nil
+}
+
 func (rc *RedisClient) SMembers(ctx context.Context, key string) ([]string, error) {
 	prefixedKey := rc.KeyName(key)
 
