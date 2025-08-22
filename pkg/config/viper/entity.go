@@ -14,6 +14,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/redis"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 )
 
 type Service interface {
@@ -26,6 +27,7 @@ type Config struct {
 	Rest             []map[string]rest.Config       `mapstructure:"rest"`
 	GrpcClient       []map[string]grpcClient.Config `mapstructure:"grpc_client"`
 	Log              logger.Config                  `mapstructure:"log"`
+	Telemetry        *telemetry.Config              `mapstructure:"telemetry"`
 	Aws              AwsConfig                      `mapstructure:"aws"`
 	SQS              *sqs.Config                    `mapstructure:"sqs"`
 	SNS              *sns.Config                    `mapstructure:"sns"`

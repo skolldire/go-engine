@@ -14,6 +14,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/redis"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 )
 
 type Engine struct {
@@ -22,6 +23,7 @@ type Engine struct {
 	Router             router.Service
 	GrpcServer         grpcServer.Service
 	Log                logger.Service
+	Telemetry          telemetry.Telemetry
 	Conf               *viper.Config
 	RestClients        map[string]rest.Service
 	GpcClients         map[string]grpcClient.Service

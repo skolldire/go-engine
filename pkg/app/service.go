@@ -18,6 +18,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/redis"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 	"go.elastic.co/ecslogrus"
 )
 
@@ -77,6 +78,7 @@ func (c *App) Init() *App {
 	c.Engine.DynamoDBClient = initializer.createClientDynamo(c.Engine.Conf.Dynamo)
 	c.Engine.RedisClient = initializer.createClientRedis(c.Engine.Conf.Redis)
 	c.Engine.SqlConnection = initializer.createClientSQL(c.Engine.Conf.DataBaseSql)
+	c.Engine.Telemetry = initializer.createTelemetry(c.Engine.Conf.Telemetry)
 	c.Engine.RepositoriesConfig = c.Engine.Conf.Repositories
 	c.Engine.UsesCasesConfig = c.Engine.Conf.Cases
 	c.Engine.HandlerConfig = c.Engine.Conf.Endpoints
@@ -191,6 +193,15 @@ func (i *clients) createClientSQL(cfg *gormsql.Config) *gormsql.DBClient {
 	}
 
 	return client
+}
+
+func (i *clients) createTelemetry(cfg *telemetry.Config) telemetry.Telemetry {
+	tel, err := telemetry.NewTelemetry(i.ctx, *cfg)
+	if err != nil {
+		i.setError(err)
+		return nil
+	}
+	return tel
 }
 
 func setLogLevel(c logger.Config, l *logrus.Logger) logger.Service {
