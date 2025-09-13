@@ -5,7 +5,7 @@ import (
 
 	"github.com/skolldire/go-engine/pkg/app/router"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rest"
+	"github.com/skolldire/go-engine/pkg/clients/rest/advanced"
 	"github.com/skolldire/go-engine/pkg/clients/sns"
 	"github.com/skolldire/go-engine/pkg/clients/sqs"
 	"github.com/skolldire/go-engine/pkg/config/viper"
@@ -25,7 +25,7 @@ type Engine struct {
 	Log                logger.Service
 	Telemetry          telemetry.Telemetry
 	Conf               *viper.Config
-	RestClients        map[string]rest.Service
+	RestClients        map[string]advanced.Service
 	GpcClients         map[string]grpcClient.Service
 	SQSClient          sqs.Service
 	SNSClient          sns.Service

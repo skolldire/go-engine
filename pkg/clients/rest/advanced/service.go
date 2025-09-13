@@ -1,4 +1,4 @@
-package rest
+package advanced
 
 import (
 	"context"
