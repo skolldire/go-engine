@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rest/advanced"
+	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/sns"
 	"github.com/skolldire/go-engine/pkg/clients/sqs"
 	"github.com/skolldire/go-engine/pkg/config/viper"
@@ -121,11 +121,11 @@ func (i *clients) createServerGRPC(cfg *grpcServer.Config) grpcServer.Service {
 	return grpcServer.NewServer(*cfg, i.log)
 }
 
-func (i *clients) createClientsHttp(configs []map[string]advanced.Config) map[string]advanced.Service {
-	httpClients := make(map[string]advanced.Service)
+func (i *clients) createClientsHttp(configs []map[string]rest.Config) map[string]rest.Service {
+	httpClients := make(map[string]rest.Service)
 	for _, v := range configs {
 		for k, cfg := range v {
-			httpClients[k] = advanced.NewClient(cfg, i.log)
+			httpClients[k] = rest.NewClient(cfg, i.log)
 		}
 	}
 	return httpClients

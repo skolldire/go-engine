@@ -6,7 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rest/advanced"
+	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/sns"
 	"github.com/skolldire/go-engine/pkg/clients/sqs"
 	"github.com/skolldire/go-engine/pkg/database/dynamo"
@@ -24,7 +24,7 @@ type Service interface {
 type Config struct {
 	Router           router.Config                  `mapstructure:"router"`
 	GrpcServer       *grpcServer.Config             `mapstructure:"grpc_server"`
-	Rest             []map[string]advanced.Config   `mapstructure:"rest"`
+	Rest             []map[string]rest.Config       `mapstructure:"rest"`
 	GrpcClient       []map[string]grpcClient.Config `mapstructure:"grpc_client"`
 	Log              logger.Config                  `mapstructure:"log"`
 	Telemetry        *telemetry.Config              `mapstructure:"telemetry"`
