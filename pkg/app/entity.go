@@ -22,42 +22,39 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/mongodb"
 	"github.com/skolldire/go-engine/pkg/database/redis"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
+	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 )
 
 type Engine struct {
-	ctx                context.Context
-	errors             []error
-	Router             router.Service
-	GrpcServer         grpcServer.Service
-	Log                logger.Service
-	Telemetry          telemetry.Telemetry
-	Conf               *viper.Config
-	RestClients        map[string]rest.Service
-	GpcClients         map[string]grpcClient.Service
-	SQSClient          sqs.Service
-	SNSClient          sns.Service
-	DynamoDBClient     dynamo.Service
-	RedisClient        *redis.RedisClient
-	SqlConnection      *gormsql.DBClient
-	SQSClients         map[string]sqs.Service
-	SNSClients         map[string]sns.Service
-	DynamoDBClients    map[string]dynamo.Service
-	RedisClients       map[string]*redis.RedisClient
-	SQLConnections     map[string]*gormsql.DBClient
-	SSMClients         map[string]ssm.Service
-	SESClients         map[string]ses.Service
-	S3Clients          map[string]s3.Service
-	MemcachedClients   map[string]memcached.Service
-	MongoDBClients     map[string]mongodb.Service
-	RabbitMQClients    map[string]rabbitmq.Service
-	RepositoriesConfig map[string]interface{}
-	UsesCasesConfig    map[string]interface{}
-	HandlerConfig      map[string]interface{}
-	BatchConfig        map[string]interface{}
-	FeatureFlags       *dynamic.FeatureFlags
-	Validator          *validator.Validate
+	ctx        context.Context
+	errors     []error
+	Router     router.Service
+	GrpcServer grpcServer.Service
+	Log        logger.Service
+	Telemetry  telemetry.Telemetry
+	Conf       *viper.Config
+	
+	// Legacy single clients (deprecated, use Services instead)
+	SQSClient      sqs.Service
+	SNSClient      sns.Service
+	DynamoDBClient dynamo.Service
+	RedisClient    *redis.RedisClient
+	SqlConnection  *gormsql.DBClient
+	
+	// Service registry (composition pattern)
+	Services *ServiceRegistry
+	
+	// Config registry (composition pattern)
+	Configs *ConfigRegistry
+	
+	// Feature flags and validation
+	FeatureFlags *dynamic.FeatureFlags
+	Validator    *validator.Validate
+	
+	// Cloud integration client
+	CloudClient awsclient.Client // Optional: HTTP-like AWS integration facade
 }
 
 func (e *Engine) GetErrors() []error {
@@ -88,17 +85,17 @@ func (e *Engine) GetConfig() *viper.Config {
 }
 
 func (e *Engine) GetRestClient(name string) rest.Service {
-	if e.RestClients == nil {
+	if e.Services == nil || e.Services.RESTClients == nil {
 		return nil
 	}
-	return e.RestClients[name]
+	return e.Services.RESTClients[name]
 }
 
 func (e *Engine) GetGRPCClient(name string) grpcClient.Service {
-	if e.GpcClients == nil {
+	if e.Services == nil || e.Services.GRPCClients == nil {
 		return nil
 	}
-	return e.GpcClients[name]
+	return e.Services.GRPCClients[name]
 }
 
 func (e *Engine) GetSQSClient() sqs.Service {
@@ -129,67 +126,84 @@ func (e *Engine) GetTelemetry() telemetry.Telemetry {
 	return e.Telemetry
 }
 
+// GetServices returns the service registry
+func (e *Engine) GetServices() *ServiceRegistry {
+	if e.Services == nil {
+		e.Services = NewServiceRegistry()
+	}
+	return e.Services
+}
+
+// GetConfigs returns the config registry
+func (e *Engine) GetConfigs() *ConfigRegistry {
+	if e.Configs == nil {
+		e.Configs = NewConfigRegistry()
+	}
+	return e.Configs
+}
+
+// Legacy getters for backward compatibility
 func (e *Engine) GetRepositoryConfig(name string) interface{} {
-	if e.RepositoriesConfig == nil {
+	if e.Configs == nil || e.Configs.Repositories == nil {
 		return nil
 	}
-	return e.RepositoriesConfig[name]
+	return e.Configs.Repositories[name]
 }
 
 func (e *Engine) GetUseCaseConfig(name string) interface{} {
-	if e.UsesCasesConfig == nil {
+	if e.Configs == nil || e.Configs.UseCases == nil {
 		return nil
 	}
-	return e.UsesCasesConfig[name]
+	return e.Configs.UseCases[name]
 }
 
 func (e *Engine) GetHandlerConfig(name string) interface{} {
-	if e.HandlerConfig == nil {
+	if e.Configs == nil || e.Configs.Handlers == nil {
 		return nil
 	}
-	return e.HandlerConfig[name]
+	return e.Configs.Handlers[name]
 }
 
 func (e *Engine) GetBatchConfig(name string) interface{} {
-	if e.BatchConfig == nil {
+	if e.Configs == nil || e.Configs.Batches == nil {
 		return nil
 	}
-	return e.BatchConfig[name]
+	return e.Configs.Batches[name]
 }
 
 func (e *Engine) GetSQSClientByName(name string) sqs.Service {
-	if e.SQSClients == nil {
+	if e.Services == nil || e.Services.SQSClients == nil {
 		return nil
 	}
-	return e.SQSClients[name]
+	return e.Services.SQSClients[name]
 }
 
 func (e *Engine) GetSNSClientByName(name string) sns.Service {
-	if e.SNSClients == nil {
+	if e.Services == nil || e.Services.SNSClients == nil {
 		return nil
 	}
-	return e.SNSClients[name]
+	return e.Services.SNSClients[name]
 }
 
 func (e *Engine) GetDynamoDBClientByName(name string) dynamo.Service {
-	if e.DynamoDBClients == nil {
+	if e.Services == nil || e.Services.DynamoDBClients == nil {
 		return nil
 	}
-	return e.DynamoDBClients[name]
+	return e.Services.DynamoDBClients[name]
 }
 
 func (e *Engine) GetRedisClientByName(name string) *redis.RedisClient {
-	if e.RedisClients == nil {
+	if e.Services == nil || e.Services.RedisClients == nil {
 		return nil
 	}
-	return e.RedisClients[name]
+	return e.Services.RedisClients[name]
 }
 
 func (e *Engine) GetSQLConnectionByName(name string) *gormsql.DBClient {
-	if e.SQLConnections == nil {
+	if e.Services == nil || e.Services.SQLConnections == nil {
 		return nil
 	}
-	return e.SQLConnections[name]
+	return e.Services.SQLConnections[name]
 }
 
 func (e *Engine) GetFeatureFlags() *dynamic.FeatureFlags {
@@ -197,49 +211,53 @@ func (e *Engine) GetFeatureFlags() *dynamic.FeatureFlags {
 }
 
 func (e *Engine) GetSSMClientByName(name string) ssm.Service {
-	if e.SSMClients == nil {
+	if e.Services == nil || e.Services.SSMClients == nil {
 		return nil
 	}
-	return e.SSMClients[name]
+	return e.Services.SSMClients[name]
 }
 
 func (e *Engine) GetSESClientByName(name string) ses.Service {
-	if e.SESClients == nil {
+	if e.Services == nil || e.Services.SESClients == nil {
 		return nil
 	}
-	return e.SESClients[name]
+	return e.Services.SESClients[name]
 }
 
 func (e *Engine) GetS3ClientByName(name string) s3.Service {
-	if e.S3Clients == nil {
+	if e.Services == nil || e.Services.S3Clients == nil {
 		return nil
 	}
-	return e.S3Clients[name]
+	return e.Services.S3Clients[name]
 }
 
 func (e *Engine) GetMemcachedClientByName(name string) memcached.Service {
-	if e.MemcachedClients == nil {
+	if e.Services == nil || e.Services.MemcachedClients == nil {
 		return nil
 	}
-	return e.MemcachedClients[name]
+	return e.Services.MemcachedClients[name]
 }
 
 func (e *Engine) GetMongoDBClientByName(name string) mongodb.Service {
-	if e.MongoDBClients == nil {
+	if e.Services == nil || e.Services.MongoDBClients == nil {
 		return nil
 	}
-	return e.MongoDBClients[name]
+	return e.Services.MongoDBClients[name]
 }
 
 func (e *Engine) GetRabbitMQClientByName(name string) rabbitmq.Service {
-	if e.RabbitMQClients == nil {
+	if e.Services == nil || e.Services.RabbitMQClients == nil {
 		return nil
 	}
-	return e.RabbitMQClients[name]
+	return e.Services.RabbitMQClients[name]
 }
 
 func (e *Engine) GetValidator() *validator.Validate {
 	return e.Validator
+}
+
+func (e *Engine) GetCloudClient() awsclient.Client {
+	return e.CloudClient
 }
 
 type App struct {

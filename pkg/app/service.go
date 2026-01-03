@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
@@ -24,6 +24,8 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/memcached"
 	"github.com/skolldire/go-engine/pkg/database/mongodb"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
+	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
+	"github.com/skolldire/go-engine/pkg/integration/observability"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
@@ -33,7 +35,7 @@ import (
 type clients struct {
 	ctx       context.Context
 	log       logger.Service
-	awsConfig aws.Config
+	awsConfig awsconfig.Config
 	errors    []error
 }
 
@@ -64,7 +66,7 @@ func (c *App) Init() *App {
 		return c
 	}
 
-	awsConfig, err := config.LoadDefaultConfig(c.Engine.ctx,
+	awsCfg, err := config.LoadDefaultConfig(c.Engine.ctx,
 		config.WithRegion(c.Engine.Conf.Aws.Region),
 	)
 	if err != nil {
@@ -75,36 +77,48 @@ func (c *App) Init() *App {
 	initializer := &clients{
 		ctx:       c.Engine.ctx,
 		log:       c.Engine.Log,
-		awsConfig: awsConfig,
+		awsConfig: awsCfg,
 	}
 
 	c.Engine.GrpcServer = initializer.createServerGRPC(c.Engine.Conf.GrpcServer)
-	c.Engine.RestClients = initializer.createClientsHttp(c.Engine.Conf.Rest)
-	c.Engine.GpcClients = initializer.createClientGRPC(c.Engine.Conf.GrpcClient)
 	
+	// Initialize service registry
+	c.Engine.Services = NewServiceRegistry()
+	c.Engine.Services.RESTClients = initializer.createClientsHttp(c.Engine.Conf.Rest)
+	c.Engine.Services.GRPCClients = initializer.createClientGRPC(c.Engine.Conf.GrpcClient)
+	
+	// Legacy single clients (for backward compatibility)
 	c.Engine.SQSClient = initializer.createClientSQS(c.Engine.Conf.SQS)
 	c.Engine.SNSClient = initializer.createClientSNS(c.Engine.Conf.SNS)
 	c.Engine.DynamoDBClient = initializer.createClientDynamo(c.Engine.Conf.Dynamo)
 	c.Engine.RedisClient = initializer.createClientRedis(c.Engine.Conf.Redis)
 	c.Engine.SqlConnection = initializer.createClientSQL(c.Engine.Conf.DataBaseSql)
 	
-	c.Engine.SQSClients = initializer.createClientsSQS(c.Engine.Conf.SQSClients)
-	c.Engine.SNSClients = initializer.createClientsSNS(c.Engine.Conf.SNSClients)
-	c.Engine.DynamoDBClients = initializer.createClientsDynamo(c.Engine.Conf.DynamoClients)
-	c.Engine.RedisClients = initializer.createClientsRedis(c.Engine.Conf.RedisClients)
-	c.Engine.SQLConnections = initializer.createClientsSQL(c.Engine.Conf.SQLConnections)
-	c.Engine.SSMClients = initializer.createClientsSSM(c.Engine.Conf.SSMClients)
-	c.Engine.SESClients = initializer.createClientsSES(c.Engine.Conf.SESClients)
-	c.Engine.S3Clients = initializer.createClientsS3(c.Engine.Conf.S3Clients)
-	c.Engine.MemcachedClients = initializer.createClientsMemcached(c.Engine.Conf.MemcachedClients)
-	c.Engine.MongoDBClients = initializer.createClientsMongoDB(c.Engine.Conf.MongoDBClients)
-	c.Engine.RabbitMQClients = initializer.createClientsRabbitMQ(c.Engine.Conf.RabbitMQClients)
+	// Multiple clients in registry
+	c.Engine.Services.SQSClients = initializer.createClientsSQS(c.Engine.Conf.SQSClients)
+	c.Engine.Services.SNSClients = initializer.createClientsSNS(c.Engine.Conf.SNSClients)
+	c.Engine.Services.DynamoDBClients = initializer.createClientsDynamo(c.Engine.Conf.DynamoClients)
+	c.Engine.Services.RedisClients = initializer.createClientsRedis(c.Engine.Conf.RedisClients)
+	c.Engine.Services.SQLConnections = initializer.createClientsSQL(c.Engine.Conf.SQLConnections)
+	c.Engine.Services.SSMClients = initializer.createClientsSSM(c.Engine.Conf.SSMClients)
+	c.Engine.Services.SESClients = initializer.createClientsSES(c.Engine.Conf.SESClients)
+	c.Engine.Services.S3Clients = initializer.createClientsS3(c.Engine.Conf.S3Clients)
+	c.Engine.Services.MemcachedClients = initializer.createClientsMemcached(c.Engine.Conf.MemcachedClients)
+	c.Engine.Services.MongoDBClients = initializer.createClientsMongoDB(c.Engine.Conf.MongoDBClients)
+	c.Engine.Services.RabbitMQClients = initializer.createClientsRabbitMQ(c.Engine.Conf.RabbitMQClients)
 	
 	c.Engine.Telemetry = initializer.createTelemetry(c.Engine.Conf.Telemetry)
-	c.Engine.RepositoriesConfig = c.Engine.Conf.Repositories
-	c.Engine.UsesCasesConfig = c.Engine.Conf.Cases
-	c.Engine.HandlerConfig = c.Engine.Conf.Endpoints
-	c.Engine.BatchConfig = c.Engine.Conf.Processors
+	
+	// Initialize CloudClient (optional - can be nil if not configured)
+	c.Engine.CloudClient = initializer.createCloudClient(c.Engine.Log, c.Engine.Telemetry)
+	
+	// Initialize config registry
+	c.Engine.Configs = NewConfigRegistry()
+	c.Engine.Configs.Repositories = c.Engine.Conf.Repositories
+	c.Engine.Configs.UseCases = c.Engine.Conf.Cases
+	c.Engine.Configs.Handlers = c.Engine.Conf.Endpoints
+	c.Engine.Configs.Batches = c.Engine.Conf.Processors
+	
 	c.Engine.Validator = validation.NewValidator()
 	validation.SetGlobalValidator(c.Engine.Validator)
 	
@@ -230,6 +244,16 @@ func (i *clients) createTelemetry(cfg *telemetry.Config) telemetry.Telemetry {
 		return nil
 	}
 	return tel
+}
+
+func (i *clients) createCloudClient(log logger.Service, tel telemetry.Telemetry) awsclient.Client {
+	// Create CloudClient - always available if AWS config exists
+	// Observability can be added later via middleware if needed
+	var metricsRecorder observability.MetricsRecorder
+	if tel != nil {
+		metricsRecorder = observability.NewTelemetryMetricsRecorder(tel)
+	}
+	return awsclient.NewWithOptions(i.awsConfig, awsclient.WithObservability(log, metricsRecorder, tel))
 }
 
 func (i *clients) createClientsSQS(configs []map[string]sqs.Config) map[string]sqs.Service {

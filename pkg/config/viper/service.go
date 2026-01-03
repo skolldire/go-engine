@@ -40,8 +40,24 @@ func (s *service) Apply() (Config, error) {
 		return Config{}, fmt.Errorf("error loading configuration - %w", err)
 	}
 
-	s.log.Info("configuration loaded successfully")
-	return s.mapConfigToStruct(mergedConfig)
+	config, err := s.mapConfigToStruct(mergedConfig)
+	if err != nil {
+		s.log.Error("error mapping configuration: ", err)
+		return Config{}, fmt.Errorf("error mapping configuration - %w", err)
+	}
+
+	// Validate configuration structure
+	if validationErrors := ValidateConfig(config); len(validationErrors) > 0 {
+		var errorMessages []string
+		for _, err := range validationErrors {
+			errorMessages = append(errorMessages, err.Error())
+			s.log.Error("configuration validation error: ", err)
+		}
+		return Config{}, fmt.Errorf("configuration validation failed: %s", strings.Join(errorMessages, "; "))
+	}
+
+	s.log.Info("configuration loaded and validated successfully")
+	return config, nil
 }
 
 func (s *service) validateRequiredFiles() error {

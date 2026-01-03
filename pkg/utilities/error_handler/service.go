@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
 const (
@@ -105,23 +107,53 @@ func NewInternalError(msg string, err error) *CommonApiError {
 	return NewCommonApiError(CodeInternalError, msg, err, http.StatusInternalServerError)
 }
 
-func HandleApiErrorResponse(err error, w http.ResponseWriter) error {
+// HandleApiErrorResponse handles API errors and writes JSON response
+// If logger is provided, errors are logged using structured logging
+func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var errType *CommonApiError
 	if errors.As(err, &errType) {
-		if errType.Err == nil {
-			fmt.Printf("[error_wrapper] Warning: Err field is nil in CommonApiError\n")
-		} else {
-			fmt.Printf("CommonApiError: %v\n", err)
+		ctx := context.Background()
+		if errType.Context != nil {
+			ctx = errType.Context
 		}
+
+		if errType.Err == nil {
+			if log != nil {
+				log.Warn(ctx, "CommonApiError has nil Err field", map[string]interface{}{
+					"error_code": errType.Code,
+					"error_msg":  errType.Msg,
+					"http_code":  errType.HttpCode,
+				})
+			}
+		} else {
+			if log != nil {
+				logFields := map[string]interface{}{
+					"error_code": errType.Code,
+					"error_msg":  errType.Msg,
+					"http_code":  errType.HttpCode,
+				}
+				if errType.RequestID != "" {
+					logFields["request_id"] = errType.RequestID
+				}
+				log.Error(ctx, errType.Err, logFields)
+			}
+		}
+
 		w.WriteHeader(errType.HttpCode)
 		b, _ := json.Marshal(errType)
 		_, _ = w.Write(b)
 		return nil
 	}
 
-	fmt.Printf("Unhandled error: %v\n", err)
+	// Unhandled error - log it if logger is available
+	if log != nil {
+		log.Error(context.Background(), err, map[string]interface{}{
+			"error_type": "unhandled_error",
+		})
+	}
+
 	w.WriteHeader(http.StatusInternalServerError)
 	b, _ := json.Marshal(CommonApiError{
 		Code: CodeInternalError,
@@ -131,24 +163,53 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter) error {
 	return nil
 }
 
-func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, requestID string) error {
+// HandleApiErrorResponseWithRequest handles API errors with request ID and writes JSON response
+// If logger is provided, errors are logged using structured logging
+func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, requestID string, log logger.Service) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var errType *CommonApiError
 	if errors.As(err, &errType) {
 		errType.RequestID = requestID
-		if errType.Err == nil {
-			fmt.Printf("[error_wrapper] Warning: Err field is nil in CommonApiError\n")
-		} else {
-			fmt.Printf("CommonApiError: %v (RequestID: %s)\n", err, requestID)
+		ctx := context.Background()
+		if errType.Context != nil {
+			ctx = errType.Context
 		}
+
+		if errType.Err == nil {
+			if log != nil {
+				log.Warn(ctx, "CommonApiError has nil Err field", map[string]interface{}{
+					"error_code": errType.Code,
+					"error_msg":  errType.Msg,
+					"http_code":  errType.HttpCode,
+					"request_id": requestID,
+				})
+			}
+		} else {
+			if log != nil {
+				log.Error(ctx, errType.Err, map[string]interface{}{
+					"error_code": errType.Code,
+					"error_msg":  errType.Msg,
+					"http_code":  errType.HttpCode,
+					"request_id": requestID,
+				})
+			}
+		}
+
 		w.WriteHeader(errType.HttpCode)
 		b, _ := json.Marshal(errType)
 		_, _ = w.Write(b)
 		return nil
 	}
 
-	fmt.Printf("Unhandled error: %v (RequestID: %s)\n", err, requestID)
+	// Unhandled error - log it if logger is available
+	if log != nil {
+		log.Error(context.Background(), err, map[string]interface{}{
+			"error_type": "unhandled_error",
+			"request_id": requestID,
+		})
+	}
+
 	w.WriteHeader(http.StatusInternalServerError)
 	b, _ := json.Marshal(CommonApiError{
 		Code:      CodeInternalError,
@@ -157,4 +218,16 @@ func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, request
 	})
 	_, _ = w.Write(b)
 	return nil
+}
+
+// HandleApiErrorResponseLegacy is a legacy version that doesn't require logger
+// Deprecated: Use HandleApiErrorResponse with logger parameter instead
+func HandleApiErrorResponseLegacy(err error, w http.ResponseWriter) error {
+	return HandleApiErrorResponse(err, w, nil)
+}
+
+// HandleApiErrorResponseWithRequestLegacy is a legacy version that doesn't require logger
+// Deprecated: Use HandleApiErrorResponseWithRequest with logger parameter instead
+func HandleApiErrorResponseWithRequestLegacy(err error, w http.ResponseWriter, requestID string) error {
+	return HandleApiErrorResponseWithRequest(err, w, requestID, nil)
 }

@@ -219,16 +219,21 @@ func (l *service) SetLogLevel(level string) error {
 }
 
 func (l *service) createEntry(ctx context.Context, fields map[string]interface{}) *logrus.Entry {
-	entry := l.Log.WithFields(l.fields)
+	// Sanitize base fields
+	sanitizedBaseFields := SanitizeFields(l.fields)
+	entry := l.Log.WithFields(sanitizedBaseFields)
 
 	if l.contextExtractor != nil && ctx != nil {
 		ctxFields := l.contextExtractor(ctx)
-		for k, v := range ctxFields {
+		sanitizedCtxFields := SanitizeFields(ctxFields)
+		for k, v := range sanitizedCtxFields {
 			entry = entry.WithField(k, v)
 		}
 	}
 
-	for k, v := range fields {
+	// Sanitize provided fields
+	sanitizedFields := SanitizeFields(fields)
+	for k, v := range sanitizedFields {
 		entry = entry.WithField(k, v)
 	}
 

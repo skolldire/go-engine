@@ -101,7 +101,7 @@ func clientsInfoHandler(engine *app.Engine) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		info := map[string]interface{}{
 			"rest_clients":    len(engine.RestClients),
-			"grpc_clients":    len(engine.GpcClients),
+			"grpc_clients":    len(engine.GrpcClients),
 			"sqs_clients":     len(engine.SQSClients),
 			"sns_clients":     len(engine.SNSClients),
 			"dynamo_clients":  len(engine.DynamoDBClients),
