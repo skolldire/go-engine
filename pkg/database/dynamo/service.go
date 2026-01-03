@@ -3,12 +3,12 @@ package dynamo
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
@@ -24,9 +24,9 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	client := dynamodb.NewFromConfig(acf, func(o *dynamodb.Options) {
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
-			log.Debug(context.Background(), "Conexión con endpoint externo", map[string]interface{}{"endpoint": cfg.Endpoint})
+			log.Debug(context.Background(), "connecting to external endpoint", map[string]interface{}{"endpoint": cfg.Endpoint})
 		} else {
-			log.Debug(context.Background(), "Conexión con AWS", nil)
+			log.Debug(context.Background(), "connecting to AWS", nil)
 		}
 	})
 
@@ -53,22 +53,22 @@ func (dc *DynamoClient) execute(ctx context.Context, operationName string, opera
 
 	if dc.resilience != nil {
 		if dc.logging {
-			dc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DynamoDB con resiliencia: %s", operationName), logFields)
+			dc.logger.Debug(ctx, fmt.Sprintf("starting DynamoDB operation with resilience: %s", operationName), logFields)
 		}
 
 		result, err := dc.resilience.Execute(ctx, operation)
 
 		if err != nil && dc.logging {
-			dc.logger.Error(ctx, fmt.Errorf("error en operación DynamoDB: %w", err), logFields)
+			dc.logger.Error(ctx, fmt.Errorf("error in DynamoDB operation: %w", err), logFields)
 		} else if dc.logging {
-			dc.logger.Debug(ctx, fmt.Sprintf("Operación DynamoDB completada con resiliencia: %s", operationName), logFields)
+			dc.logger.Debug(ctx, fmt.Sprintf("DynamoDB operation completed with resilience: %s", operationName), logFields)
 		}
 
 		return result, err
 	}
 
 	if dc.logging {
-		dc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DynamoDB: %s", operationName), logFields)
+		dc.logger.Debug(ctx, fmt.Sprintf("starting DynamoDB operation: %s", operationName), logFields)
 	}
 
 	result, err := operation()
@@ -76,16 +76,15 @@ func (dc *DynamoClient) execute(ctx context.Context, operationName string, opera
 	if err != nil && dc.logging {
 		dc.logger.Error(ctx, err, logFields)
 	} else if dc.logging {
-		dc.logger.Debug(ctx, fmt.Sprintf("Operación DynamoDB completada: %s", operationName), logFields)
+		dc.logger.Debug(ctx, fmt.Sprintf("DynamoDB operation completed: %s", operationName), logFields)
 	}
 
 	return result, err
 }
 
 func (dc *DynamoClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
-		timeout := time.Until(deadline)
-		return context.WithTimeout(ctx, timeout)
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		return context.WithCancel(ctx)
 	}
 	return context.WithTimeout(ctx, DefaultTimeout)
 }
@@ -99,9 +98,9 @@ func (dc *DynamoClient) GetItem(ctx context.Context, input *dynamodb.GetItemInpu
 		return nil, err
 	}
 
-	output, ok := result.(*dynamodb.GetItemOutput)
-	if !ok {
-		return nil, fmt.Errorf("resultado inesperado de GetItem")
+	output, err := client.SafeTypeAssert[*dynamodb.GetItemOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected GetItem result: %w", err)
 	}
 
 	if len(output.Item) == 0 {
@@ -139,7 +138,11 @@ func (dc *DynamoClient) PutItem(ctx context.Context, input *dynamodb.PutItemInpu
 		return nil, err
 	}
 
-	return result.(*dynamodb.PutItemOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.PutItemOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected PutItem result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) PutItemTyped(ctx context.Context, tableName string, item interface{}, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -165,7 +168,11 @@ func (dc *DynamoClient) DeleteItem(ctx context.Context, input *dynamodb.DeleteIt
 		return nil, err
 	}
 
-	return result.(*dynamodb.DeleteItemOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.DeleteItemOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected DeleteItem result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) DeleteItemByKey(ctx context.Context, tableName string, key map[string]types.AttributeValue, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
@@ -186,7 +193,11 @@ func (dc *DynamoClient) UpdateItem(ctx context.Context, input *dynamodb.UpdateIt
 		return nil, err
 	}
 
-	return result.(*dynamodb.UpdateItemOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.UpdateItemOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected UpdateItem result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) Query(ctx context.Context, input *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
@@ -202,7 +213,11 @@ func (dc *DynamoClient) Query(ctx context.Context, input *dynamodb.QueryInput, o
 		return nil, err
 	}
 
-	return result.(*dynamodb.QueryOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.QueryOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected Query result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) QueryTyped(ctx context.Context, input *dynamodb.QueryInput, items interface{}, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
@@ -232,7 +247,11 @@ func (dc *DynamoClient) Scan(ctx context.Context, input *dynamodb.ScanInput, opt
 		return nil, err
 	}
 
-	return result.(*dynamodb.ScanOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.ScanOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected Scan result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) ScanTyped(ctx context.Context, input *dynamodb.ScanInput, items interface{}, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
@@ -267,7 +286,11 @@ func (dc *DynamoClient) BatchWriteItem(ctx context.Context, input *dynamodb.Batc
 		return nil, err
 	}
 
-	return result.(*dynamodb.BatchWriteItemOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.BatchWriteItemOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected BatchWriteItem result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) BatchGetItem(ctx context.Context, input *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
@@ -288,7 +311,11 @@ func (dc *DynamoClient) BatchGetItem(ctx context.Context, input *dynamodb.BatchG
 		return nil, err
 	}
 
-	return result.(*dynamodb.BatchGetItemOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.BatchGetItemOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected BatchGetItem result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) TransactWriteItems(ctx context.Context, input *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
@@ -304,7 +331,11 @@ func (dc *DynamoClient) TransactWriteItems(ctx context.Context, input *dynamodb.
 		return nil, err
 	}
 
-	return result.(*dynamodb.TransactWriteItemsOutput), nil
+	output, err := client.SafeTypeAssert[*dynamodb.TransactWriteItemsOutput](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected TransactWriteItems result: %w", err)
+	}
+	return output, nil
 }
 
 func (dc *DynamoClient) CreateKeyAttribute(keyName string, value interface{}) (map[string]types.AttributeValue, error) {

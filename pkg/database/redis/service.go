@@ -72,7 +72,7 @@ func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 	}
 
 	if rc.logging {
-		log.Debug(ctx, "Conexión a Redis establecida correctamente",
+		log.Debug(ctx, "Redis connection established successfully",
 			map[string]interface{}{
 				"host":          cfg.Host,
 				"port":          cfg.Port,
@@ -121,22 +121,22 @@ func (rc *RedisClient) execute(ctx context.Context, operationName string, operat
 
 	if rc.resilience != nil {
 		if rc.logging {
-			rc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación Redis con resiliencia: %s", operationName), logFields)
+			rc.logger.Debug(ctx, fmt.Sprintf("starting Redis operation with resilience: %s", operationName), logFields)
 		}
 
 		result, err := rc.resilience.Execute(ctx, operation)
 
 		if err != nil && rc.logging {
-			rc.logger.Error(ctx, fmt.Errorf("error en operación Redis: %w", err), logFields)
+			rc.logger.Error(ctx, fmt.Errorf("error in Redis operation: %w", err), logFields)
 		} else if rc.logging {
-			rc.logger.Debug(ctx, fmt.Sprintf("Operación Redis completada con resiliencia: %s", operationName), logFields)
+			rc.logger.Debug(ctx, fmt.Sprintf("Redis operation completed with resilience: %s", operationName), logFields)
 		}
 
 		return result, err
 	}
 
 	if rc.logging {
-		rc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación Redis: %s", operationName), logFields)
+		rc.logger.Debug(ctx, fmt.Sprintf("starting Redis operation: %s", operationName), logFields)
 	}
 
 	result, err := operation()
@@ -144,7 +144,7 @@ func (rc *RedisClient) execute(ctx context.Context, operationName string, operat
 	if err != nil && rc.logging {
 		rc.logger.Error(ctx, err, logFields)
 	} else if rc.logging {
-		rc.logger.Debug(ctx, fmt.Sprintf("Operación Redis completada: %s", operationName), logFields)
+		rc.logger.Debug(ctx, fmt.Sprintf("Redis operation completed: %s", operationName), logFields)
 	}
 
 	return result, err

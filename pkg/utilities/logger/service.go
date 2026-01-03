@@ -173,7 +173,7 @@ func (l *service) Error(ctx context.Context, err error, fields map[string]interf
 		entry = entry.WithError(err)
 		entry.Error(err)
 	} else {
-		entry.Error("Error desconocido")
+		entry.Error("Unknown error")
 	}
 }
 
@@ -194,7 +194,7 @@ func (l *service) FatalError(ctx context.Context, err error, fields map[string]i
 		entry = entry.WithError(err)
 		entry.Fatal(err)
 	} else {
-		entry.Fatal("Error fatal desconocido")
+		entry.Fatal("Unknown fatal error")
 	}
 }
 
@@ -212,7 +212,7 @@ func (l *service) GetLogLevel() string {
 func (l *service) SetLogLevel(level string) error {
 	lvl, err := logrus.ParseLevel(level)
 	if err != nil {
-		return fmt.Errorf("nivel de log inválido: %s", level)
+		return fmt.Errorf("invalid log level: %s", level)
 	}
 	l.Log.SetLevel(lvl)
 	return nil

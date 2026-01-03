@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
@@ -48,7 +47,7 @@ func NewCliente(cfg Config, log logger.Service) (Service, error) {
 	}
 
 	if c.logging {
-		c.logger.Debug(ctx, "Conexión a servidor gRPC establecida correctamente",
+		c.logger.Debug(ctx, "gRPC server connection established successfully",
 			map[string]interface{}{"target": cfg.Target})
 	}
 
@@ -64,11 +63,11 @@ func waitForConnection(ctx context.Context, conn *grpc.ClientConn) error {
 		}
 
 		if state == connectivity.Shutdown || state == connectivity.TransientFailure {
-			return fmt.Errorf("%w: estado de conexión %v", ErrConnection, state)
+			return fmt.Errorf("%w: connection state %v", ErrConnection, state)
 		}
 
 		if !conn.WaitForStateChange(ctx, state) {
-			return fmt.Errorf("%w: última estado %v", ErrTimeoutConnect, state)
+			return fmt.Errorf("%w: last state %v", ErrTimeoutConnect, state)
 		}
 
 		select {
@@ -86,7 +85,7 @@ func (c *Cliente) execute(ctx context.Context, operationName string, operation f
 	state := c.conn.GetState()
 	if state != connectivity.Ready && state != connectivity.Idle {
 		if c.logging {
-			c.logger.Warn(ctx, fmt.Sprintf("Estado de conexión gRPC no óptimo: %v", state),
+			c.logger.Warn(ctx, fmt.Sprintf("gRPC connection state not optimal: %v", state),
 				map[string]interface{}{"operation": operationName})
 		}
 	}
@@ -95,22 +94,22 @@ func (c *Cliente) execute(ctx context.Context, operationName string, operation f
 
 	if c.resilience != nil {
 		if c.logging {
-			c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación gRPC con resiliencia: %s", operationName), logFields)
+			c.logger.Debug(ctx, fmt.Sprintf("starting gRPC operation with resilience: %s", operationName), logFields)
 		}
 
 		result, err := c.resilience.Execute(ctx, operation)
 
 		if err != nil && c.logging {
-			c.logger.Error(ctx, fmt.Errorf("error en operación gRPC: %w", err), logFields)
+			c.logger.Error(ctx, fmt.Errorf("error in gRPC operation: %w", err), logFields)
 		} else if c.logging {
-			c.logger.Debug(ctx, fmt.Sprintf("Operación gRPC completada con resiliencia: %s", operationName), logFields)
+			c.logger.Debug(ctx, fmt.Sprintf("gRPC operation completed with resilience: %s", operationName), logFields)
 		}
 
 		return result, err
 	}
 
 	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación gRPC: %s", operationName), logFields)
+		c.logger.Debug(ctx, fmt.Sprintf("starting gRPC operation: %s", operationName), logFields)
 	}
 
 	result, err := operation()
@@ -118,16 +117,15 @@ func (c *Cliente) execute(ctx context.Context, operationName string, operation f
 	if err != nil && c.logging {
 		c.logger.Error(ctx, err, logFields)
 	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Operación gRPC completada: %s", operationName), logFields)
+		c.logger.Debug(ctx, fmt.Sprintf("gRPC operation completed: %s", operationName), logFields)
 	}
 
 	return result, err
 }
 
 func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
-		timeout := time.Until(deadline)
-		return context.WithTimeout(ctx, timeout)
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		return context.WithCancel(ctx)
 	}
 	return context.WithTimeout(ctx, DefaultTimeout)
 }
@@ -153,11 +151,11 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 	state := c.conn.GetState()
 
 	if state == connectivity.Ready || state == connectivity.Idle {
-		return nil // La conexión está en buen estado
+		return nil
 	}
 
 	if c.logging {
-		c.logger.Warn(ctx, "Intentando reconexión gRPC",
+		c.logger.Warn(ctx, "attempting gRPC reconnection",
 			map[string]interface{}{"state": state, "target": c.target})
 	}
 
@@ -180,7 +178,7 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 	c.conn = conn
 
 	if c.logging {
-		c.logger.Info(ctx, "Reconexión gRPC exitosa",
+		c.logger.Info(ctx, "gRPC reconnection successful",
 			map[string]interface{}{"target": c.target})
 	}
 
@@ -189,7 +187,7 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 
 func (c *Cliente) Close() error {
 	if c.logging {
-		c.logger.Debug(context.Background(), "Cerrando conexión gRPC",
+		c.logger.Debug(context.Background(), "closing gRPC connection",
 			map[string]interface{}{"target": c.target})
 	}
 	return c.conn.Close()
@@ -204,7 +202,7 @@ func (c *Cliente) InvokeRPC(ctx context.Context, operationName string,
 	state := c.conn.GetState()
 	if state != connectivity.Ready && state != connectivity.Idle {
 		if err := c.ReconnectIfNeeded(ctx); err != nil && c.logging {
-			c.logger.Warn(ctx, "No se pudo reconectar, intentando operación con la conexión actual",
+			c.logger.Warn(ctx, "reconnection failed, attempting operation with current connection",
 				map[string]interface{}{"error": err.Error(), "operation": operationName})
 		}
 	}

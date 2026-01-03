@@ -111,7 +111,7 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter) error {
 	var errType *CommonApiError
 	if errors.As(err, &errType) {
 		if errType.Err == nil {
-			fmt.Printf("[error_wrapper] Advertencia: El campo Err es nulo en CommonApiError\n")
+			fmt.Printf("[error_wrapper] Warning: Err field is nil in CommonApiError\n")
 		} else {
 			fmt.Printf("CommonApiError: %v\n", err)
 		}
@@ -121,11 +121,11 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter) error {
 		return nil
 	}
 
-	fmt.Printf("Error no manejado: %v\n", err)
+	fmt.Printf("Unhandled error: %v\n", err)
 	w.WriteHeader(http.StatusInternalServerError)
 	b, _ := json.Marshal(CommonApiError{
 		Code: CodeInternalError,
-		Msg:  "Error interno del servidor",
+		Msg:  "Internal server error",
 	})
 	_, _ = w.Write(b)
 	return nil
@@ -138,7 +138,7 @@ func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, request
 	if errors.As(err, &errType) {
 		errType.RequestID = requestID
 		if errType.Err == nil {
-			fmt.Printf("[error_wrapper] Advertencia: El campo Err es nulo en CommonApiError\n")
+			fmt.Printf("[error_wrapper] Warning: Err field is nil in CommonApiError\n")
 		} else {
 			fmt.Printf("CommonApiError: %v (RequestID: %s)\n", err, requestID)
 		}
@@ -148,11 +148,11 @@ func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, request
 		return nil
 	}
 
-	fmt.Printf("Error no manejado: %v (RequestID: %s)\n", err, requestID)
+	fmt.Printf("Unhandled error: %v (RequestID: %s)\n", err, requestID)
 	w.WriteHeader(http.StatusInternalServerError)
 	b, _ := json.Marshal(CommonApiError{
 		Code:      CodeInternalError,
-		Msg:       "Error interno del servidor",
+		Msg:       "Internal server error",
 		RequestID: requestID,
 	})
 	_, _ = w.Write(b)

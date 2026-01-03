@@ -15,7 +15,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/skolldire/go-engine/pkg/utilities/app_profile"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/uala-challenge/simple-toolkit/pkg/simplify/simple_router/ping"
 )
 
 var _ Service = (*App)(nil)
@@ -91,7 +90,7 @@ func (a *App) configureMiddlewares() {
 }
 
 func (a *App) configureBasicRoutes() {
-	a.router.Get("/ping", ping.NewService().Apply())
+	a.router.Get("/ping", pingHandler)
 	if !app_profile.IsProdProfile() {
 		registerPprofRoutes(a.router)
 	}
@@ -142,10 +141,10 @@ func (a *App) Run() error {
 
 	select {
 	case <-stop:
-		a.logger.Info(ctx, "Recibida señal de apagado, iniciando shutdown controlado", nil)
+		a.logger.Info(ctx, "shutdown signal received, initiating graceful shutdown", nil)
 	case err := <-errorCh:
 		a.logger.Error(ctx, err, map[string]interface{}{
-			"message": "Error al iniciar el servidor",
+			"message": "error starting server",
 		})
 		return err
 	}
@@ -155,12 +154,12 @@ func (a *App) Run() error {
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		a.logger.Error(ctx, err, map[string]interface{}{
-			"message": "Error durante el shutdown del servidor",
+			"message": "error during server shutdown",
 		})
 		return err
 	}
 
-	a.logger.Info(ctx, "Servidor apagado correctamente", nil)
+	a.logger.Info(ctx, "server shut down successfully", nil)
 	return nil
 }
 

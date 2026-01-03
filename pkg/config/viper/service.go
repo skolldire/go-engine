@@ -3,14 +3,17 @@ package viper
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
+	"github.com/skolldire/go-engine/pkg/config/dynamic"
 	"github.com/skolldire/go-engine/pkg/utilities/app_profile"
 	"github.com/skolldire/go-engine/pkg/utilities/file_utils"
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/spf13/viper"
 )
 
@@ -27,17 +30,17 @@ func NewService(logger *logrus.Logger) Service {
 
 func (s *service) Apply() (Config, error) {
 	if err := s.validateRequiredFiles(); err != nil {
-		s.log.Error("Error validando archivos de configuración: ", err)
+		s.log.Error("error validating configuration files: ", err)
 		return Config{}, err
 	}
 
 	mergedConfig, err := s.loadAndMergeConfigs()
 	if err != nil {
-		s.log.Error("Error cargando configuración: ", err)
+		s.log.Error("error loading configuration: ", err)
 		return Config{}, fmt.Errorf("error loading configuration - %w", err)
 	}
 
-	s.log.Info("Configuración cargada correctamente")
+	s.log.Info("configuration loaded successfully")
 	return s.mapConfigToStruct(mergedConfig)
 }
 
@@ -50,11 +53,11 @@ func (s *service) validateRequiredFiles() error {
 
 	missingFiles := getMissingFiles(s.propertyFiles, files)
 	if len(missingFiles) > 0 {
-		s.log.Errorf("Archivos de configuración faltantes: %v", missingFiles)
-		return fmt.Errorf("faltan archivos de configuración: %v", missingFiles)
+		s.log.Errorf("missing configuration files: %v", missingFiles)
+		return fmt.Errorf("missing configuration files: %v", missingFiles)
 	}
 
-	s.log.Debug("Todos los archivos de configuración requeridos están presentes")
+	s.log.Debug("all required configuration files are present")
 	return nil
 }
 
@@ -77,7 +80,7 @@ func (s *service) loadAndMergeConfigs() (*viper.Viper, error) {
 		envV.SetConfigType("yaml")
 
 		if err := loadConfigFile(envV, s.path, envFileName, s.log); err != nil {
-			s.log.Warnf("No se pudo cargar la configuración específica del entorno %s: %v", envFileName, err)
+			s.log.Warnf("failed to load environment-specific configuration %s: %v", envFileName, err)
 		} else {
 			if err := v.MergeConfigMap(envV.AllSettings()); err != nil {
 				return nil, fmt.Errorf("failed to merge configurations: %w", err)
@@ -89,7 +92,7 @@ func (s *service) loadAndMergeConfigs() (*viper.Viper, error) {
 		watchConfig(v, s.log)
 	}
 
-	s.log.Debug("Archivos de configuración combinados correctamente")
+	s.log.Debug("configuration files merged successfully")
 	return v, nil
 }
 
@@ -117,16 +120,64 @@ func (s *service) mapConfigToStruct(v *viper.Viper) (Config, error) {
 
 	decoder, err := mapstructure.NewDecoder(decoderConfig)
 	if err != nil {
-		return Config{}, fmt.Errorf("error creando decodificador: %w", err)
+		return Config{}, fmt.Errorf("error creating decoder: %w", err)
 	}
 
 	if err := decoder.Decode(v.AllSettings()); err != nil {
-		s.log.Error("Error decodificando configuración: ", err)
+		s.log.Error("error decoding configuration: ", err)
 		return Config{}, err
 	}
 
-	s.log.Debug("Configuración mapeada correctamente a la estructura")
+	s.log.Debug("configuration mapped successfully to structure")
 	return config, nil
+}
+
+func (s *service) ApplyDynamic(log logger.Service) (*dynamic.DynamicConfig, error) {
+	mergedConfig, err := s.loadAndMergeConfigs()
+	if err != nil {
+		return nil, fmt.Errorf("error loading initial configuration: %w", err)
+	}
+
+	config, err := s.mapConfigToStruct(mergedConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error mapping configuration: %w", err)
+	}
+
+	dynamicConfig := dynamic.NewDynamicConfig(&config, log)
+
+	dynamicConfig.SetReloadFunc(func() (interface{}, error) {
+		mergedConfig, err := s.loadAndMergeConfigs()
+		if err != nil {
+			return nil, err
+		}
+		config, err := s.mapConfigToStruct(mergedConfig)
+		if err != nil {
+			return nil, err
+		}
+		return &config, nil
+	})
+
+	if mergedConfig.GetBool("enable_config_watch") {
+		configPath := s.path
+		configFiles := []string{
+			filepath.Join(configPath, "application.yaml"),
+		}
+
+		envFileName := s.getPropertyFileName()
+		if envFileName != "application" {
+			configFiles = append(configFiles, filepath.Join(configPath, envFileName+".yaml"))
+		}
+
+		fileWatcher, err := dynamic.NewFileWatcher(configFiles, log)
+		if err != nil {
+			s.log.Warnf("failed to create file watcher: %v", err)
+		} else {
+			dynamicConfig.AddWatcher(fileWatcher)
+		}
+	}
+
+	s.log.Info("dynamic configuration created successfully")
+	return dynamicConfig, nil
 }
 
 func (s *service) getPropertyFileName() string {
@@ -135,7 +186,7 @@ func (s *service) getPropertyFileName() string {
 
 	files, err := file_utils.ListFiles(s.path)
 	if err != nil {
-		s.log.Warnf("Error listando archivos para buscar configuraciones específicas: %v", err)
+		s.log.Warnf("error listing files to search for specific configurations: %v", err)
 		return "application"
 	}
 
@@ -151,7 +202,7 @@ func (s *service) getPropertyFileName() string {
 		}
 	}
 
-	s.log.Warnf("No se encontró archivo de configuración específico para %s o %s", scopeFile, profileFile)
+	s.log.Warnf("specific configuration file not found for %s or %s", scopeFile, profileFile)
 	return "application"
 }
 
@@ -159,17 +210,17 @@ func loadConfigFile(v *viper.Viper, path, name string, logger *logrus.Logger) er
 	v.AddConfigPath(path)
 	v.SetConfigName(name)
 
-	logger.Debugf("Intentando cargar archivo de configuración: %s en %s", name, path)
+	logger.Debugf("attempting to load configuration file: %s in %s", name, path)
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			logger.Warnf("Archivo de configuración no encontrado: %s", name)
+			logger.Warnf("configuration file not found: %s", name)
 		} else {
-			logger.Errorf("Error leyendo archivo de configuración %s: %v", name, err)
+			logger.Errorf("error reading configuration file %s: %v", name, err)
 		}
 		return err
 	}
 
-	logger.Infof("Archivo de configuración %s cargado correctamente", name)
+	logger.Infof("configuration file %s loaded successfully", name)
 	return nil
 }
 
@@ -195,7 +246,7 @@ func envVarDecodeHook() mapstructure.DecodeHookFunc {
 func watchConfig(v *viper.Viper, logger *logrus.Logger) {
 	v.WatchConfig()
 	v.OnConfigChange(func(e fsnotify.Event) {
-		logger.Warnf("Archivo de configuración cambiado: %s", e.Name)
+		logger.Warnf("configuration file changed: %s", e.Name)
 	})
 }
 
@@ -207,7 +258,7 @@ func getPropertyFiles(logger *logrus.Logger) []string {
 	path := getConfigPath(logger)
 	availableFiles, err := file_utils.ListFiles(path)
 	if err != nil {
-		logger.Warnf("No se pudieron listar archivos de configuración: %v", err)
+		logger.Warnf("failed to list configuration files: %v", err)
 		return requiredFiles
 	}
 
@@ -223,16 +274,16 @@ func getPropertyFiles(logger *logrus.Logger) []string {
 
 func getConfigPath(logger *logrus.Logger) string {
 	if path := os.Getenv("CONF_DIR"); path != "" {
-		logger.Debugf("Usando CONF_DIR: %s", path)
+		logger.Debugf("using CONF_DIR: %s", path)
 		return path
 	}
 
 	if app_profile.IsLocalProfile() {
-		logger.Debug("Usando perfil local para configuración")
+		logger.Debug("using local profile for configuration")
 		return "config"
 	}
 
-	logger.Debug("Usando configuración por defecto en /app/config")
+	logger.Debug("using default configuration in /app/config")
 	return "/app/config"
 }
 

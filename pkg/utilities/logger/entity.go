@@ -7,7 +7,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Config contiene la configuración para el servicio de logger
 type Config struct {
 	Level            string           `mapstructure:"level" json:"level"`
 	Path             string           `mapstructure:"path" json:"path"`

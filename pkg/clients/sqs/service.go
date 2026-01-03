@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
@@ -32,9 +33,9 @@ func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
 	if cliente.logging {
 		endpoint := cfg.Endpoint
 		if endpoint == "" {
-			endpoint = "AWS predeterminado"
+			endpoint = "default AWS"
 		}
-		l.Debug(context.Background(), "Cliente SQS inicializado",
+		l.Debug(context.Background(), "SQS client initialized",
 			map[string]interface{}{
 				"endpoint": endpoint,
 			})
@@ -60,7 +61,7 @@ func (c *Cliente) execute(ctx context.Context, operationName string,
 
 func (c *Cliente) executeOperation(ctx context.Context, operationName string,
 	operation func() (interface{}, error)) (interface{}, error) {
-	logFields := map[string]interface{}{"operacion": operationName, "servicio": "SQS"}
+	logFields := map[string]interface{}{"operation": operationName, "service": "SQS"}
 
 	if c.resilience != nil {
 		return c.executeWithResilience(ctx, operationName, operation, logFields)
@@ -72,7 +73,7 @@ func (c *Cliente) executeOperation(ctx context.Context, operationName string,
 func (c *Cliente) executeWithResilience(ctx context.Context, operationName string,
 	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación SQS con resiliencia: %s", operationName), logFields)
+		c.logger.Debug(ctx, fmt.Sprintf("starting SQS operation with resilience: %s", operationName), logFields)
 	}
 
 	result, err := c.resilience.Execute(ctx, operation)
@@ -80,7 +81,7 @@ func (c *Cliente) executeWithResilience(ctx context.Context, operationName strin
 	if err != nil && c.logging {
 		c.logger.Error(ctx, err, logFields)
 	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Operación SQS completada con resiliencia: %s", operationName), logFields)
+		c.logger.Debug(ctx, fmt.Sprintf("SQS operation completed with resilience: %s", operationName), logFields)
 	}
 
 	return result, err
@@ -89,7 +90,7 @@ func (c *Cliente) executeWithResilience(ctx context.Context, operationName strin
 func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
 	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Iniciando operación SQS: %s", operationName), logFields)
+		c.logger.Debug(ctx, fmt.Sprintf("starting SQS operation: %s", operationName), logFields)
 	}
 
 	result, err := operation()
@@ -97,7 +98,7 @@ func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
 	if err != nil && c.logging {
 		c.logger.Error(ctx, err, logFields)
 	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Operación SQS completada: %s", operationName), logFields)
+		c.logger.Debug(ctx, fmt.Sprintf("SQS operation completed: %s", operationName), logFields)
 	}
 
 	return result, err
@@ -123,7 +124,10 @@ func (c *Cliente) SendMsj(ctx context.Context, queueURL string, mensaje string,
 		return "", c.logger.WrapError(err, ErrEnviarMensaje.Error())
 	}
 
-	response := result.(*sqs.SendMessageOutput)
+	response, err := client.SafeTypeAssert[*sqs.SendMessageOutput](result)
+	if err != nil {
+		return "", c.logger.WrapError(err, ErrEnviarMensaje.Error())
+	}
 	return *response.MessageId, nil
 }
 
@@ -135,7 +139,7 @@ func (c *Cliente) SendJSON(ctx context.Context, queueURL string, mensaje interfa
 
 	jsonBytes, err := json.Marshal(mensaje)
 	if err != nil {
-		return "", fmt.Errorf("error al convertir mensaje a JSON: %w", err)
+		return "", fmt.Errorf("error converting message to JSON: %w", err)
 	}
 
 	return c.SendMsj(ctx, queueURL, string(jsonBytes), atributos)
@@ -148,7 +152,7 @@ func (c *Cliente) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes i
 	}
 
 	if maxMensajes <= 0 {
-		maxMensajes = 10 // Valor por defecto
+		maxMensajes = 10
 	}
 
 	input := &sqs.ReceiveMessageInput{
@@ -166,7 +170,10 @@ func (c *Cliente) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes i
 		return nil, c.logger.WrapError(err, ErrRecibirMensajes.Error())
 	}
 
-	response := result.(*sqs.ReceiveMessageOutput)
+	response, err := client.SafeTypeAssert[*sqs.ReceiveMessageOutput](result)
+	if err != nil {
+		return nil, c.logger.WrapError(err, ErrRecibirMensajes.Error())
+	}
 	return response.Messages, nil
 }
 
@@ -212,7 +219,10 @@ func (c *Cliente) CreateQueue(ctx context.Context, nombre string, atributos map[
 		return "", c.logger.WrapError(err, ErrCrearCola.Error())
 	}
 
-	response := result.(*sqs.CreateQueueOutput)
+	response, err := client.SafeTypeAssert[*sqs.CreateQueueOutput](result)
+	if err != nil {
+		return "", c.logger.WrapError(err, ErrCrearCola.Error())
+	}
 	return *response.QueueUrl, nil
 }
 
@@ -248,7 +258,10 @@ func (c *Cliente) ListQueue(ctx context.Context, prefijo string) ([]string, erro
 		return nil, c.logger.WrapError(err, ErrListarColas.Error())
 	}
 
-	response := result.(*sqs.ListQueuesOutput)
+	response, err := client.SafeTypeAssert[*sqs.ListQueuesOutput](result)
+	if err != nil {
+		return nil, c.logger.WrapError(err, ErrListarColas.Error())
+	}
 	urls := make([]string, len(response.QueueUrls))
 	copy(urls, response.QueueUrls)
 
@@ -270,7 +283,10 @@ func (c *Cliente) GetURLQueue(ctx context.Context, nombre string) (string, error
 		return "", c.logger.WrapError(err, ErrObtenerURLCola.Error())
 	}
 
-	response := result.(*sqs.GetQueueUrlOutput)
+	response, err := client.SafeTypeAssert[*sqs.GetQueueUrlOutput](result)
+	if err != nil {
+		return "", c.logger.WrapError(err, ErrObtenerURLCola.Error())
+	}
 	return *response.QueueUrl, nil
 }
 

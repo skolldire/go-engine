@@ -61,7 +61,7 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		waitTime := r.calculateWaitTime(attempt)
 
 		if r.logger != nil {
-			r.logger.Debug(ctx, "Reintentando operación después de error",
+			r.logger.Debug(ctx, "retrying operation after error",
 				map[string]interface{}{"attempt": attempt + 1,
 					"maxRetries": r.config.MaxRetries,
 					"waitTime":   waitTime,
@@ -75,7 +75,7 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 	}
 
-	return r.logger.WrapError(err, "Error al ejecutar operación después de todos los reintentos")
+	return r.logger.WrapError(err, "error executing operation after all retries")
 }
 
 func (r *Retryer) calculateWaitTime(attempt int) time.Duration {

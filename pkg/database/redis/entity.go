@@ -19,9 +19,9 @@ const (
 )
 
 var (
-	ErrKeyNotFound  = errors.New("clave no encontrada")
-	ErrInvalidValue = errors.New("valor inválido")
-	ErrConnection   = errors.New("error de conexión con redis")
+	ErrKeyNotFound  = errors.New("key not found")
+	ErrInvalidValue = errors.New("invalid value")
+	ErrConnection   = errors.New("redis connection error")
 )
 
 type Config struct {

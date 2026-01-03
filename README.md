@@ -17,6 +17,21 @@ Go Engine es un framework ligero para desarrollar aplicaciones en Go siguiendo l
 - **Cierre controlado**: Manejo de señales del sistema para un apagado graceful
 - **Integración con AWS**: Soporte nativo para servicios como DynamoDB, SQS, SNS
 - **Conectores de base de datos**: Integraciones con Redis, SQL (vía GORM) y DynamoDB
+- **Sistema de Plugins**: Registro de clientes personalizados mediante el sistema de registry
+- **BaseClient**: Cliente base reutilizable con logging y resiliencia integrados
+- **API Mejorada**: Getters para acceso controlado a recursos de la aplicación
+
+## Nuevas Mejoras
+
+Para más información sobre las mejoras arquitectónicas recientes, consulta [MEJORAS.md](./MEJORAS.md).
+
+### Principales Mejoras Implementadas
+
+1. **BaseClient**: Cliente base que elimina duplicación de código en todos los clientes
+2. **Registry System**: Sistema de registro para clientes personalizados
+3. **AppBuilder Completo**: Builder pattern fluido y completo para construcción de aplicaciones
+4. **Mejor Encapsulación**: Getters para acceso controlado a recursos
+5. **Facilidad de Extensión**: Agregar nuevos clientes es más simple usando BaseClient
 
 ## Instalación
 
@@ -55,21 +70,28 @@ func main() {
     }()
 
     // Crear aplicación usando el builder
-    aplicacion := app.NewAppBuilder().
+    engine, err := app.NewAppBuilder().
         WithContext(ctx).
-        WithMiddleware().
+        WithConfigs().
+        WithInitialization().
+        WithRouter().
         WithGracefulShutdown().
         Build()
 
+    if err != nil {
+        fmt.Printf("Error al construir la aplicación: %v\n", err)
+        os.Exit(1)
+    }
+
     // Verificar errores durante la inicialización
-    if errs := aplicacion.GetErrors(); len(errs) > 0 {
+    if errs := engine.GetErrors(); len(errs) > 0 {
         fmt.Printf("Error al inicializar la aplicación: %v\n", errs[0])
         os.Exit(1)
     }
 
     // Ejecutar la aplicación
     fmt.Println("Iniciando la aplicación...")
-    if err := aplicacion.Run(); err != nil {
+    if err := engine.Run(); err != nil {
         fmt.Printf("Error en la aplicación: %v\n", err)
         os.Exit(1)
     }

@@ -100,7 +100,7 @@ func distributeTasksByPriority(ctx context.Context, tasks map[string]Tasker, tas
 			}
 		case <-ctx.Done():
 			if cfg.logger != nil {
-				cfg.logger.Debug(ctx, "Distribución de tareas cancelada", nil)
+				cfg.logger.Debug(ctx, "task distribution cancelled", nil)
 			}
 			return
 		}
@@ -127,7 +127,7 @@ func waitForWorkersToFinish(wg *sync.WaitGroup, resultChan chan<- Result, cfg *c
 	wg.Wait()
 	close(resultChan)
 	if cfg.logger != nil {
-		cfg.logger.Debug(ctx, "Todas las tareas han sido procesadas", nil)
+		cfg.logger.Debug(ctx, "all tasks have been processed", nil)
 	}
 }
 
@@ -168,7 +168,7 @@ func collectResults(ctx context.Context, resultChan <-chan Result, tasks map[str
 
 func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
-		cfg.logger.Warn(ctx, "Tiempo de espera agotado para recolección de resultados",
+		cfg.logger.Warn(ctx, "timeout exceeded for result collection",
 			map[string]interface{}{
 				"totalTasks":       len(tasks),
 				"collectedResults": len(results),
@@ -178,7 +178,7 @@ func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker
 
 func logCancellationWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
-		cfg.logger.Warn(ctx, "Recolección de resultados cancelada",
+		cfg.logger.Warn(ctx, "result collection cancelled",
 			map[string]interface{}{
 				"totalTasks":       len(tasks),
 				"collectedResults": len(results),
@@ -243,7 +243,7 @@ func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <
 			case resultChan <- result:
 			case <-ctx.Done():
 				if cfg.logger != nil {
-					cfg.logger.Debug(ctx, "Descartando resultado por cancelación",
+					cfg.logger.Debug(ctx, "discarding result due to cancellation",
 						map[string]interface{}{
 							"taskID":   taskItem.id,
 							"workerID": workerID,
@@ -273,7 +273,7 @@ func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, w
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				errMsg := fmt.Sprintf("panic en ejecución de tarea: %v", r)
+				errMsg := fmt.Sprintf("panic during task execution: %v", r)
 				if cfg.logger != nil {
 					cfg.logger.Error(ctx, ErrTaskPanic, map[string]interface{}{
 						"taskID":   id,
