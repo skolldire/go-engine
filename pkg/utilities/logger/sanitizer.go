@@ -110,3 +110,5 @@ func ShouldSanitizeField(fieldName string) bool {
 	return sensitiveFieldNames[strings.ToLower(fieldName)]
 }
 
+
+

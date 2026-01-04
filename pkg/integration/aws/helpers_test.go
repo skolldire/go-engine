@@ -2,22 +2,24 @@ package aws
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
+	"github.com/stretchr/testify/mock"
 )
 
-// mockClient is a mock implementation of Client for testing
-type mockClient struct {
-	doFunc func(ctx context.Context, req *cloud.Request) (*cloud.Response, error)
+// mockClientHelper is a mock implementation of Client for testing helpers
+// Uses the same mockClient from client_test.go but with a simpler interface
+type mockClientHelper struct {
+	mock.Mock
 }
 
-func (m *mockClient) Do(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
-	if m.doFunc != nil {
-		return m.doFunc(ctx, req)
+func (m *mockClientHelper) Do(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-	return &cloud.Response{StatusCode: 200}, nil
+	return args.Get(0).(*cloud.Response), args.Error(1)
 }
 
 func TestSQSSendMessage(t *testing.T) {
@@ -30,28 +32,27 @@ func TestSQSSendMessage(t *testing.T) {
 	}{
 		{
 			name: "success",
-			client: &mockClient{
-				doFunc: func(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
-					if req.Operation != "sqs.send_message" {
-						return nil, errors.New("wrong operation")
-					}
-					return &cloud.Response{
-						StatusCode: 200,
-						Headers:    map[string]string{"sqs.message_id": "msg-123"},
-					}, nil
-				},
-			},
+			client: func() Client {
+				m := &mockClientHelper{}
+				m.On("Do", mock.Anything, mock.MatchedBy(func(req *cloud.Request) bool {
+					return req.Operation == "sqs.send_message"
+				})).Return(&cloud.Response{
+					StatusCode: 200,
+					Headers:    map[string]string{"sqs.message_id": "msg-123"},
+				}, nil)
+				return m
+			}(),
 			queue:   "my-queue",
 			payload: map[string]string{"key": "value"},
 			wantErr: false,
 		},
 		{
 			name: "client error",
-			client: &mockClient{
-				doFunc: func(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
-					return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, "test error")
-				},
-			},
+			client: func() Client {
+				m := &mockClientHelper{}
+				m.On("Do", mock.Anything, mock.Anything).Return(nil, cloud.NewError(cloud.ErrCodeInvalidRequest, "test error"))
+				return m
+			}(),
 			queue:   "my-queue",
 			payload: map[string]string{"key": "value"},
 			wantErr: true,
@@ -73,17 +74,13 @@ func TestSQSSendMessage(t *testing.T) {
 }
 
 func TestSNSPublish(t *testing.T) {
-	client := &mockClient{
-		doFunc: func(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
-			if req.Operation != "sns.publish" {
-				return nil, errors.New("wrong operation")
-			}
-			return &cloud.Response{
-				StatusCode: 200,
-				Headers:    map[string]string{"sns.message_id": "msg-123"},
-			}, nil
-		},
-	}
+	client := &mockClientHelper{}
+	client.On("Do", mock.Anything, mock.MatchedBy(func(req *cloud.Request) bool {
+		return req.Operation == "sns.publish"
+	})).Return(&cloud.Response{
+		StatusCode: 200,
+		Headers:    map[string]string{"sns.message_id": "msg-123"},
+	}, nil)
 
 	msgID, err := SNSPublish(context.Background(), client, "arn:aws:sns:us-east-1:123:my-topic", map[string]string{"key": "value"})
 	if err != nil {
@@ -95,17 +92,13 @@ func TestSNSPublish(t *testing.T) {
 }
 
 func TestLambdaInvoke(t *testing.T) {
-	client := &mockClient{
-		doFunc: func(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
-			if req.Operation != "lambda.invoke" {
-				return nil, errors.New("wrong operation")
-			}
-			return &cloud.Response{
-				StatusCode: 200,
-				Body:       []byte(`{"result":"success"}`),
-			}, nil
-		},
-	}
+	client := &mockClientHelper{}
+	client.On("Do", mock.Anything, mock.MatchedBy(func(req *cloud.Request) bool {
+		return req.Operation == "lambda.invoke"
+	})).Return(&cloud.Response{
+		StatusCode: 200,
+		Body:       []byte(`{"result":"success"}`),
+	}, nil)
 
 	resp, err := LambdaInvoke(context.Background(), client, "my-function", map[string]string{"key": "value"})
 	if err != nil {

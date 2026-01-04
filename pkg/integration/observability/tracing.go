@@ -26,6 +26,11 @@ type tracingMiddleware struct {
 }
 
 func (m *tracingMiddleware) Do(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
+	// If tracer is nil, skip tracing and just call next
+	if m.tracer == nil {
+		return m.next.Do(ctx, req)
+	}
+
 	// Extract service and operation for span name
 	service, operation := extractServiceOperation(req.Operation)
 	spanName := fmt.Sprintf("%s.%s", service, operation)
