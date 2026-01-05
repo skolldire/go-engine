@@ -63,6 +63,24 @@ func (c *SESClient) SendEmail(ctx context.Context, message EmailMessage) (*SendE
 		}
 	}
 
+	for _, cc := range message.Cc {
+		if err := validation.GetGlobalValidator().Var(cc.Email, "required,email"); err != nil {
+			return nil, fmt.Errorf("%w: invalid Cc address: %v", ErrInvalidAddress, err)
+		}
+	}
+
+	for _, bcc := range message.Bcc {
+		if err := validation.GetGlobalValidator().Var(bcc.Email, "required,email"); err != nil {
+			return nil, fmt.Errorf("%w: invalid Bcc address: %v", ErrInvalidAddress, err)
+		}
+	}
+
+	for _, replyTo := range message.ReplyTo {
+		if err := validation.GetGlobalValidator().Var(replyTo.Email, "required,email"); err != nil {
+			return nil, fmt.Errorf("%w: invalid ReplyTo address: %v", ErrInvalidAddress, err)
+		}
+	}
+
 	destination := &types.Destination{
 		ToAddresses:  make([]string, len(message.To)),
 		CcAddresses:  make([]string, len(message.Cc)),

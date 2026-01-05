@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/config/viper"
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"go.elastic.co/ecslogrus"
 )
@@ -62,7 +63,11 @@ func (b *AppBuilder) WithDynamicConfig() *AppBuilder {
 		return b
 	}
 
-	config := dynamicConfig.Get().(*viper.Config)
+	config, err := client.SafeTypeAssert[*viper.Config](dynamicConfig.Get())
+	if err != nil {
+		b.addError(fmt.Errorf("failed to get dynamic config: %w", err))
+		return b
+	}
 	b.engine.Conf = config
 
 	log := setLogLevel(config.Log, tracer)
@@ -163,4 +168,3 @@ func (b *AppBuilder) SetLogger(log logger.Service) *AppBuilder {
 	b.engine.Log = log
 	return b
 }
-
