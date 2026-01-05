@@ -288,7 +288,7 @@ func (c *Cliente) SendSMS(ctx context.Context, phoneNumber, message string, attr
 	}
 
 	input := &sns.PublishInput{
-		PhoneNumber:       aws.String(phoneNumber),
+		PhoneNumber:       aws.String(cleaned),
 		Message:           aws.String(message),
 		MessageAttributes: attributes,
 	}
