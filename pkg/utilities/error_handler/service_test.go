@@ -224,7 +224,7 @@ func TestHandleApiErrorResponse(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			var result CommonApiError
-			json.Unmarshal(w.Body.Bytes(), &result)
+			_ = json.Unmarshal(w.Body.Bytes(), &result)
 			assert.Equal(t, tt.expectedCode, result.Code)
 		})
 	}
@@ -240,7 +240,7 @@ func TestHandleApiErrorResponseWithRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	var result CommonApiError
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, CodeBadRequest, result.Code)
 	assert.Equal(t, requestID, result.RequestID)
 }

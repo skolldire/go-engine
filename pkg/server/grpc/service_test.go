@@ -44,9 +44,9 @@ func TestNewServer(t *testing.T) {
 	server := NewServer(cfg, log)
 
 	assert.NotNil(t, server)
-	// Verificar que implementa la interfaz Service
-	_, ok := server.(Service)
-	assert.True(t, ok)
+	// Verify that server implements the Service interface
+	// Type assertion is redundant since NewServer already returns Service
+	_ = server
 }
 
 func TestNewServer_WithLogging(t *testing.T) {
@@ -59,9 +59,9 @@ func TestNewServer_WithLogging(t *testing.T) {
 	srv := NewServer(cfg, log)
 
 	assert.NotNil(t, srv)
-	// Verificar que implementa la interfaz Service
-	_, ok := srv.(Service)
-	assert.True(t, ok)
+	// Verify that srv implements the Service interface
+	// Type assertion is redundant since NewServer already returns Service
+	_ = srv
 }
 
 func TestServer_RegisterService(t *testing.T) {

@@ -1,11 +1,10 @@
-version: 2
+version: "2"
 
 run:
   timeout: 5m
   modules-download-mode: readonly
 
 linters:
-  disable-all: true
   enable:
     - govet
     - errcheck

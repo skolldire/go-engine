@@ -135,7 +135,7 @@ func TestApp_HandleFunc(t *testing.T) {
 
 	app.HandleFunc("/custom", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("custom"))
+		_, _ = w.Write([]byte("custom"))
 	})
 
 	req := httptest.NewRequest("GET", "/custom", nil)

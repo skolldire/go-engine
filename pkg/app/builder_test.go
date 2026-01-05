@@ -25,6 +25,7 @@ func TestAppBuilder_WithContext(t *testing.T) {
 
 func TestAppBuilder_WithContext_Nil(t *testing.T) {
 	builder := NewAppBuilder()
+	//nolint:staticcheck // Testing nil context error handling is intentional
 	result := builder.WithContext(nil)
 	assert.NotNil(t, result.GetErrors())
 	assert.Greater(t, len(result.GetErrors()), 0)
@@ -119,7 +120,7 @@ func TestAppBuilder_GetErrors(t *testing.T) {
 
 func TestAppBuilder_Build_WithErrors(t *testing.T) {
 	builder := NewAppBuilder()
-	builder.WithContext(nil) // This adds an error
+	builder.WithContext(nil) //nolint:staticcheck // Testing nil context error handling is intentional
 	engine, err := builder.Build()
 	assert.Error(t, err)
 	assert.Nil(t, engine)

@@ -30,7 +30,7 @@ func TestTracingMiddleware_Success(t *testing.T) {
 		mock.Anything).Run(func(args mock.Arguments) {
 		// Execute the callback function to populate attributes
 		fn := args.Get(2).(func(context.Context) error)
-		fn(ctx)
+		_ = fn(ctx)
 	}).Return(nil)
 
 	middleware := Tracing(mockTrac)
@@ -61,7 +61,7 @@ func TestTracingMiddleware_Error(t *testing.T) {
 	// The Span method should call the function and return its error
 	mockTrac.On("Span", ctx, "sqs.send_message", mock.AnythingOfType("func(context.Context) error"), mock.Anything).Run(func(args mock.Arguments) {
 		fn := args.Get(2).(func(context.Context) error)
-		fn(ctx) // Call the function which will call mockCli.Do and return cloudErr
+		_ = fn(ctx) // Call the function which will call mockCli.Do and return cloudErr
 	}).Return(cloudErr)
 
 	middleware := Tracing(mockTrac)

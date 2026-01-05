@@ -21,8 +21,8 @@ func TestGetProfileByScope(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {
-			os.Setenv("SCOPE", tt.scope)
-			defer os.Unsetenv("SCOPE")
+			_ = os.Setenv("SCOPE", tt.scope)
+			defer func() { _ = os.Unsetenv("SCOPE") }()
 			result := GetProfileByScope()
 			assert.Equal(t, tt.expected, result)
 		})
@@ -30,50 +30,50 @@ func TestGetProfileByScope(t *testing.T) {
 }
 
 func TestIsLocalProfile(t *testing.T) {
-	os.Setenv("SCOPE", "local")
-	defer os.Unsetenv("SCOPE")
+	_ = os.Setenv("SCOPE", "local")
+	defer func() { _ = os.Unsetenv("SCOPE") }()
 
 	assert.True(t, IsLocalProfile())
 
-	os.Setenv("SCOPE", "prod")
+	_ = os.Setenv("SCOPE", "prod")
 	assert.False(t, IsLocalProfile())
 }
 
 func TestIsTestProfile(t *testing.T) {
-	os.Setenv("SCOPE", "some-test")
-	defer os.Unsetenv("SCOPE")
+	_ = os.Setenv("SCOPE", "some-test")
+	defer func() { _ = os.Unsetenv("SCOPE") }()
 
 	assert.True(t, IsTestProfile())
 
-	os.Setenv("SCOPE", "prod")
+	_ = os.Setenv("SCOPE", "prod")
 	assert.False(t, IsTestProfile())
 }
 
 func TestIsProdProfile(t *testing.T) {
-	os.Setenv("SCOPE", "environment-prod")
-	defer os.Unsetenv("SCOPE")
+	_ = os.Setenv("SCOPE", "environment-prod")
+	defer func() { _ = os.Unsetenv("SCOPE") }()
 
 	assert.True(t, IsProdProfile())
 
-	os.Setenv("SCOPE", "stage")
+	_ = os.Setenv("SCOPE", "stage")
 	assert.False(t, IsProdProfile())
 }
 
 func TestIsStageProfile(t *testing.T) {
-	os.Setenv("SCOPE", "test-stage")
-	defer os.Unsetenv("SCOPE")
+	_ = os.Setenv("SCOPE", "test-stage")
+	defer func() { _ = os.Unsetenv("SCOPE") }()
 
 	assert.True(t, IsStageProfile())
 
-	os.Setenv("SCOPE", "prod")
+	_ = os.Setenv("SCOPE", "prod")
 	assert.False(t, IsStageProfile())
 }
 
 func TestGetScopeValue(t *testing.T) {
-	os.Setenv("SCOPE", "custom-profile")
-	defer os.Unsetenv("SCOPE")
+	_ = os.Setenv("SCOPE", "custom-profile")
+	defer func() { _ = os.Unsetenv("SCOPE") }()
 
 	assert.Equal(t, "custom-profile", GetScopeValue())
-	os.Unsetenv("SCOPE")
+	_ = os.Unsetenv("SCOPE")
 	assert.Equal(t, "local", GetScopeValue())
 }

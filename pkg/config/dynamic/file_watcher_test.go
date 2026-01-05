@@ -14,17 +14,17 @@ import (
 func TestNewFileWatcher(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "test_watcher")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	tempFile := filepath.Join(tempDir, "test.yaml")
 	f, err := os.Create(tempFile)
 	assert.NoError(t, err)
-	f.Close()
+	_ = f.Close()
 
 	watcher, err := NewFileWatcher([]string{tempFile}, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, watcher)
-	defer watcher.Stop()
+	defer func() { _ = watcher.Stop() }()
 }
 
 func TestNewFileWatcher_InvalidPath(t *testing.T) {
@@ -36,12 +36,12 @@ func TestNewFileWatcher_InvalidPath(t *testing.T) {
 func TestFileWatcher_Stop(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "test_watcher")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	tempFile := filepath.Join(tempDir, "test.yaml")
 	f, err := os.Create(tempFile)
 	assert.NoError(t, err)
-	f.Close()
+	_ = f.Close()
 
 	watcher, err := NewFileWatcher([]string{tempFile}, nil)
 	assert.NoError(t, err)
@@ -68,18 +68,18 @@ func TestFileWatcher_IsConfigFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir, err := os.MkdirTemp("", "test_watcher")
 			assert.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			tempFile := filepath.Join(tempDir, tt.filename)
 			f, err := os.Create(tempFile)
 			assert.NoError(t, err)
-			f.Close()
+			_ = f.Close()
 
 			watcher, err := NewFileWatcher([]string{tempFile}, nil)
 			if err != nil {
 				return // Skip if watcher creation fails
 			}
-			defer watcher.Stop()
+			defer func() { _ = watcher.Stop() }()
 
 			result := watcher.isConfigFile(tt.filename)
 			assert.Equal(t, tt.expected, result)
@@ -90,16 +90,16 @@ func TestFileWatcher_IsConfigFile(t *testing.T) {
 func TestFileWatcher_Watch_ContextCancelled(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "test_watcher")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	tempFile := filepath.Join(tempDir, "test.yaml")
 	f, err := os.Create(tempFile)
 	assert.NoError(t, err)
-	f.Close()
+	_ = f.Close()
 
 	watcher, err := NewFileWatcher([]string{tempFile}, nil)
 	assert.NoError(t, err)
-	defer watcher.Stop()
+	defer func() { _ = watcher.Stop() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
