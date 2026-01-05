@@ -132,24 +132,30 @@ func (e *Engine) GetTelemetry() telemetry.Telemetry {
 }
 
 // GetServices returns the service registry
-// Thread-safe lazy initialization using sync.Once
+// Thread-safe lazy initialization using sync.Once.
+// sync.Once.Do() ensures the initialization function executes exactly once
+// and provides a memory barrier that guarantees all goroutines see the
+// initialized value after Do() completes.
 func (e *Engine) GetServices() *ServiceRegistry {
 	e.servicesOnce.Do(func() {
 		e.Services = NewServiceRegistry()
 	})
-	// sync.Once.Do() provides a memory barrier that ensures all goroutines
-	// see the initialized value after Do() returns
+	// After sync.Once.Do() completes, all goroutines are guaranteed to see
+	// the initialized value due to the memory barrier provided by sync.Once.
 	return e.Services
 }
 
 // GetConfigs returns the config registry
-// Thread-safe lazy initialization using sync.Once
+// Thread-safe lazy initialization using sync.Once.
+// sync.Once.Do() ensures the initialization function executes exactly once
+// and provides a memory barrier that guarantees all goroutines see the
+// initialized value after Do() completes.
 func (e *Engine) GetConfigs() *ConfigRegistry {
 	e.configsOnce.Do(func() {
 		e.Configs = NewConfigRegistry()
 	})
-	// sync.Once.Do() provides a memory barrier that ensures all goroutines
-	// see the initialized value after Do() returns
+	// After sync.Once.Do() completes, all goroutines are guaranteed to see
+	// the initialized value due to the memory barrier provided by sync.Once.
 	return e.Configs
 }
 
