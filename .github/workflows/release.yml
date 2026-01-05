@@ -35,10 +35,28 @@ jobs:
       - name: Run Tests
         run: go test ./... -v
 
+      - name: Get tag name
+        id: tag
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "Creating release for tag: $TAG_NAME"
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: Release ${{ steps.tag.outputs.tag_name }}
+          body: |
+            ## Release ${{ steps.tag.outputs.tag_name }}
+            
+            Automatically created release from merge to main.
+            
+            ### Changes
+            See commit history for details.
           files: |
             README.md
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

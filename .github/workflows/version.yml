@@ -1,0 +1,62 @@
+name: Auto Versioning
+
+on:
+  push:
+    branches: [main, master]
+    # Solo se ejecuta cuando se hace merge a main/master
+
+permissions:
+  contents: write
+
+jobs:
+  create-version:
+    name: Create Version Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necesario para obtener todos los tags
+
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          # Obtener el último tag, o usar v0.0.0 si no hay tags
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG"
+
+      - name: Calculate next version
+        id: next_version
+        run: |
+          LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
+          # Remover el prefijo 'v' si existe
+          VERSION=${LATEST_TAG#v}
+          
+          # Dividir en major.minor.patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          
+          # Incrementar minor version y resetear patch a 0
+          # Esto deja el patch disponible para versiones de prueba/test
+          MINOR=$((MINOR + 1))
+          PATCH=0
+          
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Create and push tag
+        run: |
+          NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
+          
+          # Verificar si el tag ya existe (por si acaso)
+          if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
+            echo "Tag $NEW_VERSION already exists, skipping..."
+            exit 0
+          fi
+          
+          # Crear el tag
+          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          
+          # Push del tag (esto activará el workflow de release)
+          git push origin "$NEW_VERSION"
