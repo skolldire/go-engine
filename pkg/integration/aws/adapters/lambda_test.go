@@ -39,6 +39,3 @@ func TestLambdaAdapter_Invoke_InvalidPath(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "function name/path is required")
 }
-
-
-

@@ -56,7 +56,7 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 			defer cancel()
 		}
 	}
-	
+
 	// Parse body as JSON email message
 	var emailMsg map[string]interface{}
 	if err := json.Unmarshal(req.Body, &emailMsg); err != nil {
@@ -317,6 +317,3 @@ func (a *sesAdapter) listVerifiedEmailAddresses(ctx context.Context, req *cloud.
 func normalizeSESError(err error, operation string) *cloud.Error {
 	return normalizeAWSError(err, operation)
 }
-
-
-

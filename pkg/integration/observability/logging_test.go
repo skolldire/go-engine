@@ -141,10 +141,10 @@ func TestLoggingMiddleware_WithMethod(t *testing.T) {
 
 func TestExtractServiceVerb(t *testing.T) {
 	tests := []struct {
-		name           string
-		operation      string
-		wantService    string
-		wantVerb       string
+		name        string
+		operation   string
+		wantService string
+		wantVerb    string
 	}{
 		{
 			name:        "valid operation",
@@ -174,4 +174,3 @@ func TestExtractServiceVerb(t *testing.T) {
 		})
 	}
 }
-

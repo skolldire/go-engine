@@ -67,6 +67,3 @@ func (r *Request) WithBody(body []byte) *Request {
 	r.Body = body
 	return r
 }
-
-
-

@@ -74,7 +74,7 @@ func SQSCreateQueue(ctx context.Context, client Client, queueName string, attrib
 	req := &cloud.Request{
 		Operation: "sqs.create_queue",
 		Path:      queueName,
-		Headers:  make(map[string]string),
+		Headers:   make(map[string]string),
 	}
 	for k, v := range attributes {
 		req.Headers["sqs.queue_attribute."+k] = v
@@ -101,7 +101,7 @@ func SQSDeleteQueue(ctx context.Context, client Client, queueURL string) error {
 // AWS SDK equivalent: ListQueues
 func SQSListQueues(ctx context.Context, client Client, prefix string) (*cloud.Response, error) {
 	req := &cloud.Request{
-		Operation: "sqs.list_queues",
+		Operation:   "sqs.list_queues",
 		QueryParams: make(map[string]string),
 	}
 	if prefix != "" {
@@ -216,8 +216,8 @@ func S3ListObjects(ctx context.Context, client Client, bucket, prefix string, ma
 		path = fmt.Sprintf("%s/%s", bucket, prefix)
 	}
 	req := &cloud.Request{
-		Operation: "s3.list_objects",
-		Path:      path,
+		Operation:   "s3.list_objects",
+		Path:        path,
 		QueryParams: make(map[string]string),
 	}
 	if maxKeys > 0 {
@@ -265,7 +265,7 @@ func SESSendRawEmail(ctx context.Context, client Client, rawMessage []byte, dest
 		Operation: "ses.send_raw_email",
 	}
 	body := map[string]interface{}{
-		"raw_message": string(rawMessage),
+		"raw_message":  string(rawMessage),
 		"destinations": destinations,
 	}
 	if err := req.WithJSONBody(body); err != nil {
@@ -311,8 +311,8 @@ func SESListVerifiedEmailAddresses(ctx context.Context, client Client) (*cloud.R
 // AWS SDK equivalent: GetParameter
 func SSMGetParameter(ctx context.Context, client Client, name string, decrypt bool) (*cloud.Response, error) {
 	req := &cloud.Request{
-		Operation: "ssm.get_parameter",
-		Path:      name,
+		Operation:   "ssm.get_parameter",
+		Path:        name,
 		QueryParams: make(map[string]string),
 	}
 	if decrypt {
@@ -325,7 +325,7 @@ func SSMGetParameter(ctx context.Context, client Client, name string, decrypt bo
 // AWS SDK equivalent: GetParameters
 func SSMGetParameters(ctx context.Context, client Client, names []string, decrypt bool) (*cloud.Response, error) {
 	req := &cloud.Request{
-		Operation: "ssm.get_parameters",
+		Operation:   "ssm.get_parameters",
 		QueryParams: make(map[string]string),
 	}
 	if decrypt {
@@ -345,8 +345,8 @@ func SSMPutParameter(ctx context.Context, client Client, name, value, paramType,
 		Path:      name,
 	}
 	body := map[string]interface{}{
-		"value":    value,
-		"type":     paramType,
+		"value":     value,
+		"type":      paramType,
 		"overwrite": overwrite,
 	}
 	if description != "" {
@@ -376,8 +376,8 @@ func SSMDeleteParameter(ctx context.Context, client Client, name string) error {
 // AWS SDK equivalent: GetParametersByPath
 func SSMGetParametersByPath(ctx context.Context, client Client, path string, recursive, decrypt bool) (*cloud.Response, error) {
 	req := &cloud.Request{
-		Operation: "ssm.get_parameters_by_path",
-		Path:      path,
+		Operation:   "ssm.get_parameters_by_path",
+		Path:        path,
 		QueryParams: make(map[string]string),
 	}
 	if recursive {
@@ -388,4 +388,3 @@ func SSMGetParametersByPath(ctx context.Context, client Client, path string, rec
 	}
 	return client.Do(ctx, req)
 }
-

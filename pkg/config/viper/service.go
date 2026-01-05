@@ -126,7 +126,7 @@ func (s *service) mapConfigToStruct(v *viper.Viper) (Config, error) {
 			envVarDecodeHook(),
 		),
 		MatchName: func(mapKey, fieldName string) bool {
-			snakeToField := strings.Replace(mapKey, "_", "", -1)
+			snakeToField := strings.ReplaceAll(mapKey, "_", "")
 			fieldToSnake := strings.ToLower(fieldName)
 			return strings.EqualFold(snakeToField, fieldToSnake) ||
 				strings.EqualFold(mapKey, fieldName) ||

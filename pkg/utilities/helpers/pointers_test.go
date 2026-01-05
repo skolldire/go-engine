@@ -69,11 +69,11 @@ func TestValueOrError(t *testing.T) {
 	val := 42
 
 	tests := []struct {
-		name         string
-		ptr          *int
-		err          error
-		expectedVal  int
-		expectedErr  error
+		name        string
+		ptr         *int
+		err         error
+		expectedVal int
+		expectedErr error
 	}{
 		{"nil returns error", nil, testErr, 0, testErr},
 		{"non-nil returns value", &val, testErr, 42, nil},
@@ -87,6 +87,3 @@ func TestValueOrError(t *testing.T) {
 		})
 	}
 }
-
-
-

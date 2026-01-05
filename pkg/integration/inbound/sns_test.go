@@ -57,4 +57,3 @@ func TestNormalizeSNSEvent(t *testing.T) {
 		})
 	}
 }
-

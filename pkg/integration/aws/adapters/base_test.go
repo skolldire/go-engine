@@ -92,5 +92,3 @@ func TestBaseAdapter_Do_WithTimeout(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, resp)
 }
-
-

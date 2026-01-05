@@ -12,6 +12,3 @@ func SafeTypeAssert[T any](result interface{}) (T, error) {
 	}
 	return val, nil
 }
-
-
-

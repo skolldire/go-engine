@@ -35,10 +35,10 @@ type Error struct {
 
 // Error codes constants
 const (
-	ErrCodeThrottling            = "aws.throttling"
-	ErrCodeAuthenticationFailed  = "aws.authentication_failed"
-	ErrCodeAuthorizationFailed   = "aws.authorization_failed"
-	ErrCodeServiceUnavailable    = "aws.service_unavailable"
+	ErrCodeThrottling             = "aws.throttling"
+	ErrCodeAuthenticationFailed   = "aws.authentication_failed"
+	ErrCodeAuthorizationFailed    = "aws.authorization_failed"
+	ErrCodeServiceUnavailable     = "aws.service_unavailable"
 	ErrCodeInvalidRequest         = "aws.invalid_request"
 	ErrCodeNotFound               = "aws.not_found"
 	ErrCodeConflict               = "aws.conflict"
@@ -88,6 +88,3 @@ func NewErrorWithCause(code, message string, cause error) *Error {
 		Cause:   cause,
 	}
 }
-
-
-

@@ -53,14 +53,14 @@ func TestDynamicConfig_Reload_Success(t *testing.T) {
 	mockLog := new(mockLogger)
 	initialConfig := map[string]string{"key": "value"}
 	dc := NewDynamicConfig(initialConfig, mockLog)
-	
+
 	newConfig := map[string]string{"new": "config"}
 	dc.SetReloadFunc(func() (interface{}, error) {
 		return newConfig, nil
 	})
-	
+
 	mockLog.On("Info", context.Background(), "configuration reloaded successfully", mock.Anything).Return()
-	
+
 	err := dc.Reload()
 	assert.NoError(t, err)
 	assert.Equal(t, newConfig, dc.Get())
@@ -70,14 +70,14 @@ func TestDynamicConfig_Reload_Success(t *testing.T) {
 func TestDynamicConfig_Reload_Error(t *testing.T) {
 	mockLog := new(mockLogger)
 	dc := NewDynamicConfig(map[string]interface{}{}, mockLog)
-	
+
 	testErr := errors.New("reload error")
 	dc.SetReloadFunc(func() (interface{}, error) {
 		return nil, testErr
 	})
-	
+
 	mockLog.On("Error", context.Background(), testErr, mock.Anything).Return()
-	
+
 	err := dc.Reload()
 	assert.Error(t, err)
 	mockLog.AssertExpectations(t)
@@ -110,13 +110,13 @@ func TestDynamicConfig_StartWatching(t *testing.T) {
 	dc := NewDynamicConfig(map[string]interface{}{}, mockLog)
 	watcher := new(mockWatcher)
 	dc.AddWatcher(watcher)
-	
+
 	// Use mock.MatchedBy to match the function type
 	// Note: Watch is called in a goroutine, so we use mock.MatchedBy
 	watcher.On("Watch", mock.Anything, mock.MatchedBy(func(fn func() error) bool {
 		return fn != nil
 	})).Return(nil).Maybe() // Use Maybe() since it's called in a goroutine
-	
+
 	ctx := context.Background()
 	err := dc.StartWatching(ctx)
 	assert.NoError(t, err)
@@ -130,7 +130,7 @@ func TestDynamicConfig_Stop(t *testing.T) {
 	watcher := new(mockWatcher)
 	watcher.On("Stop").Return(nil)
 	dc.AddWatcher(watcher)
-	
+
 	err := dc.Stop()
 	assert.NoError(t, err)
 	watcher.AssertExpectations(t)
@@ -154,4 +154,3 @@ func TestDynamicConfig_ValidateConfig_Valid(t *testing.T) {
 	err := dc.validateConfig(map[string]string{"key": "value"})
 	assert.NoError(t, err)
 }
-

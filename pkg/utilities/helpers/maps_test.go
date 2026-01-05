@@ -102,6 +102,3 @@ func TestNewMap(t *testing.T) {
 	m["key"] = 42
 	assert.Equal(t, 42, m["key"])
 }
-
-
-

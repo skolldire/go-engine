@@ -40,10 +40,10 @@ func (m *mockLogger) WrapError(err error, msg string) error {
 	}
 	return err
 }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service { return m }
+func (m *mockLogger) WithField(key string, value interface{}) logger.Service  { return m }
 func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error { return nil }
+func (m *mockLogger) GetLogLevel() string                                     { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                          { return nil }
 
 func TestNewClient(t *testing.T) {
 	acf := aws.Config{
@@ -157,7 +157,7 @@ func TestCliente_ReceiveMsj_DefaultMaxMessages(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
-	
+
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
@@ -207,6 +207,9 @@ func TestCliente_CreateQueue_WithAttributes(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
+	// Configure mock to return error when WrapError is called
+	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
+
 	client := NewClient(acf, cfg, log)
 
 	ctx := context.Background()
@@ -250,6 +253,9 @@ func TestCliente_ListQueue(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
+	// Configure mock to return error when WrapError is called
+	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
+
 	client := NewClient(acf, cfg, log)
 
 	ctx := context.Background()
@@ -264,6 +270,9 @@ func TestCliente_ListQueue_WithPrefix(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
+
+	// Configure mock to return error when WrapError is called
+	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
 	client := NewClient(acf, cfg, log)
 
@@ -293,13 +302,16 @@ func TestCliente_SendJSON_ValidJSON(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
+	// Configure mock to return error when WrapError is called
+	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
+
 	client := NewClient(acf, cfg, log)
 
 	ctx := context.Background()
 	message := map[string]interface{}{
-		"key":   "value",
+		"key":    "value",
 		"number": 42,
-		"bool":  true,
+		"bool":   true,
 	}
 
 	// This will fail without a real AWS connection, but tests JSON marshaling
@@ -312,6 +324,9 @@ func TestCliente_SendJSON_WithAttributes(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
+
+	// Configure mock to return error when WrapError is called
+	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
 	client := NewClient(acf, cfg, log)
 

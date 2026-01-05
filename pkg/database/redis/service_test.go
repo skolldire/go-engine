@@ -31,11 +31,11 @@ func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]int
 	m.Called(ctx, err, fields)
 }
 func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error { return nil }
+func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
+func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
 
 func TestNewClient_DefaultValues(t *testing.T) {
 	cfg := Config{
@@ -99,9 +99,11 @@ func TestNewClient_WithResilience(t *testing.T) {
 		},
 	}
 	log := &mockLogger{}
-	
-	// Configure mock to handle Debug calls during retry logic
-	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
+
+	// Configure mock to handle Debug calls during retry logic (may be called multiple times)
+	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	// Configure mock to handle Error calls at the end of retries
+	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 	// This will fail without a real Redis connection
 	_, err := NewClient(cfg, log)
@@ -113,8 +115,9 @@ func TestRedisClient_KeyName(t *testing.T) {
 	log := &mockLogger{}
 
 	// Create a client that will fail connection but we can test KeyName
+	// Note: KeyName adds ":" between prefix and key, so prefix should not include ":"
 	client := &RedisClient{
-		keyPrefix: "app:",
+		keyPrefix: "app",
 		logger:    log,
 	}
 

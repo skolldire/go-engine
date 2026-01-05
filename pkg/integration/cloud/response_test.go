@@ -61,4 +61,3 @@ func TestResponse_Complete(t *testing.T) {
 		t.Errorf("Body should not be empty")
 	}
 }
-

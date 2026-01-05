@@ -21,27 +21,27 @@ import (
 type ServiceRegistry struct {
 	// HTTP clients
 	RESTClients map[string]rest.Service
-	
+
 	// gRPC clients
 	GRPCClients map[string]grpcClient.Service
-	
+
 	// Message queue clients
-	SQSClients    map[string]sqs.Service
-	SNSClients    map[string]sns.Service
+	SQSClients      map[string]sqs.Service
+	SNSClients      map[string]sns.Service
 	RabbitMQClients map[string]rabbitmq.Service
-	
+
 	// Database clients
 	DynamoDBClients  map[string]dynamo.Service
 	RedisClients     map[string]*redis.RedisClient
 	SQLConnections   map[string]*gormsql.DBClient
 	MemcachedClients map[string]memcached.Service
 	MongoDBClients   map[string]mongodb.Service
-	
+
 	// AWS service clients
 	S3Clients  map[string]s3.Service
 	SESClients map[string]ses.Service
 	SSMClients map[string]ssm.Service
-	
+
 	// Custom clients - generic storage for any custom client implementations
 	CustomClients map[string]interface{}
 }
@@ -83,6 +83,3 @@ func NewConfigRegistry() *ConfigRegistry {
 		Batches:      make(map[string]interface{}),
 	}
 }
-
-
-

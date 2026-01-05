@@ -248,7 +248,7 @@ func (c *SSMClient) GetParameterHistory(ctx context.Context, name string) ([]*Pa
 	for {
 		result, err := c.Execute(ctx, "GetParameterHistory", func() (interface{}, error) {
 			return c.ssmClient.GetParameterHistory(ctx, &ssm.GetParameterHistoryInput{
-				Name:     aws.String(name),
+				Name:      aws.String(name),
 				NextToken: nextToken,
 			})
 		})
@@ -350,10 +350,10 @@ func (c *SSMClient) EnableLogging(enable bool) {
 
 func mapParameter(param *types.Parameter) *Parameter {
 	p := &Parameter{
-		Name:  aws.ToString(param.Name),
-		Value: aws.ToString(param.Value),
-		Type:  string(param.Type),
-		ARN:   aws.ToString(param.ARN),
+		Name:    aws.ToString(param.Name),
+		Value:   aws.ToString(param.Value),
+		Type:    string(param.Type),
+		ARN:     aws.ToString(param.ARN),
 		Version: param.Version,
 	}
 
@@ -394,4 +394,3 @@ func mapParameterHistory(hist *types.ParameterHistory) *ParameterHistory {
 
 	return ph
 }
-

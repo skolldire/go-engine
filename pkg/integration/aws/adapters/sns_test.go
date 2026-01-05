@@ -39,6 +39,3 @@ func TestSNSAdapter_Publish_InvalidPath(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "topic ARN/path is required")
 }
-
-
-

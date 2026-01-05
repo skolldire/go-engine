@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // MetricsRecorder interface for recording metrics
@@ -101,4 +101,3 @@ func (r *TelemetryMetricsRecorder) RecordThrottle(operation string) {
 		attribute.String("operation", operation),
 	)
 }
-

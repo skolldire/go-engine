@@ -133,6 +133,3 @@ func TestSQSAdapter_GetQueueURL_InvalidPath(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "queue name is required")
 }
-
-
-

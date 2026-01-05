@@ -92,4 +92,3 @@ func WithObservability(logger logger.Service, metricsRecorder observability.Metr
 	}
 	return Options{Middlewares: middlewares}
 }
-

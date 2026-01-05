@@ -118,6 +118,3 @@ func TestIsEmptyPtr(t *testing.T) {
 		})
 	}
 }
-
-
-

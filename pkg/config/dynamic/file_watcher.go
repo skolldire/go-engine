@@ -36,7 +36,7 @@ func NewFileWatcher(paths []string, log logger.Service) (*FileWatcher, error) {
 
 	for _, path := range paths {
 		if err := watcher.Add(path); err != nil {
-			watcher.Close()
+			_ = watcher.Close() // Ignore error on cleanup
 			return nil, fmt.Errorf("failed to add path to watcher: %w", err)
 		}
 	}
@@ -121,4 +121,3 @@ func (fw *FileWatcher) isConfigFile(filename string) bool {
 	ext := filepath.Ext(filename)
 	return ext == ".yaml" || ext == ".yml" || ext == ".json" || ext == ".toml"
 }
-

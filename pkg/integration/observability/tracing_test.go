@@ -26,7 +26,7 @@ func TestTracingMiddleware_Success(t *testing.T) {
 	}
 
 	mockCli.On("Do", ctx, req).Return(resp, nil)
-	mockTrac.On("Span", ctx, "sqs.send_message", mock.AnythingOfType("func(context.Context) error"), 
+	mockTrac.On("Span", ctx, "sqs.send_message", mock.AnythingOfType("func(context.Context) error"),
 		mock.Anything).Run(func(args mock.Arguments) {
 		// Execute the callback function to populate attributes
 		fn := args.Get(2).(func(context.Context) error)
@@ -168,4 +168,3 @@ func TestTracingMiddleware_NilTracer(t *testing.T) {
 	assert.Equal(t, resp, result)
 	mockCli.AssertExpectations(t)
 }
-

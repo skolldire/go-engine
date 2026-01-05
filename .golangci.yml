@@ -1,3 +1,5 @@
+version: 2
+
 run:
   timeout: 5m
   modules-download-mode: readonly
@@ -5,11 +7,13 @@ run:
 linters:
   disable-all: true
   enable:
-    - gofmt
-    - goimports
     - govet
     - errcheck
     - staticcheck
     - ineffassign
-    - gosimple
     - unused
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

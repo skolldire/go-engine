@@ -29,4 +29,3 @@ func IsEmptyPtr[T comparable](ptr *T) bool {
 	var zero T
 	return *ptr == zero
 }
-

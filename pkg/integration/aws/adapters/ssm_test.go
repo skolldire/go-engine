@@ -167,4 +167,3 @@ func TestNormalizeSSMError(t *testing.T) {
 		})
 	}
 }
-

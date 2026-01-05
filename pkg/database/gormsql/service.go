@@ -359,7 +359,7 @@ func (l *gormLogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (
 		return
 	}
 
-		l.logger.Debug(ctx, "SQL executed", fields)
+	l.logger.Debug(ctx, "SQL executed", fields)
 }
 
 func createGormLogger(log logger.Service, logLevel string) gormlogger.Interface {

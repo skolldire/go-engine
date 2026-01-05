@@ -132,4 +132,3 @@ func TestNewTelemetryMetricsRecorder(t *testing.T) {
 	// For now, we'll test that it returns a non-nil recorder
 	// In a real scenario, you'd pass a mock telemetry.Telemetry
 }
-

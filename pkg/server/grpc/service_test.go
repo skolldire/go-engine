@@ -28,11 +28,11 @@ func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]int
 	m.Called(ctx, err, fields)
 }
 func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error { return nil }
+func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
+func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
 
 func TestNewServer(t *testing.T) {
 	cfg := Config{
@@ -111,6 +111,7 @@ func TestServer_Start_WithLogging(t *testing.T) {
 	}
 	log := &mockLogger{}
 	log.On("Info", mock.Anything, "starting gRPC server", mock.Anything).Return()
+	log.On("Info", mock.Anything, "stopping gRPC server", mock.Anything).Return()
 
 	srv := NewServer(cfg, log)
 
@@ -174,6 +175,7 @@ func TestServer_Stop_WithLogging(t *testing.T) {
 		EnableLogging: true,
 	}
 	log := &mockLogger{}
+	log.On("Info", mock.Anything, "starting gRPC server", mock.Anything).Return()
 	log.On("Info", mock.Anything, "stopping gRPC server", mock.Anything).Return()
 
 	srv := NewServer(cfg, log)

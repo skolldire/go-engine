@@ -75,4 +75,3 @@ func normalizeSNSError(err error, operation string) *cloud.Error {
 func normalizeLambdaError(err error, operation string) *cloud.Error {
 	return normalizeAWSError(err, operation)
 }
-

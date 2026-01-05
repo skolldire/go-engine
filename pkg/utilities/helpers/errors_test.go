@@ -97,6 +97,3 @@ func TestNewErrorf(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "error 123: test")
 }
-
-
-

@@ -29,11 +29,11 @@ func TestFeatureFlags_Get(t *testing.T) {
 		"flag2": "value",
 	}
 	ff := NewFeatureFlags(flags, nil)
-	
+
 	value, exists := ff.Get("flag1")
 	assert.True(t, exists)
 	assert.Equal(t, true, value)
-	
+
 	value, exists = ff.Get("nonexistent")
 	assert.False(t, exists)
 	assert.Nil(t, value)
@@ -41,8 +41,8 @@ func TestFeatureFlags_Get(t *testing.T) {
 
 func TestFeatureFlags_GetBool(t *testing.T) {
 	flags := map[string]interface{}{
-		"bool_true":  true,
-		"bool_false": false,
+		"bool_true":   true,
+		"bool_false":  false,
 		"string_true": "true",
 		"string_1":    "1",
 		"string_yes":  "yes",
@@ -51,7 +51,7 @@ func TestFeatureFlags_GetBool(t *testing.T) {
 		"nonexistent": nil,
 	}
 	ff := NewFeatureFlags(flags, nil)
-	
+
 	assert.True(t, ff.GetBool("bool_true"))
 	assert.False(t, ff.GetBool("bool_false"))
 	assert.True(t, ff.GetBool("string_true"))
@@ -69,7 +69,7 @@ func TestFeatureFlags_GetString(t *testing.T) {
 		"bool":   true,
 	}
 	ff := NewFeatureFlags(flags, nil)
-	
+
 	assert.Equal(t, "value", ff.GetString("string"))
 	assert.Equal(t, "42", ff.GetString("int"))
 	assert.Equal(t, "true", ff.GetString("bool"))
@@ -84,7 +84,7 @@ func TestFeatureFlags_GetInt(t *testing.T) {
 		"bool":   true,
 	}
 	ff := NewFeatureFlags(flags, nil)
-	
+
 	assert.Equal(t, 42, ff.GetInt("int"))
 	assert.Equal(t, 3, ff.GetInt("float")) // Truncated
 	assert.Equal(t, 123, ff.GetInt("string"))
@@ -97,7 +97,7 @@ func TestFeatureFlags_Set(t *testing.T) {
 	mockLog.On("Debug", mock.Anything, "feature flag updated", mock.Anything).Return()
 	ff := NewFeatureFlags(map[string]interface{}{"key1": "value1"}, mockLog)
 	ff.Set("key2", "value2")
-	
+
 	value, exists := ff.Get("key2")
 	assert.True(t, exists)
 	assert.Equal(t, "value2", value)
@@ -110,7 +110,7 @@ func TestFeatureFlags_SetAll(t *testing.T) {
 	ff := NewFeatureFlags(map[string]interface{}{"old": "value"}, mockLog)
 	newFlags := map[string]interface{}{"new": "value"}
 	ff.SetAll(newFlags)
-	
+
 	all := ff.GetAll()
 	assert.Equal(t, newFlags, all)
 	mockLog.AssertExpectations(t)
@@ -121,7 +121,7 @@ func TestFeatureFlags_SetAll_Nil(t *testing.T) {
 	mockLog.On("Info", mock.Anything, "feature flags updated", mock.Anything).Return()
 	ff := NewFeatureFlags(map[string]interface{}{"old": "value"}, mockLog)
 	ff.SetAll(nil)
-	
+
 	all := ff.GetAll()
 	assert.NotNil(t, all)
 	assert.Equal(t, 0, len(all))
@@ -144,9 +144,8 @@ func TestFeatureFlags_IsEnabled(t *testing.T) {
 		"disabled": false,
 	}
 	ff := NewFeatureFlags(flags, nil)
-	
+
 	assert.True(t, ff.IsEnabled("enabled"))
 	assert.False(t, ff.IsEnabled("disabled"))
 	assert.False(t, ff.IsEnabled("nonexistent"))
 }
-

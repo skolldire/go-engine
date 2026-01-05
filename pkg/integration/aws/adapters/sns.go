@@ -42,7 +42,7 @@ func (a *snsAdapter) publish(ctx context.Context, req *cloud.Request) (*cloud.Re
 
 	input := &sns.PublishInput{
 		TopicArn: aws.String(req.Path),
-		Message:   aws.String(string(req.Body)),
+		Message:  aws.String(string(req.Body)),
 	}
 
 	// Parse headers for SNS-specific attributes
@@ -82,4 +82,3 @@ func (a *snsAdapter) publish(ctx context.Context, req *cloud.Request) (*cloud.Re
 		},
 	}, nil
 }
-
