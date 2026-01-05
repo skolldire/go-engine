@@ -74,6 +74,8 @@ func TestGetScopeValue(t *testing.T) {
 	defer func() { _ = os.Unsetenv("SCOPE") }()
 
 	assert.Equal(t, "custom-profile", GetScopeValue())
-	_ = os.Unsetenv("SCOPE")
+	if err := os.Unsetenv("SCOPE"); err != nil {
+		t.Fatalf("failed to unset SCOPE environment variable: %v", err)
+	}
 	assert.Equal(t, "local", GetScopeValue())
 }
