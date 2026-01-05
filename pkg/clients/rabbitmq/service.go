@@ -35,7 +35,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() // Ignore error on cleanup
 		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
 	}
 
@@ -211,7 +211,7 @@ func (c *RabbitMQClient) BindQueue(ctx context.Context, queue, routingKey, excha
 
 func (c *RabbitMQClient) Close() error {
 	if c.channel != nil {
-		c.channel.Close()
+		_ = c.channel.Close() // Ignore error, connection close will handle cleanup
 	}
 	if c.conn != nil {
 		return c.conn.Close()

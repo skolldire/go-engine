@@ -22,7 +22,7 @@ func TestSetGlobalValidator(t *testing.T) {
 func TestGetGlobalValidator(t *testing.T) {
 	// Clear global validator first
 	SetGlobalValidator(nil)
-	
+
 	// GetGlobalValidator should create a new one if nil
 	v := GetGlobalValidator()
 	assert.NotNil(t, v)
@@ -30,12 +30,12 @@ func TestGetGlobalValidator(t *testing.T) {
 
 func TestRegisterCustomValidators(t *testing.T) {
 	v := NewValidator()
-	
+
 	// Test not_empty validator
 	type TestStruct struct {
 		Field string `validate:"not_empty"`
 	}
-	
+
 	tests := []struct {
 		name    string
 		value   string
@@ -45,7 +45,7 @@ func TestRegisterCustomValidators(t *testing.T) {
 		{"empty", "", true},
 		{"whitespace", "   ", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			test := TestStruct{Field: tt.value}
@@ -61,16 +61,16 @@ func TestRegisterCustomValidators(t *testing.T) {
 
 func TestValidator_JSONTagName(t *testing.T) {
 	v := NewValidator()
-	
+
 	type TestStruct struct {
 		FieldName string `json:"field_name" validate:"required"`
 		Ignored   string `json:"-" validate:"required"`
 	}
-	
+
 	test := TestStruct{}
 	err := v.Struct(test)
 	assert.Error(t, err)
-	
+
 	// Check that field_name is used, not FieldName
 	errs := err.(validator.ValidationErrors)
 	found := false
@@ -82,6 +82,3 @@ func TestValidator_JSONTagName(t *testing.T) {
 	}
 	assert.True(t, found, "should use JSON tag name")
 }
-
-
-

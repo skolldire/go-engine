@@ -45,4 +45,3 @@ func TestMockApp_Run(t *testing.T) {
 	err := app.Run()
 	assert.NoError(t, err)
 }
-

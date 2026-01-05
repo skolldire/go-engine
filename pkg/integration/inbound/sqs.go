@@ -20,7 +20,7 @@ func NormalizeSQSEvent(event *events.SQSEvent) ([]*cloud.Request, error) {
 		req := &cloud.Request{
 			Operation: "sqs.receive",
 			Path:      record.EventSourceARN, // or extract queue name
-			Method:    "POST",                 // Optional, mainly for documentation
+			Method:    "POST",                // Optional, mainly for documentation
 			Headers: map[string]string{
 				"sqs.message_id":       record.MessageId,
 				"sqs.receipt_handle":   record.ReceiptHandle,
@@ -66,6 +66,3 @@ func serializeAttrs(attrs map[string]string) string {
 	}
 	return string(jsonBytes)
 }
-
-
-

@@ -89,4 +89,3 @@ func (a *lambdaAdapter) invoke(ctx context.Context, req *cloud.Request) (*cloud.
 		},
 	}, nil
 }
-

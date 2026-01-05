@@ -14,11 +14,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// mockClient is a mock implementation of cloud.Client
+// mockClient is unused but kept for potential future use
+// nolint:unused
 type mockClient struct {
 	mock.Mock
 }
 
+// nolint:unused
 func (m *mockClient) Do(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {

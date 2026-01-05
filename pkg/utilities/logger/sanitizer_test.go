@@ -194,4 +194,3 @@ func TestSanitizeFields_CaseInsensitive(t *testing.T) {
 		t.Error("Api_Key field not sanitized (case insensitive)")
 	}
 }
-

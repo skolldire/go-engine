@@ -15,6 +15,3 @@ type Client interface {
 // Middleware is a function that wraps a Client to add cross-cutting concerns
 // Examples: logging, metrics, tracing, retries
 type Middleware func(next Client) Client
-
-
-

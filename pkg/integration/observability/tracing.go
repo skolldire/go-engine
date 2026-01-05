@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"strings"
 
-	"go.opentelemetry.io/otel/attribute"
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Tracing returns a middleware that traces all requests
 func Tracing(tracer telemetry.Tracer) cloud.Middleware {
 	return func(next cloud.Client) cloud.Client {
 		return &tracingMiddleware{
-			next:    next,
-			tracer:  tracer,
+			next:   next,
+			tracer: tracer,
 		}
 	}
 }
@@ -83,4 +83,3 @@ func extractServiceOperation(operation string) (service, op string) {
 	}
 	return operation, ""
 }
-

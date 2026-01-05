@@ -16,10 +16,10 @@ func TestNormalizeAPIGatewayEvent(t *testing.T) {
 		{
 			name: "valid event",
 			event: &events.APIGatewayProxyRequest{
-				Path:       "/api/users",
-				HTTPMethod: "POST",
-				Body:       `{"key":"value"}`,
-				Headers:    map[string]string{"Content-Type": "application/json"},
+				Path:                  "/api/users",
+				HTTPMethod:            "POST",
+				Body:                  `{"key":"value"}`,
+				Headers:               map[string]string{"Content-Type": "application/json"},
 				QueryStringParameters: map[string]string{"param": "value"},
 				RequestContext: events.APIGatewayProxyRequestContext{
 					RequestID: "req-123",
@@ -75,4 +75,3 @@ func TestNormalizeAPIGatewayEvent(t *testing.T) {
 		})
 	}
 }
-

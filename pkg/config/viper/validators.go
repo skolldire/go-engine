@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/skolldire/go-engine/pkg/app/router"
-	"github.com/skolldire/go-engine/pkg/clients/rest"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/sqs"
+	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/sns"
+	"github.com/skolldire/go-engine/pkg/clients/sqs"
 	"github.com/skolldire/go-engine/pkg/database/dynamo"
 	"github.com/skolldire/go-engine/pkg/database/gormsql"
 	"github.com/skolldire/go-engine/pkg/database/redis"
@@ -393,4 +393,3 @@ func isValidSQLType(dbType string) bool {
 	}
 	return false
 }
-

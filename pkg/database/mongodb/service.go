@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
@@ -37,7 +37,7 @@ func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, er
 	defer cancel()
 
 	clientOptions := options.Client().ApplyURI(cfg.URI)
-	
+
 	if cfg.MaxPoolSize > 0 {
 		clientOptions.SetMaxPoolSize(cfg.MaxPoolSize)
 	}
@@ -125,4 +125,3 @@ func redactMongoURI(uri string) string {
 func (c *MongoDBClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }
-

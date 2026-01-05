@@ -18,10 +18,10 @@ func TestNormalizeSQSEvent(t *testing.T) {
 			event: &events.SQSEvent{
 				Records: []events.SQSMessage{
 					{
-						MessageId:     "msg-123",
-						Body:          `{"key":"value"}`,
-						ReceiptHandle: "receipt-123",
-						EventSource:   "aws:sqs",
+						MessageId:      "msg-123",
+						Body:           `{"key":"value"}`,
+						ReceiptHandle:  "receipt-123",
+						EventSource:    "aws:sqs",
 						EventSourceARN: "arn:aws:sqs:us-east-1:123:my-queue",
 					},
 				},
@@ -75,9 +75,9 @@ func TestNormalizeSQSEvent_Headers(t *testing.T) {
 	event := &events.SQSEvent{
 		Records: []events.SQSMessage{
 			{
-				MessageId:     "msg-123",
-				ReceiptHandle: "receipt-123",
-				EventSource:   "aws:sqs",
+				MessageId:      "msg-123",
+				ReceiptHandle:  "receipt-123",
+				EventSource:    "aws:sqs",
 				EventSourceARN: "arn:aws:sqs:us-east-1:123:my-queue",
 			},
 		},
@@ -117,4 +117,3 @@ func TestNormalizeSQSEvent_Body(t *testing.T) {
 		t.Errorf("Body = %v, want {\"key\":\"value\"}", string(requests[0].Body))
 	}
 }
-

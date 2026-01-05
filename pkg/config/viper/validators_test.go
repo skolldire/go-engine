@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/app/router"
-	"github.com/skolldire/go-engine/pkg/clients/rest"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
+	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/sqs"
 	"github.com/skolldire/go-engine/pkg/database/gormsql"
 )
@@ -367,8 +367,8 @@ func TestIsValidAWSRegion(t *testing.T) {
 
 func TestIsValidURL(t *testing.T) {
 	tests := []struct {
-		url    string
-		valid  bool
+		url   string
+		valid bool
 	}{
 		{"http://localhost:4566", true},
 		{"https://api.example.com", true},
@@ -396,8 +396,8 @@ func TestIsValidSQLType(t *testing.T) {
 		{"mysql", true},
 		{"sqlite", true},
 		{"sqlserver", true},
-		{"POSTGRES", true},    // converts to lowercase: "postgres"
-		{"MySQL", true},       // converts to lowercase: "mysql"
+		{"POSTGRES", true}, // converts to lowercase: "postgres"
+		{"MySQL", true},    // converts to lowercase: "mysql"
 		{"invalid", false},
 		{"", false},
 	}
@@ -411,4 +411,3 @@ func TestIsValidSQLType(t *testing.T) {
 		})
 	}
 }
-

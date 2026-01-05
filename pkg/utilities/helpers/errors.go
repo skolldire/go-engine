@@ -54,6 +54,3 @@ func NewError(msg string) error {
 func NewErrorf(format string, args ...interface{}) error {
 	return fmt.Errorf(format, args...)
 }
-
-
-

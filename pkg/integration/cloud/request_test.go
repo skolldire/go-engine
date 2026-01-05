@@ -58,11 +58,11 @@ func TestRequest_WithBody(t *testing.T) {
 
 func TestRequest_Complete(t *testing.T) {
 	req := &Request{
-		Operation:  "sqs.send",
-		Path:       "my-queue",
-		Timeout:    5 * time.Second,
-		Method:     "POST",
-		Headers:    map[string]string{"key": "value"},
+		Operation:   "sqs.send",
+		Path:        "my-queue",
+		Timeout:     5 * time.Second,
+		Method:      "POST",
+		Headers:     map[string]string{"key": "value"},
 		QueryParams: map[string]string{"param": "value"},
 	}
 
@@ -73,4 +73,3 @@ func TestRequest_Complete(t *testing.T) {
 		t.Errorf("Path = %v, want my-queue", req.Path)
 	}
 }
-

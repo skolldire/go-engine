@@ -62,9 +62,9 @@ type RecipientResult struct {
 }
 
 type BulkSendResult struct {
-	Recipients      []RecipientResult
-	SuccessCount    int
-	FailureCount    int
+	Recipients       []RecipientResult
+	SuccessCount     int
+	FailureCount     int
 	FailedRecipients []string
 }
 

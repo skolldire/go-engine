@@ -79,7 +79,7 @@ func (a *ssmAdapter) getParameter(ctx context.Context, req *cloud.Request) (*clo
 		Body:       body,
 		Headers: map[string]string{
 			"ssm.parameter_name": aws.ToString(result.Parameter.Name),
-			"ssm.parameter_type":  string(result.Parameter.Type),
+			"ssm.parameter_type": string(result.Parameter.Type),
 		},
 		Metadata: map[string]interface{}{
 			"ssm.parameter_name": aws.ToString(result.Parameter.Name),
@@ -299,7 +299,7 @@ func (a *ssmAdapter) getParameterHistory(ctx context.Context, req *cloud.Request
 
 	for {
 		input := &ssm.GetParameterHistoryInput{
-			Name:     aws.String(req.Path),
+			Name:      aws.String(req.Path),
 			NextToken: nextToken,
 		}
 
@@ -358,10 +358,10 @@ func (a *ssmAdapter) describeParameters(ctx context.Context, req *cloud.Request)
 
 		for _, param := range result.Parameters {
 			allParams = append(allParams, map[string]interface{}{
-				"name":             aws.ToString(param.Name),
-				"type":             string(param.Type),
+				"name":               aws.ToString(param.Name),
+				"type":               string(param.Type),
 				"last_modified_date": param.LastModifiedDate,
-				"version":          param.Version,
+				"version":            param.Version,
 			})
 		}
 
@@ -402,10 +402,10 @@ func normalizeSSMError(err error, operation string) *cloud.Error {
 
 func mapParameter(param *types.Parameter) map[string]interface{} {
 	p := map[string]interface{}{
-		"name":  aws.ToString(param.Name),
-		"value": aws.ToString(param.Value),
-		"type":  string(param.Type),
-		"arn":   aws.ToString(param.ARN),
+		"name":    aws.ToString(param.Name),
+		"value":   aws.ToString(param.Value),
+		"type":    string(param.Type),
+		"arn":     aws.ToString(param.ARN),
 		"version": param.Version,
 	}
 
@@ -446,4 +446,3 @@ func mapParameterHistory(hist *types.ParameterHistory) map[string]interface{} {
 
 	return ph
 }
-

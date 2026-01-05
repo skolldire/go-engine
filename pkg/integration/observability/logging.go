@@ -97,4 +97,3 @@ func extractServiceVerb(operation string) (service, verb string) {
 	}
 	return operation, ""
 }
-

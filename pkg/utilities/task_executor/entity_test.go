@@ -16,7 +16,7 @@ func TestTask_SetPriority(t *testing.T) {
 		},
 		Args: "test",
 	}
-	
+
 	task.SetPriority(PriorityHigh)
 	assert.Equal(t, PriorityHigh, task.Priority())
 }
@@ -36,7 +36,7 @@ func TestTask_Execute_Success(t *testing.T) {
 		},
 		Args: "input",
 	}
-	
+
 	result, duration, err := task.Execute(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, "result", result)
@@ -52,11 +52,11 @@ func TestTask_Execute_Error(t *testing.T) {
 		},
 		Args: "input",
 	}
-	
+
 	result, duration, err := task.Execute(context.Background())
 	assert.Error(t, err)
 	assert.Equal(t, testErr, err)
-	assert.Equal(t, "", result) // For string type, zero value is "", not nil
+	assert.Equal(t, "", result)           // For string type, zero value is "", not nil
 	assert.GreaterOrEqual(t, duration, 0) // Duration can be 0 for very fast operations
 }
 
@@ -67,10 +67,10 @@ func TestTask_Execute_ContextCancelled(t *testing.T) {
 		},
 		Args: "input",
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	
+
 	result, duration, err := task.Execute(ctx)
 	assert.Error(t, err)
 	assert.Equal(t, context.Canceled, err)
@@ -88,11 +88,10 @@ func TestResult(t *testing.T) {
 		EndTime:   time.Now(),
 		Priority:  PriorityNormal,
 	}
-	
+
 	assert.Equal(t, "test-id", result.ID)
 	assert.NoError(t, result.Err)
 	assert.Equal(t, "result", result.Res)
 	assert.Equal(t, 100, result.Time)
 	assert.Equal(t, PriorityNormal, result.Priority)
 }
-

@@ -36,4 +36,3 @@ func RegisterDefaultClients(log logger.Service) error {
 
 	return nil
 }
-

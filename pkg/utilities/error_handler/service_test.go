@@ -27,11 +27,11 @@ func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]int
 	m.Called(ctx, err, fields)
 }
 func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error { return nil }
+func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
+func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
 
 func TestCommonApiError_Error(t *testing.T) {
 	tests := []struct {
@@ -42,9 +42,9 @@ func TestCommonApiError_Error(t *testing.T) {
 		{
 			name: "with cause",
 			err: &CommonApiError{
-				Code:    CodeBadRequest,
-				Msg:     "test message",
-				Err:     errors.New("underlying error"),
+				Code: CodeBadRequest,
+				Msg:  "test message",
+				Err:  errors.New("underlying error"),
 			},
 			expected: "Error ER-400: test message",
 		},
@@ -204,9 +204,9 @@ func TestHandleApiErrorResponse(t *testing.T) {
 			expectedCode:   CodeInternalError,
 		},
 		{
-			name:           "with logger",
-			err:            NewBadRequestError("bad request", errors.New("underlying")),
-			logger:         func() logger.Service {
+			name: "with logger",
+			err:  NewBadRequestError("bad request", errors.New("underlying")),
+			logger: func() logger.Service {
 				m := &mockLogger{}
 				m.On("Error", mock.Anything, mock.Anything, mock.Anything).Return()
 				return m
@@ -224,7 +224,7 @@ func TestHandleApiErrorResponse(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			var result CommonApiError
-			json.Unmarshal(w.Body.Bytes(), &result)
+			_ = json.Unmarshal(w.Body.Bytes(), &result)
 			assert.Equal(t, tt.expectedCode, result.Code)
 		})
 	}
@@ -240,7 +240,7 @@ func TestHandleApiErrorResponseWithRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	var result CommonApiError
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, CodeBadRequest, result.Code)
 	assert.Equal(t, requestID, result.RequestID)
 }
@@ -263,4 +263,3 @@ func TestHandleApiErrorResponseWithRequestLegacy(t *testing.T) {
 	assert.NoError(t, handleErr)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
-

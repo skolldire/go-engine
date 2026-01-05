@@ -15,7 +15,7 @@ func TestNewCircuitBreaker(t *testing.T) {
 		Config: &Config{Name: "test"},
 		Log:    nil,
 	})
-	
+
 	assert.NotNil(t, cb)
 }
 
@@ -24,7 +24,7 @@ func TestNewCircuitBreaker_WithDefaults(t *testing.T) {
 		Config: &Config{}, // Empty config should use defaults
 		Log:    nil,
 	})
-	
+
 	assert.NotNil(t, cb)
 	assert.Equal(t, DefaultCBName, cb.config.Name)
 }
@@ -34,11 +34,11 @@ func TestCircuitBreaker_Execute_Success(t *testing.T) {
 		Config: &Config{Name: "test"},
 		Log:    nil,
 	})
-	
+
 	result, err := cb.Execute(context.Background(), func() (interface{}, error) {
 		return "success", nil
 	})
-	
+
 	assert.NoError(t, err)
 	assert.Equal(t, "success", result)
 }
@@ -48,12 +48,12 @@ func TestCircuitBreaker_Execute_Error(t *testing.T) {
 		Config: &Config{Name: "test"},
 		Log:    nil,
 	})
-	
+
 	testErr := errors.New("test error")
 	result, err := cb.Execute(context.Background(), func() (interface{}, error) {
 		return nil, testErr
 	})
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, result)
 }
@@ -63,14 +63,14 @@ func TestCircuitBreaker_Execute_ContextCancelled(t *testing.T) {
 		Config: &Config{Name: "test"},
 		Log:    nil,
 	})
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	
+
 	result, err := cb.Execute(ctx, func() (interface{}, error) {
 		return "success", nil
 	})
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Equal(t, context.Canceled, err)
@@ -81,7 +81,7 @@ func TestCircuitBreaker_State(t *testing.T) {
 		Config: &Config{Name: "test"},
 		Log:    nil,
 	})
-	
+
 	state := cb.State()
 	assert.Equal(t, gobreaker.StateClosed, state) // Initially closed
 }
@@ -91,7 +91,7 @@ func TestCircuitBreaker_StateAsString(t *testing.T) {
 		Config: &Config{Name: "test"},
 		Log:    nil,
 	})
-	
+
 	stateStr := cb.StateAsString()
 	assert.NotEmpty(t, stateStr)
 	assert.Equal(t, "closed", stateStr) // Initially closed
@@ -108,7 +108,7 @@ func TestStateToString(t *testing.T) {
 		{"open", gobreaker.StateOpen, "open"},
 		{"unknown", gobreaker.State(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := stateToString(tt.state)
@@ -119,12 +119,12 @@ func TestStateToString(t *testing.T) {
 
 func TestValidateCBConfig(t *testing.T) {
 	tests := []struct {
-		name     string
-		config   *Config
-		checkFn  func(*testing.T, *Config)
+		name    string
+		config  *Config
+		checkFn func(*testing.T, *Config)
 	}{
 		{
-			name: "all defaults",
+			name:   "all defaults",
 			config: &Config{},
 			checkFn: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, DefaultCBName, cfg.Name)
@@ -148,7 +148,7 @@ func TestValidateCBConfig(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validateCBConfig(tt.config)
@@ -156,4 +156,3 @@ func TestValidateCBConfig(t *testing.T) {
 		})
 	}
 }
-

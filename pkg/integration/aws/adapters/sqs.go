@@ -104,7 +104,7 @@ func (a *sqsAdapter) sendMessage(ctx context.Context, req *cloud.Request) (*clou
 		Metadata: map[string]interface{}{
 			"sqs.message_id":           aws.ToString(result.MessageId),
 			"sqs.sequence_number":      aws.ToString(result.SequenceNumber),
-			"sqs.md5_of_message_body":   aws.ToString(result.MD5OfMessageBody),
+			"sqs.md5_of_message_body":  aws.ToString(result.MD5OfMessageBody),
 			"sqs.md5_of_message_attrs": aws.ToString(result.MD5OfMessageAttributes),
 		},
 	}, nil
@@ -162,7 +162,7 @@ func (a *sqsAdapter) receiveMessages(ctx context.Context, req *cloud.Request) (*
 
 	return &cloud.Response{
 		StatusCode: 200,
-		Body:      bodyBytes,
+		Body:       bodyBytes,
 		Headers: map[string]string{
 			"sqs.message_count": strconv.Itoa(len(result.Messages)),
 		},
@@ -313,4 +313,3 @@ func (a *sqsAdapter) getQueueURL(ctx context.Context, req *cloud.Request) (*clou
 		},
 	}, nil
 }
-

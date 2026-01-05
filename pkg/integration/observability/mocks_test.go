@@ -6,8 +6,8 @@ import (
 
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"go.opentelemetry.io/otel/attribute"
 	"github.com/stretchr/testify/mock"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // mockLogger is a mock implementation of logger.Service
@@ -102,4 +102,3 @@ func (m *mockTracer) Span(ctx context.Context, name string, fn func(context.Cont
 	}
 	return fn(ctx)
 }
-

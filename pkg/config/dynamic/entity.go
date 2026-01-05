@@ -157,4 +157,3 @@ func (dc *DynamicConfig) validateConfig(config interface{}) error {
 	}
 	return nil
 }
-

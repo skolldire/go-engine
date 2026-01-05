@@ -58,7 +58,7 @@ func GetGlobalValidator() *validator.Validate {
 		return globalValidator
 	}
 	mu.RUnlock()
-	
+
 	// Double-checked locking
 	mu.Lock()
 	defer mu.Unlock()

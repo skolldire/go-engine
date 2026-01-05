@@ -55,4 +55,3 @@ func JoinNonEmpty(separator string, strs ...string) string {
 	}
 	return strings.Join(parts, separator)
 }
-

@@ -122,4 +122,3 @@ func (ff *FeatureFlags) GetAll() map[string]interface{} {
 func (ff *FeatureFlags) IsEnabled(key string) bool {
 	return ff.GetBool(key)
 }
-

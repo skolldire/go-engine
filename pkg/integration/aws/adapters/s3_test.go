@@ -138,10 +138,10 @@ func TestS3Adapter_CopyObject_MissingHeaders(t *testing.T) {
 
 func TestParseS3Path(t *testing.T) {
 	tests := []struct {
-		name         string
-		path         string
-		wantBucket   string
-		wantKey      string
+		name       string
+		path       string
+		wantBucket string
+		wantKey    string
 	}{
 		{"bucket and key", "bucket/key", "bucket", "key"},
 		{"bucket only", "bucket", "bucket", ""},
@@ -195,6 +195,3 @@ func TestNormalizeS3Error(t *testing.T) {
 		})
 	}
 }
-
-
-

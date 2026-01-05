@@ -79,4 +79,3 @@ func (b *baseAdapter) Do(ctx context.Context, req *cloud.Request) (*cloud.Respon
 
 	return adapter.Do(ctx, req)
 }
-

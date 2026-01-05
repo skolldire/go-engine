@@ -11,7 +11,7 @@ import (
 func TestListFiles_Success(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "testdir")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 	files := []string{"file1.txt", "file2.log", "file3.json"}
 	for _, file := range files {
 		filePath := fmt.Sprintf("%s/%s", tempDir, file)

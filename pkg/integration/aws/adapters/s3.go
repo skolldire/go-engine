@@ -94,8 +94,8 @@ func (a *s3Adapter) putObject(ctx context.Context, req *cloud.Request) (*cloud.R
 			"s3.etag": aws.ToString(result.ETag),
 		},
 		Metadata: map[string]interface{}{
-			"s3.etag":                aws.ToString(result.ETag),
-			"s3.version_id":          aws.ToString(result.VersionId),
+			"s3.etag":                   aws.ToString(result.ETag),
+			"s3.version_id":             aws.ToString(result.VersionId),
 			"s3.server_side_encryption": string(result.ServerSideEncryption),
 		},
 	}, nil
@@ -117,7 +117,9 @@ func (a *s3Adapter) getObject(ctx context.Context, req *cloud.Request) (*cloud.R
 	if err != nil {
 		return nil, normalizeS3Error(err, "s3.get_object")
 	}
-	defer result.Body.Close()
+	defer func() {
+		_ = result.Body.Close() // Ignore error on cleanup
+	}()
 
 	// Read body
 	body, err := io.ReadAll(result.Body)
@@ -247,10 +249,10 @@ func (a *s3Adapter) listObjects(ctx context.Context, req *cloud.Request) (*cloud
 	objects := make([]map[string]interface{}, len(result.Contents))
 	for i, obj := range result.Contents {
 		objects[i] = map[string]interface{}{
-			"key":          aws.ToString(obj.Key),
-			"size":         obj.Size,
+			"key":           aws.ToString(obj.Key),
+			"size":          obj.Size,
 			"last_modified": obj.LastModified,
-			"etag":         aws.ToString(obj.ETag),
+			"etag":          aws.ToString(obj.ETag),
 		}
 	}
 
@@ -305,15 +307,15 @@ func (a *s3Adapter) copyObject(ctx context.Context, req *cloud.Request) (*cloud.
 		},
 		Metadata: map[string]interface{}{
 			"s3.copy_source_version_id": aws.ToString(result.CopySourceVersionId),
-			"s3.version_id":              aws.ToString(result.VersionId),
+			"s3.version_id":             aws.ToString(result.VersionId),
 		},
 	}
-	
+
 	// Safely add ETag if CopyObjectResult is not nil
 	if result.CopyObjectResult != nil && result.CopyObjectResult.ETag != nil {
 		response.Metadata["s3.etag"] = aws.ToString(result.CopyObjectResult.ETag)
 	}
-	
+
 	return response, nil
 }
 
@@ -336,4 +338,3 @@ func normalizeS3Error(err error, operation string) *cloud.Error {
 		err,
 	).WithMetadata("status_code", 500)
 }
-

@@ -16,7 +16,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 	}
 
 	mc := memcache.New(cfg.Servers...)
-	
+
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = DefaultTimeout
@@ -68,7 +68,7 @@ func (c *MemcachedClient) Ping(ctx context.Context) error {
 
 func (c *MemcachedClient) Get(ctx context.Context, key string) ([]byte, error) {
 	fullKey := c.KeyName(key)
-	
+
 	result, err := c.Execute(ctx, "Get", func() (interface{}, error) {
 		item, err := c.client.Get(fullKey)
 		if err != nil {
@@ -93,7 +93,7 @@ func (c *MemcachedClient) Get(ctx context.Context, key string) ([]byte, error) {
 
 func (c *MemcachedClient) Set(ctx context.Context, key string, value []byte, expiration time.Duration) error {
 	fullKey := c.KeyName(key)
-	
+
 	if expiration == 0 {
 		expiration = DefaultExpiration
 	}
@@ -111,7 +111,7 @@ func (c *MemcachedClient) Set(ctx context.Context, key string, value []byte, exp
 
 func (c *MemcachedClient) Delete(ctx context.Context, key string) error {
 	fullKey := c.KeyName(key)
-	
+
 	_, err := c.Execute(ctx, "Delete", func() (interface{}, error) {
 		return nil, c.client.Delete(fullKey)
 	})
@@ -121,7 +121,7 @@ func (c *MemcachedClient) Delete(ctx context.Context, key string) error {
 
 func (c *MemcachedClient) Add(ctx context.Context, key string, value []byte, expiration time.Duration) error {
 	fullKey := c.KeyName(key)
-	
+
 	if expiration == 0 {
 		expiration = DefaultExpiration
 	}
@@ -139,7 +139,7 @@ func (c *MemcachedClient) Add(ctx context.Context, key string, value []byte, exp
 
 func (c *MemcachedClient) Replace(ctx context.Context, key string, value []byte, expiration time.Duration) error {
 	fullKey := c.KeyName(key)
-	
+
 	if expiration == 0 {
 		expiration = DefaultExpiration
 	}
@@ -157,7 +157,7 @@ func (c *MemcachedClient) Replace(ctx context.Context, key string, value []byte,
 
 func (c *MemcachedClient) Increment(ctx context.Context, key string, delta uint64) (uint64, error) {
 	fullKey := c.KeyName(key)
-	
+
 	result, err := c.Execute(ctx, "Increment", func() (interface{}, error) {
 		return c.client.Increment(fullKey, delta)
 	})
@@ -175,7 +175,7 @@ func (c *MemcachedClient) Increment(ctx context.Context, key string, delta uint6
 
 func (c *MemcachedClient) Decrement(ctx context.Context, key string, delta uint64) (uint64, error) {
 	fullKey := c.KeyName(key)
-	
+
 	result, err := c.Execute(ctx, "Decrement", func() (interface{}, error) {
 		return c.client.Decrement(fullKey, delta)
 	})
@@ -255,4 +255,3 @@ func (c *MemcachedClient) removePrefix(key string) string {
 func (c *MemcachedClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }
-

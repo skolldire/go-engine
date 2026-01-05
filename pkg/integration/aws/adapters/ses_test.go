@@ -111,4 +111,3 @@ func TestNormalizeSESError(t *testing.T) {
 		})
 	}
 }
-

@@ -37,4 +37,3 @@ func NormalizeSNSEvent(event *events.SNSEvent) ([]*cloud.Request, error) {
 
 	return requests, nil
 }
-
