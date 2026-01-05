@@ -71,7 +71,6 @@ func (b *AppBuilder) WithDynamicConfig() *AppBuilder {
 	b.engine.Conf = config
 
 	log := setLogLevel(config.Log, tracer)
-	_ = log.SetLogLevel("trace")
 	b.engine.Log = log
 
 	ctx := b.engine.ctx
@@ -131,6 +130,14 @@ func (b *AppBuilder) WithCustomClient(name string, client interface{}) *AppBuild
 		b.addError(fmt.Errorf("client cannot be nil"))
 		return b
 	}
+
+	// Ensure Services registry is initialized
+	if b.engine.Services == nil {
+		b.engine.Services = NewServiceRegistry()
+	}
+
+	// Store the custom client
+	b.engine.Services.CustomClients[name] = client
 	return b
 }
 

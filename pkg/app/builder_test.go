@@ -65,6 +65,44 @@ func TestAppBuilder_WithCustomClient_NilClient(t *testing.T) {
 	assert.Greater(t, len(result.GetErrors()), 0)
 }
 
+func TestAppBuilder_WithCustomClient_Success(t *testing.T) {
+	builder := NewAppBuilder()
+	customClient := "my-custom-client"
+	result := builder.WithCustomClient("test-client", customClient)
+	
+	// Verify no errors
+	assert.Equal(t, 0, len(result.GetErrors()))
+	
+	// Verify client is stored
+	engine, err := result.Build()
+	if err != nil {
+		// Build might fail due to router not initialized, but that's OK for this test
+		// We just need to verify the client was stored
+		engine = result.engine
+	}
+	
+	assert.NotNil(t, engine)
+	assert.NotNil(t, engine.Services)
+	assert.NotNil(t, engine.Services.CustomClients)
+	assert.Equal(t, customClient, engine.Services.CustomClients["test-client"])
+	
+	// Verify retrieval via GetCustomClient
+	retrieved := engine.GetCustomClient("test-client")
+	assert.Equal(t, customClient, retrieved)
+}
+
+func TestEngine_GetCustomClient_NotExists(t *testing.T) {
+	builder := NewAppBuilder()
+	engine, _ := builder.Build()
+	if engine == nil {
+		engine = builder.engine
+	}
+	
+	// Should return nil for non-existent client
+	retrieved := engine.GetCustomClient("non-existent")
+	assert.Nil(t, retrieved)
+}
+
 func TestAppBuilder_WithGracefulShutdown(t *testing.T) {
 	builder := NewAppBuilder()
 	result := builder.WithGracefulShutdown()

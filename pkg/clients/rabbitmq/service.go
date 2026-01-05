@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"fmt"
+	"net"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/skolldire/go-engine/pkg/core/client"
@@ -19,10 +20,15 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		timeout = DefaultTimeout
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	// Create a dialer with the configured timeout
+	dialer := &net.Dialer{
+		Timeout: timeout,
+	}
 
-	conn, err := amqp.Dial(cfg.URL)
+	// Use DialConfig to apply the timeout to the connection attempt
+	conn, err := amqp.DialConfig(cfg.URL, amqp.Config{
+		Dial: dialer.Dial,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
 	}
@@ -47,9 +53,10 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 	}
 
 	if c.IsLoggingEnabled() {
-		log.Debug(ctx, "RabbitMQ connection established successfully",
+		log.Debug(context.Background(), "RabbitMQ connection established successfully",
 			map[string]interface{}{
-				"url": cfg.URL,
+				"url":     cfg.URL,
+				"timeout": timeout.String(),
 			})
 	}
 
@@ -90,11 +97,8 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 		return c.GetLogger().WrapError(err, "error consuming messages")
 	}
 
-	consumeCtx, cancel := context.WithCancel(context.Background())
-	
 	go func() {
 		defer func() {
-			cancel()
 			if r := recover(); r != nil {
 				if c.IsLoggingEnabled() {
 					c.GetLogger().Error(ctx, fmt.Errorf("panic in consume handler: %v", r), map[string]interface{}{
@@ -112,8 +116,6 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 						"queue": queue,
 					})
 				}
-				return
-			case <-consumeCtx.Done():
 				return
 			case delivery, ok := <-deliveries:
 				if !ok {
@@ -187,4 +189,3 @@ func (c *RabbitMQClient) Close() error {
 func (c *RabbitMQClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }
-

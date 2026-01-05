@@ -41,6 +41,9 @@ type ServiceRegistry struct {
 	S3Clients  map[string]s3.Service
 	SESClients map[string]ses.Service
 	SSMClients map[string]ssm.Service
+	
+	// Custom clients - generic storage for any custom client implementations
+	CustomClients map[string]interface{}
 }
 
 // NewServiceRegistry creates a new empty service registry
@@ -59,6 +62,7 @@ func NewServiceRegistry() *ServiceRegistry {
 		S3Clients:        make(map[string]s3.Service),
 		SESClients:       make(map[string]ses.Service),
 		SSMClients:       make(map[string]ssm.Service),
+		CustomClients:    make(map[string]interface{}),
 	}
 }
 

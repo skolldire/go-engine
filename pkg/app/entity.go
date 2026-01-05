@@ -260,6 +260,14 @@ func (e *Engine) GetCloudClient() awsclient.Client {
 	return e.CloudClient
 }
 
+// GetCustomClient retrieves a custom client by name
+func (e *Engine) GetCustomClient(name string) interface{} {
+	if e.Services == nil || e.Services.CustomClients == nil {
+		return nil
+	}
+	return e.Services.CustomClients[name]
+}
+
 type App struct {
 	Engine *Engine
 }
