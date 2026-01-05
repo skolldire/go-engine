@@ -82,13 +82,16 @@ func (c *App) Init() *App {
 
 	c.Engine.GrpcServer = initializer.createServerGRPC(c.Engine.Conf.GrpcServer)
 
-	// Initialize service registry - preserve existing CustomClients if registry already exists
+	// Initialize service registry using sync.Once to ensure thread-safety
+	// and prevent overwriting if GetServices() was called first
 	var existingCustomClients map[string]interface{}
 	if c.Engine.Services != nil && c.Engine.Services.CustomClients != nil {
 		existingCustomClients = c.Engine.Services.CustomClients
 	}
 
-	c.Engine.Services = NewServiceRegistry()
+	c.Engine.servicesOnce.Do(func() {
+		c.Engine.Services = NewServiceRegistry()
+	})
 
 	// Restore existing custom clients if they were present
 	if existingCustomClients != nil {
@@ -123,8 +126,11 @@ func (c *App) Init() *App {
 	// Initialize CloudClient (optional - can be nil if not configured)
 	c.Engine.CloudClient = initializer.createCloudClient(c.Engine.Log, c.Engine.Telemetry)
 
-	// Initialize config registry
-	c.Engine.Configs = NewConfigRegistry()
+	// Initialize config registry using sync.Once to ensure thread-safety
+	// and prevent overwriting if GetConfigs() was called first
+	c.Engine.configsOnce.Do(func() {
+		c.Engine.Configs = NewConfigRegistry()
+	})
 	c.Engine.Configs.Repositories = c.Engine.Conf.Repositories
 	c.Engine.Configs.UseCases = c.Engine.Conf.Cases
 	c.Engine.Configs.Handlers = c.Engine.Conf.Endpoints

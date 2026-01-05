@@ -136,6 +136,8 @@ func (e *Engine) GetTelemetry() telemetry.Telemetry {
 // sync.Once.Do() ensures the initialization function executes exactly once
 // and provides a memory barrier that guarantees all goroutines see the
 // initialized value after Do() completes.
+// Note: Init() also uses the same sync.Once, so it's safe to call either
+// Init() or GetServices() first without overwriting existing registries.
 func (e *Engine) GetServices() *ServiceRegistry {
 	e.servicesOnce.Do(func() {
 		e.Services = NewServiceRegistry()
@@ -150,6 +152,8 @@ func (e *Engine) GetServices() *ServiceRegistry {
 // sync.Once.Do() ensures the initialization function executes exactly once
 // and provides a memory barrier that guarantees all goroutines see the
 // initialized value after Do() completes.
+// Note: Init() also uses the same sync.Once, so it's safe to call either
+// Init() or GetConfigs() first without overwriting existing registries.
 func (e *Engine) GetConfigs() *ConfigRegistry {
 	e.configsOnce.Do(func() {
 		e.Configs = NewConfigRegistry()

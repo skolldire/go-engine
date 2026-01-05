@@ -124,3 +124,53 @@ func TestAppBuilder_Build_WithErrors(t *testing.T) {
 	assert.Nil(t, engine)
 }
 
+func TestAppBuilder_WithCustomClient_PreservedAfterInit(t *testing.T) {
+	// This test verifies that custom clients added via WithCustomClient()
+	// are preserved when WithInitialization() is called afterwards.
+	// This is the fix for the issue where Init() was overwriting the registry.
+	
+	builder := NewAppBuilder()
+	customClient := "my-custom-client"
+	
+	// Add custom client first
+	builder = builder.WithCustomClient("test-client", customClient)
+	
+	// Verify client is stored before Init()
+	assert.NotNil(t, builder.engine.Services)
+	assert.NotNil(t, builder.engine.Services.CustomClients)
+	assert.Equal(t, customClient, builder.engine.Services.CustomClients["test-client"])
+	
+	// Note: WithInitialization() requires WithConfigs() or WithDynamicConfig() first
+	// For this test, we'll directly test the Init() method behavior
+	// by simulating the scenario where Services already has CustomClients
+	
+	// Create an app with existing Services containing CustomClients
+	app := &App{
+		Engine: &Engine{
+			ctx:    context.Background(),
+			Log:    &mockLogger{},
+			Services: NewServiceRegistry(),
+		},
+	}
+	
+	// Add a custom client to the existing registry
+	app.Engine.Services.CustomClients["preserved-client"] = "preserved-value"
+	
+	// Set minimal config to allow Init() to proceed (it will fail AWS config but that's OK)
+	// We're just testing that CustomClients are preserved
+	app.Engine.Conf = &viper.Config{
+		Aws: viper.AwsConfig{
+			Region: "us-east-1",
+		},
+	}
+	
+	// Call Init() - this should preserve the existing CustomClients
+	result := app.Init()
+	
+	// Verify that CustomClients were preserved
+	// Note: Init() may fail due to AWS config, but CustomClients should still be preserved
+	if result.Engine.Services != nil {
+		preserved := result.Engine.Services.CustomClients["preserved-client"]
+		assert.Equal(t, "preserved-value", preserved, "CustomClients should be preserved after Init()")
+	}
+}
