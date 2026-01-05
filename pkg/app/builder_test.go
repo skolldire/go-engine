@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/skolldire/go-engine/pkg/app/router"
+	"github.com/skolldire/go-engine/pkg/config/viper"
 	"github.com/stretchr/testify/assert"
 )
 

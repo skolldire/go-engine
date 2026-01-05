@@ -1,6 +1,7 @@
 package inbound
 
 import (
+	"encoding/base64"
 	"encoding/json"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -39,6 +40,9 @@ func NormalizeSQSEvent(event *events.SQSEvent) ([]*cloud.Request, error) {
 			for k, v := range record.MessageAttributes {
 				if v.StringValue != nil {
 					attrs[k] = *v.StringValue
+				} else if v.BinaryValue != nil {
+					// Encode binary value as base64 string
+					attrs[k] = base64.StdEncoding.EncodeToString(v.BinaryValue)
 				}
 			}
 			// Store as JSON string in headers

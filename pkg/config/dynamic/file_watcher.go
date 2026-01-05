@@ -47,7 +47,6 @@ func NewFileWatcher(paths []string, log logger.Service) (*FileWatcher, error) {
 func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 	debounceTimer := time.NewTimer(fw.debounce)
 	debounceTimer.Stop()
-	var lastEvent time.Time
 	var pendingName string
 	var pendingOp fsnotify.Op
 
@@ -85,7 +84,16 @@ func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 					"op":   pendingOp.String(),
 				})
 
-				time.Sleep(100 * time.Millisecond)
+				// Wait briefly for filesystem write completion before reloading
+				// Use select to allow cancellation during wait
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-fw.stopCh:
+					return nil
+				case <-time.After(100 * time.Millisecond):
+					// Continue with onChange after wait
+				}
 
 				if err := onChange(); err != nil {
 					fw.logger.Error(ctx, err, map[string]interface{}{
@@ -94,7 +102,6 @@ func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 					})
 				}
 
-				lastEvent = time.Now()
 				pendingName = ""
 			}
 		}

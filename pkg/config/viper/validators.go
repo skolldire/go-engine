@@ -199,42 +199,24 @@ func validateSNSConfig(single *sns.Config, multiple []map[string]sns.Config) []e
 	var errors []error
 
 	// Validate single SNS client if provided
+	// Note: SNS Config doesn't have Topic/Region fields as they're provided per-operation
+	// Only validate that the config struct exists if needed
 	if single != nil {
-		if single.Topic == "" {
-			errors = append(errors, &ValidationError{
-				Field:   "sns.topic",
-				Message: "SNS topic is required",
-			})
-		}
-		if single.Region == "" {
-			errors = append(errors, &ValidationError{
-				Field:   "sns.region",
-				Message: "SNS region is required",
-			})
-		}
+		// SNS config is valid if provided (Topic/Region are operation-specific, not config-level)
+		// No additional validation needed here
 	}
 
 	// Validate multiple SNS clients
 	for i, clientMap := range multiple {
-		for name, cfg := range clientMap {
+		for name := range clientMap {
 			if name == "" {
 				errors = append(errors, &ValidationError{
 					Field:   fmt.Sprintf("sns_clients[%d].name", i),
 					Message: "SNS client name cannot be empty",
 				})
 			}
-			if cfg.Topic == "" {
-				errors = append(errors, &ValidationError{
-					Field:   fmt.Sprintf("sns_clients[%d].%s.topic", i, name),
-					Message: "SNS topic is required",
-				})
-			}
-			if cfg.Region == "" {
-				errors = append(errors, &ValidationError{
-					Field:   fmt.Sprintf("sns_clients[%d].%s.region", i, name),
-					Message: "SNS region is required",
-				})
-			}
+			// SNS config doesn't require Topic/Region at config level
+			// These are provided per-operation (Publish, CreateTopic, etc.)
 		}
 	}
 

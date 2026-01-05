@@ -297,7 +297,7 @@ func (a *s3Adapter) copyObject(ctx context.Context, req *cloud.Request) (*cloud.
 		return nil, normalizeS3Error(err, "s3.copy_object")
 	}
 
-	return &cloud.Response{
+	response := &cloud.Response{
 		StatusCode: 200,
 		Headers: map[string]string{
 			"s3.copy_source_version_id": aws.ToString(result.CopySourceVersionId),
@@ -315,7 +315,6 @@ func (a *s3Adapter) copyObject(ctx context.Context, req *cloud.Request) (*cloud.
 	}
 	
 	return response, nil
-	}, nil
 }
 
 func parseS3Path(path string) (bucket, key string) {

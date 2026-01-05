@@ -2,6 +2,7 @@ package retry_backoff
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -75,10 +76,13 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 	}
 
+	// Always wrap error with consistent message regardless of logger configuration
+	wrappedErr := fmt.Errorf("error executing operation after all retries: %w", err)
 	if r.logger != nil {
-		return r.logger.WrapError(err, "error executing operation after all retries")
+		// Log the error if logger is available
+		r.logger.Error(ctx, wrappedErr, nil)
 	}
-	return err
+	return wrappedErr
 }
 
 func (r *Retryer) calculateWaitTime(attempt int) time.Duration {

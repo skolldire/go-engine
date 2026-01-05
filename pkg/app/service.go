@@ -382,7 +382,7 @@ func (i *clients) createClientsMongoDB(configs []map[string]mongodb.Config) map[
 	mongoDBClients := make(map[string]mongodb.Service)
 	for _, v := range configs {
 		for k, cfg := range v {
-			client, err := mongodb.NewClient(cfg, i.log)
+			client, err := mongodb.NewClient(i.ctx, cfg, i.log)
 			if err != nil {
 				i.setError(err)
 				continue

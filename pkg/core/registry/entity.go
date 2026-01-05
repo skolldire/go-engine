@@ -54,13 +54,14 @@ func (r *Registry) Register(clientType string, factory ClientFactory) error {
 func (r *Registry) Create(ctx context.Context, clientType string, config interface{}) (interface{}, error) {
 	r.mu.RLock()
 	factory, exists := r.factories[clientType]
+	logger := r.logger // Copy logger while holding lock
 	r.mu.RUnlock()
 
 	if !exists {
 		return nil, fmt.Errorf("client '%s' not registered", clientType)
 	}
 
-	return factory(ctx, config, r.logger)
+	return factory(ctx, config, logger)
 }
 
 func (r *Registry) IsRegistered(clientType string) bool {

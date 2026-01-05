@@ -11,7 +11,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(cfg Config, log logger.Service) (Service, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
 	if cfg.URI == "" {
 		return nil, fmt.Errorf("%w: URI is required", ErrConnection)
 	}
@@ -29,7 +29,11 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		timeout = DefaultTimeout
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	// Use provided context or create one with timeout
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	clientOptions := options.Client().ApplyURI(cfg.URI)
@@ -97,6 +101,25 @@ func (c *MongoDBClient) Disconnect(ctx context.Context) error {
 		return nil, c.client.Disconnect(ctx)
 	})
 	return err
+}
+
+// redactMongoURI removes userinfo (credentials) from MongoDB URI for safe logging
+func redactMongoURI(uri string) string {
+	// Parse URI and remove userinfo if present
+	// Format: mongodb://[username:password@]host[:port][/database]
+	if strings.Contains(uri, "@") {
+		parts := strings.SplitN(uri, "@", 2)
+		if len(parts) == 2 {
+			// Extract scheme and remove userinfo
+			schemeAndHost := parts[1]
+			if strings.HasPrefix(uri, "mongodb://") {
+				return "mongodb://***:***@" + schemeAndHost
+			} else if strings.HasPrefix(uri, "mongodb+srv://") {
+				return "mongodb+srv://***:***@" + schemeAndHost
+			}
+		}
+	}
+	return uri
 }
 
 func (c *MongoDBClient) EnableLogging(enable bool) {

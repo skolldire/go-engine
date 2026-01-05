@@ -316,15 +316,6 @@ func (a *sesAdapter) listVerifiedEmailAddresses(ctx context.Context, req *cloud.
 // Uses the generic normalizeAWSError function
 func normalizeSESError(err error, operation string) *cloud.Error {
 	return normalizeAWSError(err, operation)
-	if err == nil {
-		return nil
-	}
-
-	return cloud.NewErrorWithCause(
-		fmt.Sprintf("%s.error", operation),
-		err.Error(),
-		err,
-	).WithMetadata("status_code", 500)
 }
 
 

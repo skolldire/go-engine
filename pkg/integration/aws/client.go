@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"context"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"

@@ -31,7 +31,12 @@ func NewValidator() *validator.Validate {
 }
 
 func registerCustomValidators(v *validator.Validate) {
+	// "not_empty" validator only applies to string fields
 	v.RegisterValidation("not_empty", func(fl validator.FieldLevel) bool {
+		// Check if field is a string type
+		if fl.Field().Kind() != reflect.String {
+			return false // Not a string, validation fails
+		}
 		return helpers.IsNotEmptyString(fl.Field().String())
 	})
 }

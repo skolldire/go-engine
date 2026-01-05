@@ -177,6 +177,9 @@ func (c *Cliente) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes i
 	if err != nil {
 		return nil, c.logger.WrapError(err, ErrRecibirMensajes.Error())
 	}
+	if response == nil {
+		return nil, c.logger.WrapError(fmt.Errorf("received nil response"), ErrRecibirMensajes.Error())
+	}
 	return response.Messages, nil
 }
 
