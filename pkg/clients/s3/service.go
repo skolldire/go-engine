@@ -141,8 +141,8 @@ func (c *S3Client) HeadObject(ctx context.Context, key string) (*ObjectMetadata,
 	})
 
 	if err != nil {
-		var nsk *types.NoSuchKey
-		if errors.As(err, &nsk) {
+		var notFound *types.NotFound
+		if errors.As(err, &notFound) {
 			return nil, ErrObjectNotFound
 		}
 		return nil, c.GetLogger().WrapError(err, "error getting object metadata")

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/skolldire/go-engine/pkg/app/router"
@@ -21,8 +22,8 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/memcached"
 	"github.com/skolldire/go-engine/pkg/database/mongodb"
 	"github.com/skolldire/go-engine/pkg/database/redis"
-	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
+	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 )
@@ -35,24 +36,28 @@ type Engine struct {
 	Log        logger.Service
 	Telemetry  telemetry.Telemetry
 	Conf       *viper.Config
-	
+
 	// Legacy single clients (deprecated, use Services instead)
 	SQSClient      sqs.Service
 	SNSClient      sns.Service
 	DynamoDBClient dynamo.Service
 	RedisClient    *redis.RedisClient
 	SqlConnection  *gormsql.DBClient
-	
+
 	// Service registry (composition pattern)
 	Services *ServiceRegistry
-	
+
 	// Config registry (composition pattern)
 	Configs *ConfigRegistry
-	
+
+	// Synchronization for lazy initialization
+	servicesOnce sync.Once
+	configsOnce  sync.Once
+
 	// Feature flags and validation
 	FeatureFlags *dynamic.FeatureFlags
 	Validator    *validator.Validate
-	
+
 	// Cloud integration client
 	CloudClient awsclient.Client // Optional: HTTP-like AWS integration facade
 }
@@ -127,18 +132,20 @@ func (e *Engine) GetTelemetry() telemetry.Telemetry {
 }
 
 // GetServices returns the service registry
+// Thread-safe lazy initialization using sync.Once
 func (e *Engine) GetServices() *ServiceRegistry {
-	if e.Services == nil {
+	e.servicesOnce.Do(func() {
 		e.Services = NewServiceRegistry()
-	}
+	})
 	return e.Services
 }
 
 // GetConfigs returns the config registry
+// Thread-safe lazy initialization using sync.Once
 func (e *Engine) GetConfigs() *ConfigRegistry {
-	if e.Configs == nil {
+	e.configsOnce.Do(func() {
 		e.Configs = NewConfigRegistry()
-	}
+	})
 	return e.Configs
 }
 
