@@ -31,24 +31,24 @@ func (s *server) Start(ctx context.Context) error {
 	address := fmt.Sprintf(":%d", s.puerto)
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		return fmt.Errorf("error al iniciar el listener: %w", err)
+		return fmt.Errorf("error starting listener: %w", err)
 	}
 
 	if s.logging {
-		s.logger.Info(ctx, "Iniciando servidor gRPC",
+		s.logger.Info(ctx, "starting gRPC server",
 			map[string]interface{}{"puerto": s.puerto})
 	}
 
 	go func() {
 		if err := s.server.Serve(listener); err != nil {
-			s.logger.Error(ctx, fmt.Errorf("error en el servidor gRPC: %w", err), nil)
+			s.logger.Error(ctx, fmt.Errorf("gRPC server error: %w", err), nil)
 		}
 	}()
 
 	go func() {
 		<-ctx.Done()
 		if s.logging {
-			s.logger.Info(context.Background(), "Deteniendo servidor gRPC", nil)
+			s.logger.Info(context.Background(), "stopping gRPC server", nil)
 		}
 		s.server.GracefulStop()
 	}()
@@ -59,7 +59,7 @@ func (s *server) Start(ctx context.Context) error {
 func (s *server) Stop() {
 	if s.server != nil {
 		if s.logging {
-			s.logger.Info(context.Background(), "Deteniendo servidor gRPC", nil)
+			s.logger.Info(context.Background(), "stopping gRPC server", nil)
 		}
 		s.server.GracefulStop()
 	}

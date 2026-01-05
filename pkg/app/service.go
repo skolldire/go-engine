@@ -255,6 +255,9 @@ func (i *clients) createClientSQL(cfg *gormsql.Config) *gormsql.DBClient {
 }
 
 func (i *clients) createTelemetry(cfg *telemetry.Config) telemetry.Telemetry {
+	if cfg == nil {
+		return nil
+	}
 	tel, err := telemetry.NewTelemetry(i.ctx, *cfg)
 	if err != nil {
 		i.setError(err)

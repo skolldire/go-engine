@@ -273,9 +273,7 @@ func (a *sqsAdapter) listQueues(ctx context.Context, req *cloud.Request) (*cloud
 
 	// Convert queue URLs to JSON array
 	queueURLs := make([]string, len(result.QueueUrls))
-	for i, url := range result.QueueUrls {
-		queueURLs[i] = url
-	}
+	copy(queueURLs, result.QueueUrls)
 
 	bodyBytes, err := json.Marshal(queueURLs)
 	if err != nil {

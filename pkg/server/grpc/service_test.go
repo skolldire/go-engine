@@ -110,7 +110,7 @@ func TestServer_Start_WithLogging(t *testing.T) {
 		EnableLogging: true,
 	}
 	log := &mockLogger{}
-	log.On("Info", mock.Anything, "Iniciando servidor gRPC", mock.Anything).Return()
+	log.On("Info", mock.Anything, "starting gRPC server", mock.Anything).Return()
 
 	srv := NewServer(cfg, log)
 
@@ -174,7 +174,7 @@ func TestServer_Stop_WithLogging(t *testing.T) {
 		EnableLogging: true,
 	}
 	log := &mockLogger{}
-	log.On("Info", mock.Anything, "Deteniendo servidor gRPC", mock.Anything).Return()
+	log.On("Info", mock.Anything, "stopping gRPC server", mock.Anything).Return()
 
 	srv := NewServer(cfg, log)
 

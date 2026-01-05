@@ -99,6 +99,9 @@ func TestNewClient_WithResilience(t *testing.T) {
 		},
 	}
 	log := &mockLogger{}
+	
+	// Configure mock to handle Debug calls during retry logic
+	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
 	// This will fail without a real Redis connection
 	_, err := NewClient(cfg, log)

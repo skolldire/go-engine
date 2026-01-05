@@ -201,10 +201,8 @@ func validateSNSConfig(single *sns.Config, multiple []map[string]sns.Config) []e
 	// Validate single SNS client if provided
 	// Note: SNS Config doesn't have Topic/Region fields as they're provided per-operation
 	// Only validate that the config struct exists if needed
-	if single != nil {
-		// SNS config is valid if provided (Topic/Region are operation-specific, not config-level)
-		// No additional validation needed here
-	}
+	// SNS config is valid if provided (Topic/Region are operation-specific, not config-level)
+	_ = single // Explicitly acknowledge single parameter to avoid empty branch warning
 
 	// Validate multiple SNS clients
 	for i, clientMap := range multiple {
