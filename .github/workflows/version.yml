@@ -1,0 +1,93 @@
+name: Auto Versioning
+
+on:
+  push:
+    branches: [main, master]
+    # Only runs when merging to main/master
+
+concurrency:
+  group: versioning-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  create-version:
+    name: Create Version Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required to fetch all tags
+
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          # Get the latest tag, or use v0.0.0 if no tags exist
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG"
+
+      - name: Calculate next version
+        id: next_version
+        run: |
+          LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
+          
+          # Remove 'v' prefix if present
+          VERSION=${LATEST_TAG#v}
+          
+          # Normalize version: ensure we have MAJOR.MINOR.PATCH format
+          # Handle cases like "1", "1.0", "1.0.0"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          
+          # Set defaults for missing segments
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          
+          # Validate that MAJOR is a number
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid major version: $MAJOR"
+            exit 1
+          fi
+          if ! [[ "$MINOR" =~ ^[0-9]+$ ]]; then
+            MINOR=0
+          fi
+          if ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            PATCH=0
+          fi
+          
+          # Increment minor version and reset patch to 0
+          # This leaves patch available for test/experimental versions
+          MINOR=$((MINOR + 1))
+          PATCH=0
+          
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        run: |
+          set -e -o pipefail
+          NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
+          
+          # Verify tag doesn't already exist
+          if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
+            echo "Tag $NEW_VERSION already exists, skipping..."
+            exit 0
+          fi
+          
+          # Create annotated tag
+          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          echo "Created tag: $NEW_VERSION"
+          
+          # Push tag (this will trigger the release workflow)
+          git push origin "$NEW_VERSION"
+          echo "Successfully pushed tag: $NEW_VERSION"

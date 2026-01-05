@@ -24,10 +24,10 @@ const (
 )
 
 var (
-	ErrInvalidDBType = errors.New("tipo de base de datos no soportado")
-	ErrConnection    = errors.New("error de conexión con la base de datos")
-	ErrNotFound      = errors.New("registro no encontrado")
-	ErrTransaction   = errors.New("error en la transacción")
+	ErrInvalidDBType = errors.New("unsupported database type")
+	ErrConnection    = errors.New("database connection error")
+	ErrNotFound      = errors.New("record not found")
+	ErrTransaction   = errors.New("transaction error")
 )
 
 type Config struct {

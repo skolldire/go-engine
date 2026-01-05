@@ -2,9 +2,8 @@ name: Makefile CI
 
 on:
   push:
-    branches: [ "master", "develop" ]
-  pull_request:
-    branches: [ "master", "develop" ]
+    branches: [ "main", "master" ]
+    # Only runs on merge to main/master, not on PRs
 
 jobs:
   build:

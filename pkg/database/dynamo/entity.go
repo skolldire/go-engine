@@ -14,15 +14,15 @@ const (
 	DefaultTimeout         = 30 * time.Second
 	DefaultQueryLimit      = int32(50)
 	DefaultMaxBatchItems   = 25
-	DefaultItemNotFoundMsg = "ítem no encontrado"
+	DefaultItemNotFoundMsg = "item not found"
 )
 
 var (
 	ErrItemNotFound    = errors.New(DefaultItemNotFoundMsg)
-	ErrInvalidKey      = errors.New("clave primaria inválida")
-	ErrBatchSizeExceed = errors.New("tamaño de lote excede el máximo permitido")
-	ErrMarshal         = errors.New("error al serializar datos")
-	ErrUnmarshal       = errors.New("error al deserializar datos")
+	ErrInvalidKey      = errors.New("invalid primary key")
+	ErrBatchSizeExceed = errors.New("batch size exceeds maximum allowed")
+	ErrMarshal         = errors.New("error serializing data")
+	ErrUnmarshal       = errors.New("error deserializing data")
 )
 
 type Service interface {

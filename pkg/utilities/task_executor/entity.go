@@ -16,9 +16,9 @@ const (
 )
 
 var (
-	ErrTaskTimeout   = errors.New("tarea cancelada por timeout")
-	ErrPoolCancelled = errors.New("pool de trabajadores cancelado")
-	ErrTaskPanic     = errors.New("panic en ejecución de tarea")
+	ErrTaskTimeout   = errors.New("task cancelled due to timeout")
+	ErrPoolCancelled = errors.New("worker pool cancelled")
+	ErrTaskPanic     = errors.New("panic during task execution")
 )
 
 type Option func(*config)

@@ -17,6 +17,21 @@ Go Engine es un framework ligero para desarrollar aplicaciones en Go siguiendo l
 - **Cierre controlado**: Manejo de señales del sistema para un apagado graceful
 - **Integración con AWS**: Soporte nativo para servicios como DynamoDB, SQS, SNS
 - **Conectores de base de datos**: Integraciones con Redis, SQL (vía GORM) y DynamoDB
+- **Sistema de Plugins**: Registro de clientes personalizados mediante el sistema de registry
+- **BaseClient**: Cliente base reutilizable con logging y resiliencia integrados
+- **API Mejorada**: Getters para acceso controlado a recursos de la aplicación
+
+## Nuevas Mejoras
+
+Para más información sobre las mejoras arquitectónicas recientes, consulta [MEJORAS.md](./MEJORAS.md).
+
+### Principales Mejoras Implementadas
+
+1. **BaseClient**: Cliente base que elimina duplicación de código en todos los clientes
+2. **Registry System**: Sistema de registro para clientes personalizados
+3. **AppBuilder Completo**: Builder pattern fluido y completo para construcción de aplicaciones
+4. **Mejor Encapsulación**: Getters para acceso controlado a recursos
+5. **Facilidad de Extensión**: Agregar nuevos clientes es más simple usando BaseClient
 
 ## Instalación
 
@@ -55,24 +70,355 @@ func main() {
     }()
 
     // Crear aplicación usando el builder
-    aplicacion := app.NewAppBuilder().
+    engine, err := app.NewAppBuilder().
         WithContext(ctx).
-        WithMiddleware().
+        WithConfigs().
+        WithInitialization().
+        WithRouter().
         WithGracefulShutdown().
         Build()
 
+    if err != nil {
+        fmt.Printf("Error al construir la aplicación: %v\n", err)
+        os.Exit(1)
+    }
+
     // Verificar errores durante la inicialización
-    if errs := aplicacion.GetErrors(); len(errs) > 0 {
+    if errs := engine.GetErrors(); len(errs) > 0 {
         fmt.Printf("Error al inicializar la aplicación: %v\n", errs[0])
         os.Exit(1)
     }
 
     // Ejecutar la aplicación
     fmt.Println("Iniciando la aplicación...")
-    if err := aplicacion.Run(); err != nil {
+    if err := engine.Run(); err != nil {
         fmt.Printf("Error en la aplicación: %v\n", err)
         os.Exit(1)
     }
+}
+```
+
+### Aplicación Completa con Configuración Dinámica y Feature Flags
+
+```go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+
+    "github.com/skolldire/go-engine/pkg/app"
+    "github.com/skolldire/go-engine/pkg/app/router"
+)
+
+func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    sigCh := make(chan os.Signal, 1)
+    signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+    go func() {
+        <-sigCh
+        fmt.Println("shutdown signal received")
+        cancel()
+    }()
+
+    engine, err := app.NewAppBuilder().
+        WithContext(ctx).
+        WithDynamicConfig().
+        WithInitialization().
+        WithRouter().
+        WithMiddleware(setupCustomMiddleware).
+        WithGracefulShutdown().
+        Build()
+
+    if err != nil {
+        fmt.Printf("failed to build application: %v\n", err)
+        os.Exit(1)
+    }
+
+    if errs := engine.GetErrors(); len(errs) > 0 {
+        fmt.Printf("initialization errors: %v\n", errs)
+        os.Exit(1)
+    }
+
+    setupRoutes(engine)
+
+    fmt.Println("starting application...")
+    if err := engine.Run(); err != nil {
+        fmt.Printf("application error: %v\n", err)
+        os.Exit(1)
+    }
+}
+
+func setupCustomMiddleware(r router.Service) {
+    r.Use(func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+            start := time.Now()
+            next.ServeHTTP(w, req)
+            duration := time.Since(start)
+            fmt.Printf("request completed in %v\n", duration)
+        })
+    })
+}
+
+func setupRoutes(engine *app.Engine) {
+    r := engine.GetRouter()
+
+    r.AddRoute("GET", "/health", healthCheckHandler(engine))
+    r.AddRoute("GET", "/feature-flags", featureFlagsHandler(engine))
+}
+
+func healthCheckHandler(engine *app.Engine) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        fmt.Fprintf(w, `{"status":"ok","timestamp":"%s"}`, time.Now().Format(time.RFC3339))
+    }
+}
+
+func featureFlagsHandler(engine *app.Engine) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        flags := engine.GetFeatureFlags()
+        if flags == nil {
+            http.Error(w, "feature flags not available", http.StatusServiceUnavailable)
+            return
+        }
+
+        payload := map[string]interface{}{
+            "flags": flags.GetAll(),
+        }
+        
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        if err := json.NewEncoder(w).Encode(payload); err != nil {
+            http.Error(w, "failed to encode response", http.StatusInternalServerError)
+            return
+        }
+    }
+}
+```
+
+### Uso de Múltiples Clientes
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/skolldire/go-engine/pkg/app"
+)
+
+func main() {
+    ctx := context.Background()
+
+    engine, err := app.NewAppBuilder().
+        WithContext(ctx).
+        WithConfigs().
+        WithInitialization().
+        WithRouter().
+        Build()
+
+    if err != nil {
+        panic(err)
+    }
+
+    // Usar múltiples clientes REST
+    api1Client := engine.GetRestClient("api1")
+    api2Client := engine.GetRestClient("api2")
+    
+    if api1Client != nil {
+        fmt.Println("✓ API1 client available")
+    }
+    if api2Client != nil {
+        fmt.Println("✓ API2 client available")
+    }
+
+    // Usar múltiples clientes SQS
+    queue1Client := engine.GetSQSClientByName("queue1")
+    queue2Client := engine.GetSQSClientByName("queue2")
+    
+    if queue1Client != nil {
+        fmt.Println("✓ Queue1 client available")
+    }
+    if queue2Client != nil {
+        fmt.Println("✓ Queue2 client available")
+    }
+
+    // Usar múltiples clientes Redis
+    cache1Client := engine.GetRedisClientByName("cache1")
+    cache2Client := engine.GetRedisClientByName("cache2")
+    
+    if cache1Client != nil {
+        fmt.Println("✓ Cache1 client available")
+    }
+    if cache2Client != nil {
+        fmt.Println("✓ Cache2 client available")
+    }
+
+    engine.Run()
+}
+```
+
+### Uso de Feature Flags
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/skolldire/go-engine/pkg/app"
+)
+
+func main() {
+    ctx := context.Background()
+
+    engine, err := app.NewAppBuilder().
+        WithContext(ctx).
+        WithDynamicConfig().
+        WithInitialization().
+        WithRouter().
+        Build()
+
+    if err != nil {
+        panic(err)
+    }
+
+    flags := engine.GetFeatureFlags()
+    if flags == nil {
+        fmt.Println("feature flags not available")
+        return
+    }
+
+    // Verificar flags booleanos
+    if flags.IsEnabled("enable_new_api") {
+        fmt.Println("✓ New API is enabled")
+        useNewAPI(ctx)
+    } else {
+        fmt.Println("✗ New API is disabled, using legacy API")
+        useLegacyAPI(ctx)
+    }
+
+    // Obtener valores string
+    apiVersion := flags.GetString("api_version")
+    fmt.Printf("API Version: %s\n", apiVersion)
+
+    // Obtener valores integer
+    maxRetries := flags.GetInt("max_retries")
+    fmt.Printf("Max Retries: %d\n", maxRetries)
+
+    // Obtener todos los flags
+    allFlags := flags.GetAll()
+    for key, value := range allFlags {
+        fmt.Printf("%s: %v\n", key, value)
+    }
+
+    // Actualizar flags dinámicamente
+    flags.Set("enable_new_api", true)
+    fmt.Println("Updated enable_new_api to true")
+}
+
+func useNewAPI(ctx context.Context) {
+    fmt.Println("→ Using new API implementation")
+}
+
+func useLegacyAPI(ctx context.Context) {
+    fmt.Println("→ Using legacy API implementation")
+}
+```
+
+### Integración con AWS Lambda (API Gateway Handler)
+
+```go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "log"
+
+    "github.com/aws/aws-lambda-go/events"
+    "github.com/aws/aws-lambda-go/lambda"
+    "github.com/aws/aws-sdk-go-v2/config"
+    "github.com/skolldire/go-engine/pkg/integration/aws"
+    "github.com/skolldire/go-engine/pkg/integration/inbound"
+)
+
+type RequestPayload struct {
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+func Handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+    // Normalizar evento API Gateway
+    req, err := inbound.NormalizeAPIGatewayEvent(&event)
+    if err != nil {
+        return events.APIGatewayProxyResponse{
+            StatusCode: 500,
+            Body:       `{"error":"failed to normalize event"}`,
+        }, nil
+    }
+
+    // Parsear body
+    var payload RequestPayload
+    if err := json.Unmarshal(req.Body, &payload); err != nil {
+        return events.APIGatewayProxyResponse{
+            StatusCode: 400,
+            Body:       `{"error":"invalid request body"}`,
+        }, nil
+    }
+
+    // Crear cliente AWS
+    cfg, err := config.LoadDefaultConfig(ctx)
+    if err != nil {
+        return events.APIGatewayProxyResponse{
+            StatusCode: 500,
+            Body:       `{"error":"failed to load AWS config"}`,
+        }, nil
+    }
+    client := aws.New(cfg)
+
+    // Enviar notificación a SNS
+    topicARN := "arn:aws:sns:us-east-1:123456789:notifications"
+    notification := map[string]interface{}{
+        "type":  "user_registered",
+        "name":  payload.Name,
+        "email": payload.Email,
+    }
+
+    _, err = aws.SNSPublish(ctx, client, topicARN, notification)
+    if err != nil {
+        log.Printf("failed to publish notification: %v", err)
+    }
+
+    // Retornar respuesta
+    response := map[string]interface{}{
+        "message": "User registered successfully",
+        "name":    payload.Name,
+    }
+
+    responseBody, _ := json.Marshal(response)
+    return events.APIGatewayProxyResponse{
+        StatusCode: 200,
+        Headers: map[string]string{
+            "Content-Type": "application/json",
+        },
+        Body: string(responseBody),
+    }, nil
+}
+
+func main() {
+    lambda.Start(Handler)
 }
 ```
 

@@ -101,7 +101,7 @@ func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
 	}
 
 	if client.logging {
-		msg := fmt.Sprintf("Conexión a base de datos %s establecida", cfg.Type)
+		msg := fmt.Sprintf("database connection to %s established", cfg.Type)
 		logFields := map[string]interface{}{"type": cfg.Type, "database": cfg.Database}
 		log.Debug(context.Background(), msg, logFields)
 	}
@@ -124,22 +124,22 @@ func (dbc *DBClient) execute(ctx context.Context, operationName string, operatio
 
 	if dbc.resilience != nil {
 		if dbc.logging {
-			dbc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DB con resiliencia: %s", operationName), logFields)
+			dbc.logger.Debug(ctx, fmt.Sprintf("starting DB operation with resilience: %s", operationName), logFields)
 		}
 
 		result, err := dbc.resilience.Execute(ctx, operation)
 
 		if err != nil && dbc.logging {
-			dbc.logger.Error(ctx, fmt.Errorf("error en operación DB: %w", err), logFields)
+			dbc.logger.Error(ctx, fmt.Errorf("error in DB operation: %w", err), logFields)
 		} else if dbc.logging {
-			dbc.logger.Debug(ctx, fmt.Sprintf("Operación DB completada con resiliencia: %s", operationName), logFields)
+			dbc.logger.Debug(ctx, fmt.Sprintf("DB operation completed with resilience: %s", operationName), logFields)
 		}
 
 		return result, err
 	}
 
 	if dbc.logging {
-		dbc.logger.Debug(ctx, fmt.Sprintf("Iniciando operación DB: %s", operationName), logFields)
+		dbc.logger.Debug(ctx, fmt.Sprintf("starting DB operation: %s", operationName), logFields)
 	}
 
 	result, err := operation()
@@ -147,7 +147,7 @@ func (dbc *DBClient) execute(ctx context.Context, operationName string, operatio
 	if err != nil && dbc.logging {
 		dbc.logger.Error(ctx, err, logFields)
 	} else if dbc.logging {
-		dbc.logger.Debug(ctx, fmt.Sprintf("Operación DB completada: %s", operationName), logFields)
+		dbc.logger.Debug(ctx, fmt.Sprintf("DB operation completed: %s", operationName), logFields)
 	}
 
 	return result, err
@@ -292,7 +292,7 @@ func (dbc *DBClient) Upsert(ctx context.Context, value interface{}, conflictColu
 func (dbc *DBClient) AutoMigrate(models ...interface{}) error {
 	err := dbc.db.AutoMigrate(models...)
 	if err != nil {
-		return dbc.logger.WrapError(err, "error en automigración")
+		return dbc.logger.WrapError(err, "error in auto migration")
 	}
 	return nil
 }
@@ -359,7 +359,7 @@ func (l *gormLogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (
 		return
 	}
 
-	l.logger.Debug(ctx, "SQL ejecutada", fields)
+		l.logger.Debug(ctx, "SQL executed", fields)
 }
 
 func createGormLogger(log logger.Service, logLevel string) gormlogger.Interface {

@@ -2,6 +2,7 @@ package retry_backoff
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -61,7 +62,7 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		waitTime := r.calculateWaitTime(attempt)
 
 		if r.logger != nil {
-			r.logger.Debug(ctx, "Reintentando operación después de error",
+			r.logger.Debug(ctx, "retrying operation after error",
 				map[string]interface{}{"attempt": attempt + 1,
 					"maxRetries": r.config.MaxRetries,
 					"waitTime":   waitTime,
@@ -75,7 +76,13 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 	}
 
-	return r.logger.WrapError(err, "Error al ejecutar operación después de todos los reintentos")
+	// Always wrap error with consistent message regardless of logger configuration
+	wrappedErr := fmt.Errorf("error executing operation after all retries: %w", err)
+	if r.logger != nil {
+		// Log the error if logger is available
+		r.logger.Error(ctx, wrappedErr, nil)
+	}
+	return wrappedErr
 }
 
 func (r *Retryer) calculateWaitTime(attempt int) time.Duration {

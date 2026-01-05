@@ -18,8 +18,8 @@ const (
 )
 
 var (
-	ErrCircuitOpen  = errors.New("circuit breaker está abierto")
-	ErrTooManyCalls = errors.New("demasiadas llamadas concurrentes")
+	ErrCircuitOpen  = errors.New("circuit breaker is open")
+	ErrTooManyCalls = errors.New("too many concurrent calls")
 )
 
 type Config struct {

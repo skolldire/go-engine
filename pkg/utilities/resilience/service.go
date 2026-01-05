@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	ErrOperationFailed = errors.New("operación falló después de reintentos y circuit breaker")
+	ErrOperationFailed = errors.New("operation failed after retries and circuit breaker")
 )
 
 func NewResilienceService(config Config, log logger.Service) *Service {
@@ -52,7 +52,7 @@ func (rs *Service) Execute(ctx context.Context,
 	if err != nil {
 		if errors.Is(err, circuit_breaker.ErrCircuitOpen) {
 			if rs.logger != nil {
-				rs.logger.Warn(ctx, "Circuit breaker abierto, rechazando solicitud", nil)
+				rs.logger.Warn(ctx, "circuit breaker open, rejecting request", nil)
 			}
 		}
 

@@ -31,14 +31,14 @@ type Config struct {
 }
 
 var (
-	ErrEnviarMensaje   = errors.New("error al enviar mensaje")
-	ErrRecibirMensajes = errors.New("error al recibir mensajes")
-	ErrEliminarMensaje = errors.New("error al eliminar mensaje")
-	ErrCrearCola       = errors.New("error al crear cola")
-	ErrEliminarCola    = errors.New("error al eliminar cola")
-	ErrListarColas     = errors.New("error al listar colas")
-	ErrObtenerURLCola  = errors.New("error al obtener URL de cola")
-	ErrInvalidInput    = errors.New("entrada inválida")
+	ErrEnviarMensaje   = errors.New("error sending message")
+	ErrRecibirMensajes = errors.New("error receiving messages")
+	ErrEliminarMensaje = errors.New("error deleting message")
+	ErrCrearCola       = errors.New("error creating queue")
+	ErrEliminarCola    = errors.New("error deleting queue")
+	ErrListarColas     = errors.New("error listing queues")
+	ErrObtenerURLCola  = errors.New("error getting queue URL")
+	ErrInvalidInput    = errors.New("invalid input")
 )
 
 const (

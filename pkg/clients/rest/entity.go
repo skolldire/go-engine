@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
@@ -33,10 +33,8 @@ type Service interface {
 	WithLogging(enable bool)
 }
 
-type client struct {
+type restClient struct {
+	*client.BaseClient
 	baseURL    string
 	httpClient *resty.Client
-	resilience *resilience.Service
-	logger     logger.Service
-	logging    bool
 }

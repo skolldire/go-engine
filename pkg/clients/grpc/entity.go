@@ -15,8 +15,8 @@ import (
 const DefaultTimeout = 30 * time.Second
 
 var (
-	ErrConnection     = fmt.Errorf("error al conectar con el servidor gRPC")
-	ErrTimeoutConnect = fmt.Errorf("tiempo de espera agotado al esperar la conexión gRPC")
+	ErrConnection     = fmt.Errorf("error connecting to gRPC server")
+	ErrTimeoutConnect = fmt.Errorf("timeout waiting for gRPC connection")
 )
 
 type Service interface {

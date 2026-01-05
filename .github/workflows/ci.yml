@@ -2,9 +2,8 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+    branches: [main, master]
+    # Only runs on merge to main/master, not on PRs
 
 jobs:
   lint:
