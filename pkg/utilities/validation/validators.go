@@ -39,7 +39,8 @@ func registerCustomValidators(v *validator.Validate) {
 		}
 		return helpers.IsNotEmptyString(fl.Field().String())
 	}); err != nil {
-		// Log error if registration fails (validator will still work without custom validator)
+		// Registration error is ignored; validator will still work without custom validator
+		// In practice, RegisterValidation rarely fails unless the validator name is invalid
 		_ = err
 	}
 }
