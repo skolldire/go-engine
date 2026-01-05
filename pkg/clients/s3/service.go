@@ -168,13 +168,26 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 
 	var allObjects []ObjectMetadata
 	var continuationToken *string
+	const pageSize int32 = 1000 // Fixed page size for S3 API calls
 
 	for {
+		// Calculate how many keys we still need
+		remaining := maxKeys - int32(len(allObjects))
+		if remaining <= 0 {
+			break // We've reached the requested limit
+		}
+
+		// Use the smaller of pageSize or remaining keys as the MaxKeys for this request
+		requestMaxKeys := pageSize
+		if remaining < pageSize {
+			requestMaxKeys = remaining
+		}
+
 		result, err := c.Execute(ctx, "ListObjects", func() (interface{}, error) {
 			input := &s3.ListObjectsV2Input{
 				Bucket:  aws.String(c.bucket),
 				Prefix:  aws.String(prefix),
-				MaxKeys: aws.Int32(maxKeys),
+				MaxKeys: aws.Int32(requestMaxKeys),
 			}
 			if continuationToken != nil {
 				input.ContinuationToken = continuationToken
@@ -198,9 +211,15 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 				LastModified: aws.ToTime(obj.LastModified),
 				ETag:         aws.ToString(obj.ETag),
 			})
+
+			// Stop if we've reached the requested limit
+			if int32(len(allObjects)) >= maxKeys {
+				break
+			}
 		}
 
-		if response.NextContinuationToken == nil {
+		// Stop if there are no more pages or we've reached the limit
+		if response.NextContinuationToken == nil || int32(len(allObjects)) >= maxKeys {
 			break
 		}
 		continuationToken = response.NextContinuationToken

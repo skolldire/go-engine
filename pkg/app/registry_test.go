@@ -1,6 +1,7 @@
 package app
 
 import (
+	"sync"
 	"testing"
 )
 
@@ -128,5 +129,60 @@ func TestConfigRegistry_AddConfig(t *testing.T) {
 	}
 }
 
+// TestGetServices_ConcurrentAccess verifies that GetServices() is thread-safe
+func TestGetServices_ConcurrentAccess(t *testing.T) {
+	engine := &Engine{}
+	const numGoroutines = 100
+	var wg sync.WaitGroup
+	results := make([]*ServiceRegistry, numGoroutines)
 
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx] = engine.GetServices()
+		}(i)
+	}
+	wg.Wait()
 
+	// All goroutines should get the same instance
+	firstResult := results[0]
+	if firstResult == nil {
+		t.Fatal("GetServices() returned nil")
+	}
+
+	for i, result := range results {
+		if result != firstResult {
+			t.Errorf("Goroutine %d got different instance: expected %p, got %p", i, firstResult, result)
+		}
+	}
+}
+
+// TestGetConfigs_ConcurrentAccess verifies that GetConfigs() is thread-safe
+func TestGetConfigs_ConcurrentAccess(t *testing.T) {
+	engine := &Engine{}
+	const numGoroutines = 100
+	var wg sync.WaitGroup
+	results := make([]*ConfigRegistry, numGoroutines)
+
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx] = engine.GetConfigs()
+		}(i)
+	}
+	wg.Wait()
+
+	// All goroutines should get the same instance
+	firstResult := results[0]
+	if firstResult == nil {
+		t.Fatal("GetConfigs() returned nil")
+	}
+
+	for i, result := range results {
+		if result != firstResult {
+			t.Errorf("Goroutine %d got different instance: expected %p, got %p", i, firstResult, result)
+		}
+	}
+}

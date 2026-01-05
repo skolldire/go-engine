@@ -137,6 +137,8 @@ func (e *Engine) GetServices() *ServiceRegistry {
 	e.servicesOnce.Do(func() {
 		e.Services = NewServiceRegistry()
 	})
+	// sync.Once.Do() provides a memory barrier that ensures all goroutines
+	// see the initialized value after Do() returns
 	return e.Services
 }
 
@@ -146,6 +148,8 @@ func (e *Engine) GetConfigs() *ConfigRegistry {
 	e.configsOnce.Do(func() {
 		e.Configs = NewConfigRegistry()
 	})
+	// sync.Once.Do() provides a memory barrier that ensures all goroutines
+	// see the initialized value after Do() returns
 	return e.Configs
 }
 
