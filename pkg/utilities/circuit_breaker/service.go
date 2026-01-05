@@ -63,7 +63,7 @@ func createReadyToTripFunc(config *Config, log logger.Service) func(counts gobre
 			shouldTrip := failureRate >= config.FailureRateThreshold
 
 			if shouldTrip && log != nil {
-				log.Warn(context.Background(), "Circuit breaker cambiando a estado abierto",
+				log.Warn(context.Background(), "circuit breaker changing to open state",
 					map[string]interface{}{"circuit": config.Name,
 						"requests":    counts.Requests,
 						"failures":    counts.TotalFailures,
@@ -80,7 +80,7 @@ func createReadyToTripFunc(config *Config, log logger.Service) func(counts gobre
 func createOnStateChangeFunc(config *Config, log logger.Service) func(name string, from gobreaker.State, to gobreaker.State) {
 	return func(name string, from gobreaker.State, to gobreaker.State) {
 		if log != nil {
-			log.Warn(context.Background(), "Circuit breaker estado cambiado",
+			log.Warn(context.Background(), "circuit breaker state changed",
 				map[string]interface{}{"circuit": name,
 					"from": stateToString(from),
 					"to":   stateToString(to)})
@@ -91,13 +91,13 @@ func createOnStateChangeFunc(config *Config, log logger.Service) func(name strin
 func stateToString(state gobreaker.State) string {
 	switch state {
 	case gobreaker.StateClosed:
-		return "cerrado"
+		return "closed"
 	case gobreaker.StateHalfOpen:
-		return "semi-abierto"
+		return "half-open"
 	case gobreaker.StateOpen:
-		return "abierto"
+		return "open"
 	default:
-		return "desconocido"
+		return "unknown"
 	}
 }
 

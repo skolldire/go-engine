@@ -27,12 +27,11 @@ func TestValueOrZero(t *testing.T) {
 
 func TestPtr(t *testing.T) {
 	tests := []struct {
-		name     string
-		value    int
-		expected *int
+		name  string
+		value int
 	}{
-		{"creates pointer", 42, Ptr(42)},
-		{"zero value", 0, Ptr(0)},
+		{"creates pointer", 42},
+		{"zero value", 0},
 	}
 
 	for _, tt := range tests {

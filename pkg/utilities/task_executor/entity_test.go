@@ -74,7 +74,7 @@ func TestTask_Execute_ContextCancelled(t *testing.T) {
 	result, duration, err := task.Execute(ctx)
 	assert.Error(t, err)
 	assert.Equal(t, context.Canceled, err)
-	assert.Nil(t, result)
+	assert.Empty(t, result) // result is string, not pointer
 	assert.Equal(t, 0, duration)
 }
 

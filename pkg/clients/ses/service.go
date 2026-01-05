@@ -148,6 +148,9 @@ func (c *SESClient) SendEmail(ctx context.Context, message EmailMessage) (*SendE
 	if err != nil {
 		return nil, c.GetLogger().WrapError(err, ErrSendEmail.Error())
 	}
+	if response == nil || response.MessageId == nil {
+		return nil, c.GetLogger().WrapError(ErrSendEmail, "SES response or MessageId is nil")
+	}
 	return &SendEmailResult{
 		MessageID: *response.MessageId,
 	}, nil
@@ -175,12 +178,15 @@ func (c *SESClient) SendRawEmail(ctx context.Context, rawMessage []byte, destina
 	if err != nil {
 		return nil, c.GetLogger().WrapError(err, ErrSendEmail.Error())
 	}
+	if response == nil || response.MessageId == nil {
+		return nil, c.GetLogger().WrapError(ErrSendEmail, "SES response or MessageId is nil")
+	}
 	return &SendEmailResult{
 		MessageID: *response.MessageId,
 	}, nil
 }
 
-func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subject string, htmlBody, textBody string, destinations []EmailAddress) (*SendEmailResult, error) {
+func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subject string, htmlBody, textBody string, destinations []EmailAddress) (*BulkSendResult, error) {
 	if from.Email == "" || len(destinations) == 0 {
 		return nil, ErrInvalidInput
 	}
@@ -189,20 +195,27 @@ func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subjec
 		return nil, fmt.Errorf("%w: invalid sender email: %v", ErrInvalidAddress, err)
 	}
 
-	var lastMessageID string
-	var firstError error
-	successCount := 0
+	result := &BulkSendResult{
+		Recipients:       make([]RecipientResult, 0, len(destinations)),
+		FailedRecipients: make([]string, 0),
+	}
 
 	for _, dest := range destinations {
+		recipientResult := RecipientResult{
+			EmailAddress: dest.Email,
+		}
+
 		if err := validation.GetGlobalValidator().Var(dest.Email, "required,email"); err != nil {
+			recipientResult.Error = fmt.Errorf("invalid email address: %w", err)
+			result.Recipients = append(result.Recipients, recipientResult)
+			result.FailureCount++
+			result.FailedRecipients = append(result.FailedRecipients, dest.Email)
+
 			if c.IsLoggingEnabled() {
 				c.GetLogger().Warn(ctx, "skipping invalid email address", map[string]interface{}{
 					"email": dest.Email,
 					"error": err.Error(),
 				})
-			}
-			if firstError == nil {
-				firstError = fmt.Errorf("invalid email address %s: %w", dest.Email, err)
 			}
 			continue
 		}
@@ -214,24 +227,22 @@ func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subjec
 			From:     from,
 			To:       []EmailAddress{dest},
 		}
-		result, err := c.SendEmail(ctx, message)
+
+		sendResult, err := c.SendEmail(ctx, message)
 		if err != nil {
-			if firstError == nil {
-				firstError = err
-			}
+			recipientResult.Error = err
+			result.Recipients = append(result.Recipients, recipientResult)
+			result.FailureCount++
+			result.FailedRecipients = append(result.FailedRecipients, dest.Email)
 			continue
 		}
-		successCount++
-		lastMessageID = result.MessageID
+
+		recipientResult.MessageID = sendResult.MessageID
+		result.Recipients = append(result.Recipients, recipientResult)
+		result.SuccessCount++
 	}
 
-	if successCount == 0 {
-		return nil, fmt.Errorf("%w: all emails failed, first error: %v", ErrSendEmail, firstError)
-	}
-
-	return &SendEmailResult{
-		MessageID: lastMessageID,
-	}, nil
+	return result, nil
 }
 
 func (c *SESClient) GetSendQuota(ctx context.Context) (*SendQuota, error) {

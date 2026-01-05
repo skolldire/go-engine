@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -57,7 +58,8 @@ func (m *loggingMiddleware) Do(ctx context.Context, req *cloud.Request) (*cloud.
 	if err != nil {
 		// Error case
 		logFields["success"] = false
-		if cloudErr, ok := err.(*cloud.Error); ok {
+		var cloudErr *cloud.Error
+		if errors.As(err, &cloudErr) {
 			logFields["error_code"] = cloudErr.Code
 			logFields["error_message"] = cloudErr.Message
 			logFields["retriable"] = cloudErr.Retriable

@@ -3,7 +3,9 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -96,8 +98,15 @@ func (a *ssmAdapter) getParameters(ctx context.Context, req *cloud.Request) (*cl
 		}
 	} else if req.QueryParams != nil {
 		if namesStr, ok := req.QueryParams["Names"]; ok {
-			// Assume comma-separated
-			names = []string{namesStr} // Simplified - should parse comma-separated
+			// Parse comma-separated names
+			parts := strings.Split(namesStr, ",")
+			names = make([]string, 0, len(parts))
+			for _, part := range parts {
+				trimmed := strings.TrimSpace(part)
+				if trimmed != "" {
+					names = append(names, trimmed)
+				}
+			}
 		}
 	}
 
@@ -378,10 +387,9 @@ func normalizeSSMError(err error, operation string) *cloud.Error {
 		return nil
 	}
 
-	// Check for ParameterNotFound
+	// Check for ParameterNotFound using errors.As
 	var notFoundErr *types.ParameterNotFound
-	if fmt.Sprintf("%T", err) == "*types.ParameterNotFound" || fmt.Sprintf("%T", err) == "types.ParameterNotFound" {
-		_ = notFoundErr // Suppress unused warning
+	if errors.As(err, &notFoundErr) {
 		return cloud.NewErrorWithCause(
 			cloud.ErrCodeNotFound,
 			fmt.Sprintf("Parameter not found: %v", err),
@@ -389,11 +397,7 @@ func normalizeSSMError(err error, operation string) *cloud.Error {
 		).WithMetadata("status_code", 404)
 	}
 
-	return cloud.NewErrorWithCause(
-		fmt.Sprintf("%s.error", operation),
-		err.Error(),
-		err,
-	).WithMetadata("status_code", 500)
+	return normalizeAWSError(err, operation)
 }
 
 func mapParameter(param *types.Parameter) map[string]interface{} {

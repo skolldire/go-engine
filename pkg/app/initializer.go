@@ -12,7 +12,8 @@ import (
 )
 
 func RegisterDefaultClients(log logger.Service) error {
-	reg := registry.GetRegistry(log)
+	reg := registry.GetRegistry()
+	reg.SetLogger(log)
 
 	if err := reg.Register("rest", func(ctx context.Context, cfg interface{}, log logger.Service) (interface{}, error) {
 		restConfig, ok := cfg.(rest.Config)

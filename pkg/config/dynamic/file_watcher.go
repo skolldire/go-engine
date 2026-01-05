@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -16,6 +17,7 @@ type FileWatcher struct {
 	logger   logger.Service
 	debounce time.Duration
 	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 func NewFileWatcher(paths []string, log logger.Service) (*FileWatcher, error) {
@@ -46,6 +48,8 @@ func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 	debounceTimer := time.NewTimer(fw.debounce)
 	debounceTimer.Stop()
 	var lastEvent time.Time
+	var pendingName string
+	var pendingOp fsnotify.Op
 
 	for {
 		select {
@@ -59,28 +63,11 @@ func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 			}
 
 			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
-				now := time.Now()
-				if now.Sub(lastEvent) < fw.debounce {
-					debounceTimer.Reset(fw.debounce)
-					continue
-				}
-
 				if fw.isConfigFile(event.Name) {
-					fw.logger.Debug(ctx, "configuration file modified", map[string]interface{}{
-						"file": event.Name,
-						"op":   event.Op.String(),
-					})
-
-					time.Sleep(100 * time.Millisecond)
-
-					if err := onChange(); err != nil {
-						fw.logger.Error(ctx, err, map[string]interface{}{
-							"event": "config_reload_error",
-							"file":  event.Name,
-						})
-					}
-
-					lastEvent = time.Now()
+					// Record pending event and reset timer
+					pendingName = event.Name
+					pendingOp = event.Op
+					debounceTimer.Reset(fw.debounce)
 				}
 			}
 		case err, ok := <-fw.watcher.Errors:
@@ -91,13 +78,36 @@ func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 				"event": "watcher_error",
 			})
 		case <-debounceTimer.C:
+			// Timer expired, process pending event
+			if pendingName != "" && fw.isConfigFile(pendingName) {
+				fw.logger.Debug(ctx, "configuration file modified", map[string]interface{}{
+					"file": pendingName,
+					"op":   pendingOp.String(),
+				})
+
+				time.Sleep(100 * time.Millisecond)
+
+				if err := onChange(); err != nil {
+					fw.logger.Error(ctx, err, map[string]interface{}{
+						"event": "config_reload_error",
+						"file":  pendingName,
+					})
+				}
+
+				lastEvent = time.Now()
+				pendingName = ""
+			}
 		}
 	}
 }
 
 func (fw *FileWatcher) Stop() error {
-	close(fw.stopCh)
-	return fw.watcher.Close()
+	var err error
+	fw.stopOnce.Do(func() {
+		close(fw.stopCh)
+		err = fw.watcher.Close()
+	})
+	return err
 }
 
 func (fw *FileWatcher) isConfigFile(filename string) bool {

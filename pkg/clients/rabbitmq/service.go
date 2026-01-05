@@ -126,11 +126,44 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 					}
 					return
 				}
-				if err := handler(delivery); err != nil {
-					if c.IsLoggingEnabled() {
-						c.GetLogger().Error(ctx, err, map[string]interface{}{
-							"queue": queue,
-						})
+
+				// Handle Ack/Nack manually when autoAck is false
+				if !autoAck {
+					err := handler(delivery)
+					if err != nil {
+						// Handler returned error, Nack the message
+						if nackErr := delivery.Nack(false, true); nackErr != nil {
+							if c.IsLoggingEnabled() {
+								c.GetLogger().Error(ctx, nackErr, map[string]interface{}{
+									"queue":   queue,
+									"message": "failed to nack message",
+								})
+							}
+						}
+						if c.IsLoggingEnabled() {
+							c.GetLogger().Error(ctx, err, map[string]interface{}{
+								"queue": queue,
+							})
+						}
+					} else {
+						// Handler succeeded, Ack the message
+						if ackErr := delivery.Ack(false); ackErr != nil {
+							if c.IsLoggingEnabled() {
+								c.GetLogger().Error(ctx, ackErr, map[string]interface{}{
+									"queue":   queue,
+									"message": "failed to ack message",
+								})
+							}
+						}
+					}
+				} else {
+					// autoAck is true, RabbitMQ handles Ack automatically
+					if err := handler(delivery); err != nil {
+						if c.IsLoggingEnabled() {
+							c.GetLogger().Error(ctx, err, map[string]interface{}{
+								"queue": queue,
+							})
+						}
 					}
 				}
 			}

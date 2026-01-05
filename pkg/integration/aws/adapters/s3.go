@@ -228,7 +228,8 @@ func (a *s3Adapter) listObjects(ctx context.Context, req *cloud.Request) (*cloud
 	// Parse query params
 	if req.QueryParams != nil {
 		if maxKeys, ok := req.QueryParams["MaxKeys"]; ok {
-			if max, err := fmt.Sscanf(maxKeys, "%d", new(int)); err == nil {
+			var max int
+			if _, err := fmt.Sscanf(maxKeys, "%d", &max); err == nil {
 				input.MaxKeys = aws.Int32(int32(max))
 			}
 		}
@@ -305,8 +306,15 @@ func (a *s3Adapter) copyObject(ctx context.Context, req *cloud.Request) (*cloud.
 		Metadata: map[string]interface{}{
 			"s3.copy_source_version_id": aws.ToString(result.CopySourceVersionId),
 			"s3.version_id":              aws.ToString(result.VersionId),
-			"s3.etag":                    aws.ToString(result.CopyObjectResult.ETag),
 		},
+	}
+	
+	// Safely add ETag if CopyObjectResult is not nil
+	if result.CopyObjectResult != nil && result.CopyObjectResult.ETag != nil {
+		response.Metadata["s3.etag"] = aws.ToString(result.CopyObjectResult.ETag)
+	}
+	
+	return response, nil
 	}, nil
 }
 

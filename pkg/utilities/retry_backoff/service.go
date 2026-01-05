@@ -75,7 +75,10 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 	}
 
-	return r.logger.WrapError(err, "error executing operation after all retries")
+	if r.logger != nil {
+		return r.logger.WrapError(err, "error executing operation after all retries")
+	}
+	return err
 }
 
 func (r *Retryer) calculateWaitTime(attempt int) time.Duration {

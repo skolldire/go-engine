@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
@@ -27,6 +28,7 @@ type BaseClient struct {
 	resilience  *resilience.Service
 	timeout     time.Duration
 	serviceName string
+	mu          sync.RWMutex // Protects logging and serviceName fields
 }
 
 func NewBaseClient(config BaseConfig, log logger.Service) *BaseClient {
@@ -69,15 +71,19 @@ func (bc *BaseClient) Execute(ctx context.Context, operationName string, operati
 }
 
 func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName string, operation Operation, logFields map[string]interface{}) (interface{}, error) {
-	if bc.logging {
+	bc.mu.RLock()
+	logging := bc.logging
+	bc.mu.RUnlock()
+	
+	if logging {
 		bc.logger.Debug(ctx, "starting operation with resilience: "+operationName, logFields)
 	}
 
 	result, err := bc.resilience.Execute(ctx, operation)
 
-	if err != nil && bc.logging {
+	if err != nil && logging {
 		bc.logger.Error(ctx, err, logFields)
-	} else if bc.logging {
+	} else if logging {
 		bc.logger.Debug(ctx, "operation completed with resilience: "+operationName, logFields)
 	}
 
@@ -85,15 +91,19 @@ func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName s
 }
 
 func (bc *BaseClient) executeDirectly(ctx context.Context, operationName string, operation Operation, logFields map[string]interface{}) (interface{}, error) {
-	if bc.logging {
+	bc.mu.RLock()
+	logging := bc.logging
+	bc.mu.RUnlock()
+	
+	if logging {
 		bc.logger.Debug(ctx, "starting operation: "+operationName, logFields)
 	}
 
 	result, err := operation()
 
-	if err != nil && bc.logging {
+	if err != nil && logging {
 		bc.logger.Error(ctx, err, logFields)
-	} else if bc.logging {
+	} else if logging {
 		bc.logger.Debug(ctx, "operation completed: "+operationName, logFields)
 	}
 
@@ -108,10 +118,14 @@ func (bc *BaseClient) ensureContextWithTimeout(ctx context.Context) (context.Con
 }
 
 func (bc *BaseClient) SetLogging(enable bool) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
 	bc.logging = enable
 }
 
 func (bc *BaseClient) IsLoggingEnabled() bool {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
 	return bc.logging
 }
 
@@ -120,6 +134,8 @@ func (bc *BaseClient) GetLogger() logger.Service {
 }
 
 func (bc *BaseClient) getServiceName() string {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
 	if bc.serviceName != "" {
 		return bc.serviceName
 	}
@@ -127,5 +143,7 @@ func (bc *BaseClient) getServiceName() string {
 }
 
 func (bc *BaseClient) SetServiceName(name string) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
 	bc.serviceName = name
 }

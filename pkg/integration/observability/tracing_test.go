@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"go.opentelemetry.io/otel/attribute"
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -26,7 +27,20 @@ func TestTracingMiddleware_Success(t *testing.T) {
 	}
 
 	mockCli.On("Do", ctx, req).Return(resp, nil)
-	mockTrac.On("Span", ctx, "sqs.send_message", mock.AnythingOfType("func(context.Context) error"), mock.Anything).Return(nil)
+	mockTrac.On("Span", ctx, "sqs.send_message", mock.AnythingOfType("func(context.Context) error"), 
+		mock.MatchedBy(func(attrs []attribute.KeyValue) bool {
+			// Convert to map for easier checking
+			attrMap := make(map[string]string)
+			for _, attr := range attrs {
+				attrMap[string(attr.Key)] = attr.Value.AsString()
+			}
+			// Check for expected attributes
+			return attrMap["aws.service"] == "sqs" &&
+				attrMap["aws.operation"] == "send_message" &&
+				attrMap["aws.path"] == "my-queue" &&
+				attrMap["http.status_code"] == "200" &&
+				attrMap["aws.request_id"] == "req-123"
+		})).Return(nil)
 
 	middleware := Tracing(mockTrac)
 	client := middleware(mockCli)

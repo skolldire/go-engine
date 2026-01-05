@@ -17,8 +17,9 @@ func TestNewFileWatcher(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	
 	tempFile := filepath.Join(tempDir, "test.yaml")
-	_, err = os.Create(tempFile)
+	f, err := os.Create(tempFile)
 	assert.NoError(t, err)
+	f.Close()
 	
 	watcher, err := NewFileWatcher([]string{tempFile}, nil)
 	assert.NoError(t, err)
@@ -38,8 +39,9 @@ func TestFileWatcher_Stop(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	
 	tempFile := filepath.Join(tempDir, "test.yaml")
-	_, err = os.Create(tempFile)
+	f, err := os.Create(tempFile)
 	assert.NoError(t, err)
+	f.Close()
 	
 	watcher, err := NewFileWatcher([]string{tempFile}, nil)
 	assert.NoError(t, err)
@@ -69,8 +71,9 @@ func TestFileWatcher_IsConfigFile(t *testing.T) {
 			defer os.RemoveAll(tempDir)
 			
 			tempFile := filepath.Join(tempDir, tt.filename)
-			_, err = os.Create(tempFile)
+			f, err := os.Create(tempFile)
 			assert.NoError(t, err)
+			f.Close()
 			
 			watcher, err := NewFileWatcher([]string{tempFile}, nil)
 			if err != nil {
@@ -90,8 +93,9 @@ func TestFileWatcher_Watch_ContextCancelled(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	
 	tempFile := filepath.Join(tempDir, "test.yaml")
-	_, err = os.Create(tempFile)
+	f, err := os.Create(tempFile)
 	assert.NoError(t, err)
+	f.Close()
 	
 	watcher, err := NewFileWatcher([]string{tempFile}, nil)
 	assert.NoError(t, err)

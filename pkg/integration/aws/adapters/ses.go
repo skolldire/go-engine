@@ -48,6 +48,15 @@ func (a *sesAdapter) Do(ctx context.Context, req *cloud.Request) (*cloud.Respons
 }
 
 func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
+	// Apply timeout if configured and not already set in context
+	if a.timeout > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, a.timeout)
+			defer cancel()
+		}
+	}
+	
 	// Parse body as JSON email message
 	var emailMsg map[string]interface{}
 	if err := json.Unmarshal(req.Body, &emailMsg); err != nil {
@@ -69,34 +78,34 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 		fromAddr = fmt.Sprintf("%s <%s>", fromName, fromEmail)
 	}
 
-	// Extract destination
+	// Extract destination - only append non-empty emails
 	destination := &types.Destination{}
 	if to, ok := emailMsg["to"].([]interface{}); ok {
-		destination.ToAddresses = make([]string, len(to))
-		for i, addr := range to {
+		destination.ToAddresses = make([]string, 0)
+		for _, addr := range to {
 			if addrMap, ok := addr.(map[string]interface{}); ok {
-				if email, ok := addrMap["email"].(string); ok {
-					destination.ToAddresses[i] = email
+				if email, ok := addrMap["email"].(string); ok && email != "" {
+					destination.ToAddresses = append(destination.ToAddresses, email)
 				}
 			}
 		}
 	}
 	if cc, ok := emailMsg["cc"].([]interface{}); ok {
-		destination.CcAddresses = make([]string, len(cc))
-		for i, addr := range cc {
+		destination.CcAddresses = make([]string, 0)
+		for _, addr := range cc {
 			if addrMap, ok := addr.(map[string]interface{}); ok {
-				if email, ok := addrMap["email"].(string); ok {
-					destination.CcAddresses[i] = email
+				if email, ok := addrMap["email"].(string); ok && email != "" {
+					destination.CcAddresses = append(destination.CcAddresses, email)
 				}
 			}
 		}
 	}
 	if bcc, ok := emailMsg["bcc"].([]interface{}); ok {
-		destination.BccAddresses = make([]string, len(bcc))
-		for i, addr := range bcc {
+		destination.BccAddresses = make([]string, 0)
+		for _, addr := range bcc {
 			if addrMap, ok := addr.(map[string]interface{}); ok {
-				if email, ok := addrMap["email"].(string); ok {
-					destination.BccAddresses[i] = email
+				if email, ok := addrMap["email"].(string); ok && email != "" {
+					destination.BccAddresses = append(destination.BccAddresses, email)
 				}
 			}
 		}
@@ -129,14 +138,14 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 		}
 	}
 
-	// Extract reply-to addresses
+	// Extract reply-to addresses - only append non-empty emails
 	var replyTo []string
 	if replyToAddrs, ok := emailMsg["reply_to"].([]interface{}); ok {
-		replyTo = make([]string, len(replyToAddrs))
-		for i, addr := range replyToAddrs {
+		replyTo = make([]string, 0)
+		for _, addr := range replyToAddrs {
 			if addrMap, ok := addr.(map[string]interface{}); ok {
-				if email, ok := addrMap["email"].(string); ok {
-					replyTo[i] = email
+				if email, ok := addrMap["email"].(string); ok && email != "" {
+					replyTo = append(replyTo, email)
 				}
 			}
 		}
@@ -303,7 +312,10 @@ func (a *sesAdapter) listVerifiedEmailAddresses(ctx context.Context, req *cloud.
 	}, nil
 }
 
+// normalizeSESError converts AWS SES errors to normalized cloud.Error
+// Uses the generic normalizeAWSError function
 func normalizeSESError(err error, operation string) *cloud.Error {
+	return normalizeAWSError(err, operation)
 	if err == nil {
 		return nil
 	}

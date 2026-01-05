@@ -55,6 +55,19 @@ type SendEmailResult struct {
 	MessageID string
 }
 
+type RecipientResult struct {
+	EmailAddress string
+	MessageID    string
+	Error        error
+}
+
+type BulkSendResult struct {
+	Recipients      []RecipientResult
+	SuccessCount    int
+	FailureCount    int
+	FailedRecipients []string
+}
+
 type Service interface {
 	// SendEmail sends a single email with HTML and/or text content.
 	// Email addresses are validated before sending.
@@ -64,8 +77,8 @@ type Service interface {
 	SendRawEmail(ctx context.Context, rawMessage []byte, destinations []string) (*SendEmailResult, error)
 
 	// SendBulkEmail sends emails to multiple recipients.
-	// Continues sending even if some fail, returns error only if all fail.
-	SendBulkEmail(ctx context.Context, from EmailAddress, subject string, htmlBody, textBody string, destinations []EmailAddress) (*SendEmailResult, error)
+	// Returns detailed results for each recipient including success/failure status.
+	SendBulkEmail(ctx context.Context, from EmailAddress, subject string, htmlBody, textBody string, destinations []EmailAddress) (*BulkSendResult, error)
 
 	// GetSendQuota retrieves the sending quota and rate limits.
 	GetSendQuota(ctx context.Context) (*SendQuota, error)

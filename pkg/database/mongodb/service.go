@@ -65,10 +65,12 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 	}
 
 	if c.IsLoggingEnabled() {
+		// Redact credentials from URI before logging
+		redactedURI := redactMongoURI(cfg.URI)
 		log.Debug(ctx, "MongoDB connection established successfully",
 			map[string]interface{}{
 				"database": cfg.Database,
-				"uri":      cfg.URI,
+				"uri":      redactedURI,
 			})
 	}
 

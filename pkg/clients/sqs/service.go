@@ -128,6 +128,9 @@ func (c *Cliente) SendMsj(ctx context.Context, queueURL string, mensaje string,
 	if err != nil {
 		return "", c.logger.WrapError(err, ErrEnviarMensaje.Error())
 	}
+	if response == nil || response.MessageId == nil {
+		return "", c.logger.WrapError(ErrEnviarMensaje, "SQS response or MessageId is nil")
+	}
 	return *response.MessageId, nil
 }
 
@@ -223,6 +226,9 @@ func (c *Cliente) CreateQueue(ctx context.Context, nombre string, atributos map[
 	if err != nil {
 		return "", c.logger.WrapError(err, ErrCrearCola.Error())
 	}
+	if response == nil || response.QueueUrl == nil {
+		return "", c.logger.WrapError(ErrCrearCola, "SQS response or QueueUrl is nil")
+	}
 	return *response.QueueUrl, nil
 }
 
@@ -286,6 +292,9 @@ func (c *Cliente) GetURLQueue(ctx context.Context, nombre string) (string, error
 	response, err := client.SafeTypeAssert[*sqs.GetQueueUrlOutput](result)
 	if err != nil {
 		return "", c.logger.WrapError(err, ErrObtenerURLCola.Error())
+	}
+	if response == nil || response.QueueUrl == nil {
+		return "", c.logger.WrapError(ErrObtenerURLCola, "SQS response or QueueUrl is nil")
 	}
 	return *response.QueueUrl, nil
 }

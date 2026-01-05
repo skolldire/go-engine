@@ -198,13 +198,41 @@ func validateSQSConfig(single *sqs.Config, multiple []map[string]sqs.Config) []e
 func validateSNSConfig(single *sns.Config, multiple []map[string]sns.Config) []error {
 	var errors []error
 
+	// Validate single SNS client if provided
+	if single != nil {
+		if single.Topic == "" {
+			errors = append(errors, &ValidationError{
+				Field:   "sns.topic",
+				Message: "SNS topic is required",
+			})
+		}
+		if single.Region == "" {
+			errors = append(errors, &ValidationError{
+				Field:   "sns.region",
+				Message: "SNS region is required",
+			})
+		}
+	}
+
 	// Validate multiple SNS clients
 	for i, clientMap := range multiple {
-		for name := range clientMap {
+		for name, cfg := range clientMap {
 			if name == "" {
 				errors = append(errors, &ValidationError{
 					Field:   fmt.Sprintf("sns_clients[%d].name", i),
 					Message: "SNS client name cannot be empty",
+				})
+			}
+			if cfg.Topic == "" {
+				errors = append(errors, &ValidationError{
+					Field:   fmt.Sprintf("sns_clients[%d].%s.topic", i, name),
+					Message: "SNS topic is required",
+				})
+			}
+			if cfg.Region == "" {
+				errors = append(errors, &ValidationError{
+					Field:   fmt.Sprintf("sns_clients[%d].%s.region", i, name),
+					Message: "SNS region is required",
 				})
 			}
 		}

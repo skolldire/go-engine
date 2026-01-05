@@ -23,10 +23,3 @@ func DefaultDuration(d, defaultValue time.Duration) time.Duration {
 	}
 	return d
 }
-
-func DefaultInt(value, defaultValue int) int {
-	if value == 0 {
-		return defaultValue
-	}
-	return value
-}

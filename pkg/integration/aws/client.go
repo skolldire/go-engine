@@ -17,14 +17,6 @@ type Client interface {
 	cloud.Client
 }
 
-// awsClient implements cloud.Client
-type awsClient struct {
-	config   aws.Config
-	timeout  time.Duration
-	retries  RetryPolicy
-	base     cloud.Client // Base client (before middleware)
-}
-
 // New creates a new AWS client with conservative defaults
 // This is the primary way applications initialize the client
 func New(cfg aws.Config) Client {
@@ -71,13 +63,6 @@ func NewWithOptions(cfg aws.Config, opts Options) Client {
 	}
 
 	return client
-}
-
-// Do implements cloud.Client interface
-func (c *awsClient) Do(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
-	// This should not be called directly - middleware chain handles it
-	// But we need to implement the interface
-	return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, "awsClient.Do should not be called directly")
 }
 
 // WithRetry enables retries with sensible defaults

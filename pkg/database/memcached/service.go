@@ -84,7 +84,11 @@ func (c *MemcachedClient) Get(ctx context.Context, key string) ([]byte, error) {
 		return nil, err
 	}
 
-	return result.([]byte), nil
+	value, err := client.SafeTypeAssert[[]byte](result)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected response type from memcached Get: %w", err)
+	}
+	return value, nil
 }
 
 func (c *MemcachedClient) Set(ctx context.Context, key string, value []byte, expiration time.Duration) error {

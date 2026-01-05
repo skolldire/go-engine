@@ -1,6 +1,8 @@
 package inbound
 
 import (
+	"encoding/json"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 )
@@ -51,20 +53,14 @@ func NormalizeSQSEvent(event *events.SQSEvent) ([]*cloud.Request, error) {
 	return requests, nil
 }
 
-// serializeAttrs converts map to JSON string (simple implementation)
+// serializeAttrs converts map to JSON string
 func serializeAttrs(attrs map[string]string) string {
-	// Simple serialization - could use json.Marshal for more complex cases
-	result := "{"
-	first := true
-	for k, v := range attrs {
-		if !first {
-			result += ","
-		}
-		result += `"` + k + `":"` + v + `"`
-		first = false
+	jsonBytes, err := json.Marshal(attrs)
+	if err != nil {
+		// Fallback to empty JSON object if marshaling fails
+		return "{}"
 	}
-	result += "}"
-	return result
+	return string(jsonBytes)
 }
 
 

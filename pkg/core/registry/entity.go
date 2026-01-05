@@ -21,14 +21,19 @@ var (
 	once           sync.Once
 )
 
-func GetRegistry(log logger.Service) *Registry {
+func GetRegistry() *Registry {
 	once.Do(func() {
 		globalRegistry = &Registry{
 			factories: make(map[string]ClientFactory),
-			logger:    log,
 		}
 	})
 	return globalRegistry
+}
+
+func (r *Registry) SetLogger(log logger.Service) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.logger = log
 }
 
 func (r *Registry) Register(clientType string, factory ClientFactory) error {

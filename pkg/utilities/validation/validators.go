@@ -44,9 +44,18 @@ func SetGlobalValidator(v *validator.Validate) {
 
 func GetGlobalValidator() *validator.Validate {
 	mu.RLock()
-	defer mu.RUnlock()
+	if globalValidator != nil {
+		mu.RUnlock()
+		return globalValidator
+	}
+	mu.RUnlock()
+	
+	// Double-checked locking
+	mu.Lock()
+	defer mu.Unlock()
 	if globalValidator != nil {
 		return globalValidator
 	}
-	return NewValidator()
+	globalValidator = NewValidator()
+	return globalValidator
 }

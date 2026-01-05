@@ -155,7 +155,10 @@ func (a *sqsAdapter) receiveMessages(ctx context.Context, req *cloud.Request) (*
 		}
 	}
 
-	bodyBytes, _ := json.Marshal(messages)
+	bodyBytes, err := json.Marshal(messages)
+	if err != nil {
+		return nil, normalizeSQSError(err, "sqs.receive_message")
+	}
 
 	return &cloud.Response{
 		StatusCode: 200,
@@ -274,7 +277,10 @@ func (a *sqsAdapter) listQueues(ctx context.Context, req *cloud.Request) (*cloud
 		queueURLs[i] = url
 	}
 
-	bodyBytes, _ := json.Marshal(queueURLs)
+	bodyBytes, err := json.Marshal(queueURLs)
+	if err != nil {
+		return nil, normalizeSQSError(err, "sqs.list_queues")
+	}
 
 	return &cloud.Response{
 		StatusCode: 200,

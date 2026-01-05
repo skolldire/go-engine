@@ -108,40 +108,12 @@ func TestRestClient_WithLogging(t *testing.T) {
 	assert.True(t, restClient.IsLoggingEnabled())
 }
 
-func TestValidateResponse_Success(t *testing.T) {
-	// resty.Response no se puede crear directamente sin un request real
-	// Por ahora, solo verificamos que la función existe y maneja nil correctamente
-	err := validateResponse(nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nil")
-}
-
-func TestValidateResponse_SuccessRange(t *testing.T) {
-	// Este test requiere un servidor HTTP real o mocks más complejos
-	// Por ahora, verificamos que la función existe y funciona con nil
-	err := validateResponse(nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nil")
-}
-
-func TestValidateResponse_Error(t *testing.T) {
-	// Este test requiere un servidor HTTP real o mocks más complejos
-	// Por ahora, verificamos que la función existe
-	err := validateResponse(nil)
-	assert.Error(t, err)
-}
-
 func TestValidateResponse_Nil(t *testing.T) {
+	// Test that validateResponse handles nil response correctly
+	// TODO: Add tests with actual HTTP responses when mocks are available
 	err := validateResponse(nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
-}
-
-func TestValidateResponse_LongBody(t *testing.T) {
-	// Este test requiere un servidor HTTP real o mocks más complejos
-	// Por ahora, verificamos que la función existe
-	err := validateResponse(nil)
-	assert.Error(t, err)
 }
 
 func TestRestClient_Get(t *testing.T) {

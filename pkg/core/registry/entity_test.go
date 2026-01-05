@@ -37,8 +37,10 @@ func TestGetRegistry(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry1 := GetRegistry(log)
-	registry2 := GetRegistry(log)
+	registry1 := GetRegistry()
+	registry1.SetLogger(log)
+	registry2 := GetRegistry()
+	registry2.SetLogger(log)
 
 	// Should return the same instance (singleton)
 	assert.Equal(t, registry1, registry2)
@@ -49,7 +51,8 @@ func TestRegistry_Register(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	clientName := "test-client-register"
 	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
@@ -65,7 +68,8 @@ func TestRegistry_Register_Duplicate(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
 		return "test-client", nil
@@ -85,7 +89,8 @@ func TestRegistry_Create(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
 		return "created-client", nil
@@ -103,7 +108,8 @@ func TestRegistry_Create(t *testing.T) {
 
 func TestRegistry_Create_NotRegistered(t *testing.T) {
 	log := &mockLogger{}
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	ctx := context.Background()
 	_, err := registry.Create(ctx, "nonexistent-client", nil)
@@ -115,7 +121,8 @@ func TestRegistry_Create_WithError(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	testErr := errors.New("factory error")
 	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
@@ -136,7 +143,8 @@ func TestRegistry_IsRegistered(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	clientName := "test-client-is-registered"
 	assert.False(t, registry.IsRegistered(clientName))
@@ -154,7 +162,8 @@ func TestRegistry_ListRegistered(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
 		return "client", nil
@@ -176,7 +185,8 @@ func TestRegistry_Unregister(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	clientName := "test-client-unregister"
 	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
@@ -194,7 +204,8 @@ func TestRegistry_Unregister(t *testing.T) {
 
 func TestRegistry_Unregister_NotRegistered(t *testing.T) {
 	log := &mockLogger{}
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	err := registry.Unregister("nonexistent-client")
 	assert.Error(t, err)
@@ -205,7 +216,8 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
 		return "client", nil
@@ -233,7 +245,8 @@ func TestRegistry_Create_WithConfig(t *testing.T) {
 	log := &mockLogger{}
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	registry := GetRegistry(log)
+	registry := GetRegistry()
+	registry.SetLogger(log)
 
 	clientName := "test-client-config"
 	config := map[string]string{"key": "value"}

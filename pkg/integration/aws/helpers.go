@@ -40,9 +40,9 @@ func SQSSendMessageBytes(ctx context.Context, client Client, queueURL string, bo
 	return resp.Headers["sqs.message_id"], nil
 }
 
-// QSReceiveMessage receives messages from SQS queue
+// SQSReceiveMessage receives messages from SQS queue
 // AWS SDK equivalent: ReceiveMessage
-func QSReceiveMessage(ctx context.Context, client Client, queueURL string, maxMessages int32, waitTimeSeconds int32) (*cloud.Response, error) {
+func SQSReceiveMessage(ctx context.Context, client Client, queueURL string, maxMessages int32, waitTimeSeconds int32) (*cloud.Response, error) {
 	req := &cloud.Request{
 		Operation: "sqs.receive_message",
 		Path:      queueURL,

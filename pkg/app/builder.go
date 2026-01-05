@@ -46,16 +46,23 @@ func (b *AppBuilder) WithConfigs() *AppBuilder {
 }
 
 func (b *AppBuilder) WithDynamicConfig() *AppBuilder {
-	tracer := logrus.New()
-	tracer.SetOutput(os.Stdout)
-	tracer.SetFormatter(&ecslogrus.Formatter{})
-	tracer.Level = logrus.DebugLevel
+	cfgLogger := logrus.New()
+	cfgLogger.SetOutput(os.Stdout)
+	cfgLogger.SetFormatter(&ecslogrus.Formatter{})
+	// Use InfoLevel as default, can be overridden by config
+	cfgLogger.Level = logrus.InfoLevel
 
-	v := viper.NewService(tracer)
+	v := viper.NewService(cfgLogger)
+
+	// Derive log level from environment or use default
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
 
 	tempLog := logger.NewService(logger.Config{
-		Level: "debug",
-	}, tracer)
+		Level: logLevel,
+	}, cfgLogger)
 
 	dynamicConfig, err := v.ApplyDynamic(tempLog)
 	if err != nil {
@@ -70,7 +77,7 @@ func (b *AppBuilder) WithDynamicConfig() *AppBuilder {
 	}
 	b.engine.Conf = config
 
-	log := setLogLevel(config.Log, tracer)
+	log := setLogLevel(config.Log, cfgLogger)
 	b.engine.Log = log
 
 	ctx := b.engine.ctx

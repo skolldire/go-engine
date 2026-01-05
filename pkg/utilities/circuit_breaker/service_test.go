@@ -6,23 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/sony/gobreaker"
 	"github.com/stretchr/testify/assert"
 )
-
-type mockLogger struct{}
-
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {}
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{})  {}
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{})  {}
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{})  {}
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error { return nil }
 
 func TestNewCircuitBreaker(t *testing.T) {
 	cb := NewCircuitBreaker(Dependencies{
@@ -108,7 +94,7 @@ func TestCircuitBreaker_StateAsString(t *testing.T) {
 	
 	stateStr := cb.StateAsString()
 	assert.NotEmpty(t, stateStr)
-	assert.Equal(t, "cerrado", stateStr) // Initially closed
+	assert.Equal(t, "closed", stateStr) // Initially closed
 }
 
 func TestStateToString(t *testing.T) {
@@ -117,10 +103,10 @@ func TestStateToString(t *testing.T) {
 		state    gobreaker.State
 		expected string
 	}{
-		{"closed", gobreaker.StateClosed, "cerrado"},
-		{"half-open", gobreaker.StateHalfOpen, "semi-abierto"},
-		{"open", gobreaker.StateOpen, "abierto"},
-		{"unknown", gobreaker.State(999), "desconocido"},
+		{"closed", gobreaker.StateClosed, "closed"},
+		{"half-open", gobreaker.StateHalfOpen, "half-open"},
+		{"open", gobreaker.StateOpen, "open"},
+		{"unknown", gobreaker.State(999), "unknown"},
 	}
 	
 	for _, tt := range tests {

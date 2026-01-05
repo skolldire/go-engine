@@ -105,6 +105,7 @@ package main
 
 import (
     "context"
+    "encoding/json"
     "fmt"
     "net/http"
     "os"
@@ -190,9 +191,16 @@ func featureFlagsHandler(engine *app.Engine) http.HandlerFunc {
             return
         }
 
+        payload := map[string]interface{}{
+            "flags": flags.GetAll(),
+        }
+        
         w.Header().Set("Content-Type", "application/json")
         w.WriteHeader(http.StatusOK)
-        fmt.Fprintf(w, `{"flags":%v}`, flags.GetAll())
+        if err := json.NewEncoder(w).Encode(payload); err != nil {
+            http.Error(w, "failed to encode response", http.StatusInternalServerError)
+            return
+        }
     }
 }
 ```

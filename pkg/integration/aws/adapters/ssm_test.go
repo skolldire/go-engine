@@ -130,20 +130,6 @@ func TestSSMAdapter_DescribeParameters(t *testing.T) {
 	assert.Nil(t, resp)
 }
 
-func TestMapParameter(t *testing.T) {
-	// This is a helper function, test it indirectly through adapter operations
-	cfg := aws.Config{Region: "us-east-1"}
-	adapter := newSSMAdapter(cfg, 0, RetryPolicy{})
-	assert.NotNil(t, adapter)
-}
-
-func TestMapParameterHistory(t *testing.T) {
-	// This is a helper function, test it indirectly through adapter operations
-	cfg := aws.Config{Region: "us-east-1"}
-	adapter := newSSMAdapter(cfg, 0, RetryPolicy{})
-	assert.NotNil(t, adapter)
-}
-
 func TestNormalizeSSMError(t *testing.T) {
 	tests := []struct {
 		name      string

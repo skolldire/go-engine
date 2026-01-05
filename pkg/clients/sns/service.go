@@ -127,6 +127,9 @@ func (c *Cliente) CreateTopic(ctx context.Context, nombre string, atributos map[
 	if err != nil {
 		return "", c.logger.WrapError(err, ErrCreateTopic.Error())
 	}
+	if response == nil || response.TopicArn == nil {
+		return "", c.logger.WrapError(ErrCreateTopic, "SNS response or TopicArn is nil")
+	}
 	return *response.TopicArn, nil
 }
 
