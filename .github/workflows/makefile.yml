@@ -3,7 +3,7 @@ name: Makefile CI
 on:
   push:
     branches: [ "main", "master" ]
-    # Solo se ejecuta en merge a main/master, no en PRs
+    # Only runs on merge to main/master, not on PRs
 
 jobs:
   build:

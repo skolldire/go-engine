@@ -3,7 +3,11 @@ name: Auto Versioning
 on:
   push:
     branches: [main, master]
-    # Solo se ejecuta cuando se hace merge a main/master
+    # Only runs when merging to main/master
+
+concurrency:
+  group: versioning-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -16,12 +20,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Necesario para obtener todos los tags
+          fetch-depth: 0  # Required to fetch all tags
 
       - name: Get latest tag
         id: get_tag
         run: |
-          # Obtener el último tag, o usar v0.0.0 si no hay tags
+          # Get the latest tag, or use v0.0.0 if no tags exist
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "Latest tag: $LATEST_TAG"
@@ -30,14 +34,33 @@ jobs:
         id: next_version
         run: |
           LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
-          # Remover el prefijo 'v' si existe
+          
+          # Remove 'v' prefix if present
           VERSION=${LATEST_TAG#v}
           
-          # Dividir en major.minor.patch
+          # Normalize version: ensure we have MAJOR.MINOR.PATCH format
+          # Handle cases like "1", "1.0", "1.0.0"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           
-          # Incrementar minor version y resetear patch a 0
-          # Esto deja el patch disponible para versiones de prueba/test
+          # Set defaults for missing segments
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          
+          # Validate that MAJOR is a number
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid major version: $MAJOR"
+            exit 1
+          fi
+          if ! [[ "$MINOR" =~ ^[0-9]+$ ]]; then
+            MINOR=0
+          fi
+          if ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            PATCH=0
+          fi
+          
+          # Increment minor version and reset patch to 0
+          # This leaves patch available for test/experimental versions
           MINOR=$((MINOR + 1))
           PATCH=0
           
@@ -45,18 +68,26 @@ jobs:
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
 
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Create and push tag
         run: |
+          set -e -o pipefail
           NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
           
-          # Verificar si el tag ya existe (por si acaso)
+          # Verify tag doesn't already exist
           if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
             echo "Tag $NEW_VERSION already exists, skipping..."
             exit 0
           fi
           
-          # Crear el tag
+          # Create annotated tag
           git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          echo "Created tag: $NEW_VERSION"
           
-          # Push del tag (esto activará el workflow de release)
+          # Push tag (this will trigger the release workflow)
           git push origin "$NEW_VERSION"
+          echo "Successfully pushed tag: $NEW_VERSION"
