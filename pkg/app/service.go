@@ -9,23 +9,23 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
+	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
+	"github.com/skolldire/go-engine/pkg/clients/s3"
+	"github.com/skolldire/go-engine/pkg/clients/ses"
 	"github.com/skolldire/go-engine/pkg/clients/sns"
 	"github.com/skolldire/go-engine/pkg/clients/sqs"
 	"github.com/skolldire/go-engine/pkg/clients/ssm"
-	"github.com/skolldire/go-engine/pkg/clients/ses"
-	"github.com/skolldire/go-engine/pkg/clients/s3"
-	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/config/dynamic"
 	"github.com/skolldire/go-engine/pkg/config/viper"
 	"github.com/skolldire/go-engine/pkg/database/dynamo"
 	"github.com/skolldire/go-engine/pkg/database/gormsql"
-	"github.com/skolldire/go-engine/pkg/database/redis"
 	"github.com/skolldire/go-engine/pkg/database/memcached"
 	"github.com/skolldire/go-engine/pkg/database/mongodb"
-	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
+	"github.com/skolldire/go-engine/pkg/database/redis"
 	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
 	"github.com/skolldire/go-engine/pkg/integration/observability"
+	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
@@ -81,19 +81,30 @@ func (c *App) Init() *App {
 	}
 
 	c.Engine.GrpcServer = initializer.createServerGRPC(c.Engine.Conf.GrpcServer)
-	
-	// Initialize service registry
+
+	// Initialize service registry - preserve existing CustomClients if registry already exists
+	var existingCustomClients map[string]interface{}
+	if c.Engine.Services != nil && c.Engine.Services.CustomClients != nil {
+		existingCustomClients = c.Engine.Services.CustomClients
+	}
+
 	c.Engine.Services = NewServiceRegistry()
+
+	// Restore existing custom clients if they were present
+	if existingCustomClients != nil {
+		c.Engine.Services.CustomClients = existingCustomClients
+	}
+
 	c.Engine.Services.RESTClients = initializer.createClientsHttp(c.Engine.Conf.Rest)
 	c.Engine.Services.GRPCClients = initializer.createClientGRPC(c.Engine.Conf.GrpcClient)
-	
+
 	// Legacy single clients (for backward compatibility)
 	c.Engine.SQSClient = initializer.createClientSQS(c.Engine.Conf.SQS)
 	c.Engine.SNSClient = initializer.createClientSNS(c.Engine.Conf.SNS)
 	c.Engine.DynamoDBClient = initializer.createClientDynamo(c.Engine.Conf.Dynamo)
 	c.Engine.RedisClient = initializer.createClientRedis(c.Engine.Conf.Redis)
 	c.Engine.SqlConnection = initializer.createClientSQL(c.Engine.Conf.DataBaseSql)
-	
+
 	// Multiple clients in registry
 	c.Engine.Services.SQSClients = initializer.createClientsSQS(c.Engine.Conf.SQSClients)
 	c.Engine.Services.SNSClients = initializer.createClientsSNS(c.Engine.Conf.SNSClients)
@@ -106,22 +117,22 @@ func (c *App) Init() *App {
 	c.Engine.Services.MemcachedClients = initializer.createClientsMemcached(c.Engine.Conf.MemcachedClients)
 	c.Engine.Services.MongoDBClients = initializer.createClientsMongoDB(c.Engine.Conf.MongoDBClients)
 	c.Engine.Services.RabbitMQClients = initializer.createClientsRabbitMQ(c.Engine.Conf.RabbitMQClients)
-	
+
 	c.Engine.Telemetry = initializer.createTelemetry(c.Engine.Conf.Telemetry)
-	
+
 	// Initialize CloudClient (optional - can be nil if not configured)
 	c.Engine.CloudClient = initializer.createCloudClient(c.Engine.Log, c.Engine.Telemetry)
-	
+
 	// Initialize config registry
 	c.Engine.Configs = NewConfigRegistry()
 	c.Engine.Configs.Repositories = c.Engine.Conf.Repositories
 	c.Engine.Configs.UseCases = c.Engine.Conf.Cases
 	c.Engine.Configs.Handlers = c.Engine.Conf.Endpoints
 	c.Engine.Configs.Batches = c.Engine.Conf.Processors
-	
+
 	c.Engine.Validator = validation.NewValidator()
 	validation.SetGlobalValidator(c.Engine.Validator)
-	
+
 	if c.Engine.Conf.FeatureFlags != nil {
 		c.Engine.FeatureFlags = dynamic.NewFeatureFlags(c.Engine.Conf.FeatureFlags, c.Engine.Log)
 	}
