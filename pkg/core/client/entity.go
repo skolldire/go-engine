@@ -29,10 +29,14 @@ type BaseClient struct {
 	serviceName string
 }
 
+// NewBaseClient creates a BaseClient using the provided configuration and logger and sets the service name to "base".
 func NewBaseClient(config BaseConfig, log logger.Service) *BaseClient {
 	return NewBaseClientWithName(config, log, "base")
 }
 
+// NewBaseClientWithName creates a BaseClient configured with the provided logger and service name.
+// The client's timeout is taken from config.Timeout; if zero, DefaultTimeout is applied.
+// If config.WithResilience is true, a resilience service is initialized using config.Resilience and the provided logger.
 func NewBaseClientWithName(config BaseConfig, log logger.Service, serviceName string) *BaseClient {
 	bc := &BaseClient{
 		logger:      log,

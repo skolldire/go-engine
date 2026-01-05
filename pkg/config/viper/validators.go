@@ -24,7 +24,8 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation error in field '%s': %s", e.Field, e.Message)
 }
 
-// ValidateConfig validates the entire configuration structure
+// ValidateConfig validates the entire Config structure.
+// It returns a slice of errors describing all validation failures; the slice is empty if no errors are found.
 func ValidateConfig(cfg Config) []error {
 	var errors []error
 
@@ -66,7 +67,7 @@ func ValidateConfig(cfg Config) []error {
 	return errors
 }
 
-// validateAWSConfig validates AWS configuration
+// validateAWSConfig checks the AwsConfig's Region and returns validation errors for a missing region or an unsupported region.
 func validateAWSConfig(cfg AwsConfig) []error {
 	var errors []error
 
@@ -85,7 +86,12 @@ func validateAWSConfig(cfg AwsConfig) []error {
 	return errors
 }
 
-// validateRESTClients validates REST client configurations
+// validateRESTClients validates REST client configurations and returns any validation errors found.
+// It checks each named client in the provided slice of maps for:
+// - non-empty client name (error field "rest[i].name"),
+// - presence of BaseURL and that it starts with "http://" or "https://" (error field "rest[i].<name>.base_url"),
+// - non-negative TimeOut (error field "rest[i].<name>.timeout").
+// Validation errors are returned as a slice of error (typically *ValidationError) with the Field set to the dotted path and Message describing the problem.
 func validateRESTClients(clients []map[string]rest.Config) []error {
 	var errors []error
 
@@ -154,7 +160,10 @@ func validateGRPCClients(clients []map[string]grpcClient.Config) []error {
 	return errors
 }
 
-// validateSQSConfig validates SQS configuration
+// validateSQSConfig validates SQS client configuration for a single client and for multiple named clients.
+// It checks that non-empty endpoints are valid URLs and that each named client has a non-empty name.
+// Validation failures are reported as ValidationError values with field paths such as "sqs.endpoint", "sqs_clients[i].name",
+// or "sqs_clients[i].<name>.endpoint".
 func validateSQSConfig(single *sqs.Config, multiple []map[string]sqs.Config) []error {
 	var errors []error
 
@@ -194,7 +203,8 @@ func validateSQSConfig(single *sqs.Config, multiple []map[string]sqs.Config) []e
 	return errors
 }
 
-// validateSNSConfig validates SNS configuration
+// validateSNSConfig validates SNS client configuration and returns any validation errors found.
+// It ensures each entry in `multiple` has a non-empty client name and reports errors with field paths like `sns_clients[i].name`.
 func validateSNSConfig(single *sns.Config, multiple []map[string]sns.Config) []error {
 	var errors []error
 
@@ -213,7 +223,11 @@ func validateSNSConfig(single *sns.Config, multiple []map[string]sns.Config) []e
 	return errors
 }
 
-// validateDatabaseConfigs validates database configurations
+// validateDatabaseConfigs validates database-related sections of cfg and aggregates any validation errors.
+// It checks DataBaseSql, Dynamo, and Redis configurations (when present) and validates each named entry in
+// cfg.SQLConnections; per-connection validation errors are returned with their field paths prefixed as
+// "sql_connections[i].<name>.<field>". If a connection name is empty, a ValidationError is appended with
+// field "sql_connections[i].name".
 func validateDatabaseConfigs(cfg Config) []error {
 	var errors []error
 
@@ -262,7 +276,12 @@ func validateDatabaseConfigs(cfg Config) []error {
 	return errors
 }
 
-// validateSQLConfig validates SQL database configuration
+// validateSQLConfig validates a gormsql.Config for required fields and value ranges.
+// It returns a slice of ValidationError describing missing or invalid settings such as:
+// - Type must be one of: postgres, mysql, sqlite, sqlserver.
+// - Host is required unless Type is "sqlite".
+// - Database name is required.
+// - Port must be between 0 and 65535.
 func validateSQLConfig(cfg gormsql.Config) []error {
 	var errors []error
 
@@ -302,7 +321,8 @@ func validateSQLConfig(cfg gormsql.Config) []error {
 	return errors
 }
 
-// validateDynamoConfig validates DynamoDB configuration
+// validateDynamoConfig validates DynamoDB settings and returns a slice of field-specific validation errors.
+// If Endpoint is non-empty, it must be a valid URL; otherwise an error is returned with Field set to "dynamo.endpoint".
 func validateDynamoConfig(cfg dynamo.Config) []error {
 	var errors []error
 
@@ -316,7 +336,8 @@ func validateDynamoConfig(cfg dynamo.Config) []error {
 	return errors
 }
 
-// validateRedisConfig validates Redis configuration
+// validateRedisConfig checks Redis configuration fields and returns validation errors for any invalid or missing values.
+// It ensures the host is present, the port is within 0–65535, and the DB index is not negative; each problem is reported as a ValidationError with a field path.
 func validateRedisConfig(cfg redis.Config) []error {
 	var errors []error
 
@@ -344,7 +365,8 @@ func validateRedisConfig(cfg redis.Config) []error {
 	return errors
 }
 
-// validateRouterConfig validates router configuration
+// validateRouterConfig validates router configuration and returns any validation errors.
+// Currently it performs no field validations and always returns an empty slice.
 func validateRouterConfig(cfg router.Config) []error {
 	var errors []error
 
@@ -354,7 +376,7 @@ func validateRouterConfig(cfg router.Config) []error {
 	return errors
 }
 
-// Helper functions
+// isValidAWSRegion reports whether region is one of the supported AWS region identifiers.
 
 func isValidAWSRegion(region string) bool {
 	validRegions := []string{
@@ -372,10 +394,14 @@ func isValidAWSRegion(region string) bool {
 	return false
 }
 
+// isValidURL reports whether url begins with "http://" or "https://".
 func isValidURL(url string) bool {
 	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
+// isValidSQLType reports whether the provided database type is one of the supported SQL types:
+// "postgres", "mysql", "sqlite", or "sqlserver".
+// The comparison is case-insensitive.
 func isValidSQLType(dbType string) bool {
 	validTypes := []string{"postgres", "mysql", "sqlite", "sqlserver"}
 	for _, t := range validTypes {
@@ -385,4 +411,3 @@ func isValidSQLType(dbType string) bool {
 	}
 	return false
 }
-

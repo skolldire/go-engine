@@ -13,6 +13,9 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
 )
 
+// NewClient creates an SSM Service configured with the provided AWS config, package Config, and logger.
+// If cfg.Region is set it will be used; cfg.Timeout defaults to DefaultTimeout when zero. Logging and resilience
+// settings are applied from cfg.
 func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	ssmClient := ssm.NewFromConfig(acf, func(o *ssm.Options) {
 		if cfg.Region != "" {
@@ -348,6 +351,9 @@ func (c *SSMClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }
 
+// mapParameter converts an AWS SSM `types.Parameter` into the package `Parameter` type.
+// It copies Name, Value, Type, ARN, and Version, and copies LastModifiedDate and DataType when present.
+// Returns a pointer to the populated `Parameter`.
 func mapParameter(param *types.Parameter) *Parameter {
 	p := &Parameter{
 		Name:  aws.ToString(param.Name),
@@ -368,6 +374,10 @@ func mapParameter(param *types.Parameter) *Parameter {
 	return p
 }
 
+// mapParameterHistory converts an AWS SSM ParameterHistory value into the package's ParameterHistory model.
+// 
+// The returned ParameterHistory copies Name, Type, Value, and Version, and, when present, populates
+// LastModifiedDate, LastModifiedUser, Description, and Labels from the source.
 func mapParameterHistory(hist *types.ParameterHistory) *ParameterHistory {
 	ph := &ParameterHistory{
 		Name:    aws.ToString(hist.Name),
@@ -394,4 +404,3 @@ func mapParameterHistory(hist *types.ParameterHistory) *ParameterHistory {
 
 	return ph
 }
-

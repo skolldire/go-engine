@@ -18,6 +18,16 @@ import (
 	"gorm.io/gorm/schema"
 )
 
+// NewClient creates and configures a GORM-based DBClient using the provided configuration and logger.
+// 
+// It initializes optional naming (TablePrefix) and GORM logging, opens a connection for the configured
+// database type (PostgresSQL, MySQL, SQLite, or SQLServer), configures connection pool parameters
+// (max idle/open connections and connection max lifetime), and optionally attaches a resilience service.
+// The function verifies the database connection with a ping before returning the client.
+//
+// Errors:
+// - returns ErrInvalidDBType if cfg.Type is not one of the supported database types.
+// - returns a wrapped ErrConnection when opening the database, obtaining the underlying sql.DB, or pinging the database fails.
 func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
 	var db *gorm.DB
 	var err error
@@ -362,6 +372,8 @@ func (l *gormLogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (
 		l.logger.Debug(ctx, "SQL executed", fields)
 }
 
+// createGormLogger creates a gormlogger.Interface that adapts the provided logger.Service and log level for GORM.
+// The returned adapter implements GORM's logging interface using the given logger and log level.
 func createGormLogger(log logger.Service, logLevel string) gormlogger.Interface {
 	return &gormLogAdapter{
 		logger:   log,

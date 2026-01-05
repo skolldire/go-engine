@@ -10,7 +10,8 @@ import "fmt"
 //	err := someOperation()
 //	if err != nil {
 //	    return WrapError(err, "failed to process data")
-//	}
+// WrapError wraps err with the provided message, preserving the original error for unwrapping.
+// If err is nil, WrapError returns nil.
 func WrapError(err error, msg string) error {
 	if err == nil {
 		return nil
@@ -26,7 +27,10 @@ func WrapError(err error, msg string) error {
 //	err := someOperation()
 //	if err != nil {
 //	    return WrapErrorf(err, "failed to process user %d", userID)
-//	}
+// WrapErrorf wraps the given error with a formatted context message.
+// If err is nil, WrapErrorf returns nil. Otherwise it formats the message
+// using format and args and returns a new error that combines the formatted
+// message with the original error while preserving the original error via wrapping.
 func WrapErrorf(err error, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
@@ -40,7 +44,7 @@ func WrapErrorf(err error, format string, args ...interface{}) error {
 //
 // Example:
 //
-//	return NewError("invalid input")
+// NewError creates an error with the provided message.
 func NewError(msg string) error {
 	return fmt.Errorf("%s", msg)
 }
@@ -50,10 +54,10 @@ func NewError(msg string) error {
 //
 // Example:
 //
-//	return NewErrorf("invalid user ID: %d", userID)
+// NewErrorf formats a message using the provided format and arguments and returns it as an error.
+// The resulting error's message is the formatted string.
 func NewErrorf(format string, args ...interface{}) error {
 	return fmt.Errorf(format, args...)
 }
-
 
 

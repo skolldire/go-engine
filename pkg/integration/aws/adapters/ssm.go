@@ -18,6 +18,9 @@ type ssmAdapter struct {
 	retries RetryPolicy
 }
 
+// newSSMAdapter creates an ssm-backed cloud.Client using the provided AWS configuration,
+// request timeout, and retry policy. The returned client performs SSM Parameter Store
+// operations configured with the given timeout and retry behavior.
 func newSSMAdapter(cfg aws.Config, timeout time.Duration, retries RetryPolicy) cloud.Client {
 	return &ssmAdapter{
 		client:  ssm.NewFromConfig(cfg),
@@ -373,6 +376,13 @@ func (a *ssmAdapter) describeParameters(ctx context.Context, req *cloud.Request)
 	}, nil
 }
 
+// normalizeSSMError converts an SSM client error into a cloud.Error with an appropriate
+// error code and HTTP status metadata.
+// 
+// For a nil error it returns nil. If the error represents a missing parameter it
+// returns a `cloud.ErrCodeNotFound` error with a 404 status. For all other errors it
+// returns a namespaced "<operation>.error" cloud error with a 500 status and the original
+// error as the cause.
 func normalizeSSMError(err error, operation string) *cloud.Error {
 	if err == nil {
 		return nil
@@ -396,6 +406,9 @@ func normalizeSSMError(err error, operation string) *cloud.Error {
 	).WithMetadata("status_code", 500)
 }
 
+// mapParameter converts an AWS SSM Parameter into a generic map representation.
+// The returned map always contains the keys: "name", "value", "type", "arn", and "version".
+// If present on the source parameter, "last_modified_date" and "data_type" are added.
 func mapParameter(param *types.Parameter) map[string]interface{} {
 	p := map[string]interface{}{
 		"name":  aws.ToString(param.Name),
@@ -416,6 +429,9 @@ func mapParameter(param *types.Parameter) map[string]interface{} {
 	return p
 }
 
+// mapParameterHistory converts an AWS SSM ParameterHistory value into a map[string]interface{}
+// containing keys "name", "type", "value", and "version". Optional fields "last_modified_date",
+// "last_modified_user", "description", and "labels" are included when present.
 func mapParameterHistory(hist *types.ParameterHistory) map[string]interface{} {
 	ph := map[string]interface{}{
 		"name":    aws.ToString(hist.Name),
@@ -442,4 +458,3 @@ func mapParameterHistory(hist *types.ParameterHistory) map[string]interface{} {
 
 	return ph
 }
-

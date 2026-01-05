@@ -16,7 +16,8 @@ type MetricsRecorder interface {
 	RecordThrottle(operation string)
 }
 
-// Metrics returns a middleware that records metrics
+// Metrics constructs a cloud.Middleware that instruments cloud.Client calls with the given MetricsRecorder.
+// The middleware records request duration, status and error codes, and emits retry and throttle events via the provided recorder.
 func Metrics(recorder MetricsRecorder) cloud.Middleware {
 	return func(next cloud.Client) cloud.Client {
 		return &metricsMiddleware{
@@ -63,7 +64,7 @@ type TelemetryMetricsRecorder struct {
 	telemetry telemetry.Telemetry
 }
 
-// NewTelemetryMetricsRecorder creates a new TelemetryMetricsRecorder
+// NewTelemetryMetricsRecorder returns a MetricsRecorder that emits request, retry, and throttle metrics using the provided telemetry.Telemetry.
 func NewTelemetryMetricsRecorder(tel telemetry.Telemetry) MetricsRecorder {
 	return &TelemetryMetricsRecorder{
 		telemetry: tel,
@@ -101,4 +102,3 @@ func (r *TelemetryMetricsRecorder) RecordThrottle(operation string) {
 		attribute.String("operation", operation),
 	)
 }
-

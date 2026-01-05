@@ -13,6 +13,12 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// NewCliente creates a gRPC client (Cliente) configured from cfg and the provided logger.
+// It establishes a connection to cfg.Target using cfg.TimeOut as the dial deadline, waits
+// for the connection to become ready, and returns the constructed Service. If
+// cfg.WithResilience is true, a resilience service is initialized on the client.
+// If cfg.EnableLogging is true, a debug message is emitted after successful connection.
+// On dialing or readiness failure the connection is closed and an error is returned.
 func NewCliente(cfg Config, log logger.Service) (Service, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.TimeOut)
 	defer cancel()
@@ -54,6 +60,10 @@ func NewCliente(cfg Config, log logger.Service) (Service, error) {
 	return c, nil
 }
 
+// waitForConnection waits for conn to reach the Ready connectivity state.
+// It returns nil when the connection becomes Ready.
+// If the connection transitions to Shutdown or TransientFailure, it returns an error wrapping ErrConnection that includes the observed state.
+// If the context is done or no state change occurs before timing out, it returns an error wrapping ErrTimeoutConnect that includes the last state or context error.
 func waitForConnection(ctx context.Context, conn *grpc.ClientConn) error {
 	for {
 		state := conn.GetState()

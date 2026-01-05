@@ -72,7 +72,8 @@ func (e *Error) WithMetadata(key string, value interface{}) *Error {
 	return e
 }
 
-// NewError creates a new Error
+// NewError creates a normalized AWS Error with the given code and message.
+// Retriable, Cause, StatusCode, and Metadata are left at their zero values.
 func NewError(code, message string) *Error {
 	return &Error{
 		Code:    code,
@@ -80,7 +81,8 @@ func NewError(code, message string) *Error {
 	}
 }
 
-// NewErrorWithCause creates a new Error with underlying cause
+// NewErrorWithCause creates an Error with the given code and message and sets the underlying cause.
+// The returned *Error has Code and Message set, Cause set to cause, and other fields (Retriable, StatusCode, Metadata) left at their zero values.
 func NewErrorWithCause(code, message string, cause error) *Error {
 	return &Error{
 		Code:    code,
@@ -88,6 +90,5 @@ func NewErrorWithCause(code, message string, cause error) *Error {
 		Cause:   cause,
 	}
 }
-
 
 

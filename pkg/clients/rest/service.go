@@ -10,6 +10,9 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
+// NewClient creates a REST Service configured from cfg and log.
+// It constructs a resty HTTP client, applies cfg.TimeOut (or DefaultTimeout when cfg.TimeOut == 0) and sets the timeout if greater than zero.
+// It builds a BaseConfig with logging and resilience settings taken from cfg, instantiates a restClient with the configured base URL and HTTP client, and returns it as a Service.
 func NewClient(cfg Config, log logger.Service) Service {
 	httpClient := resty.New()
 	timeout := cfg.TimeOut
@@ -128,6 +131,11 @@ func (c *restClient) WithLogging(enable bool) {
 	c.SetLogging(enable)
 }
 
+// validateResponse checks the HTTP response and returns an error for non-2xx statuses.
+// If resp is nil it returns the error "respuesta es nil". For 2xx status codes it
+// returns nil. For other statuses it returns an error formatted as
+// "HTTP <code>: <status> - <bodyPreview>", where <bodyPreview> is the response
+// body truncated to 200 characters (appending "..." when truncated).
 func validateResponse(resp *resty.Response) error {
 	if resp == nil {
 		return errors.New("respuesta es nil")

@@ -25,7 +25,8 @@ type RetryPolicy struct {
 	RetriableErrors []string
 }
 
-// NewBaseAdapter creates a new base adapter that routes requests to service adapters
+// NewBaseAdapter creates a cloud.Client that routes requests to service-specific adapters.
+// The returned adapter is configured with the provided AWS config, default timeout, and retry policy and delegates to adapters for: sqs, sns, lambda, s3, ses, and ssm.
 func NewBaseAdapter(cfg aws.Config, timeout time.Duration, retries RetryPolicy) cloud.Client {
 	adapter := &baseAdapter{
 		config:   cfg,
@@ -79,4 +80,3 @@ func (b *baseAdapter) Do(ctx context.Context, req *cloud.Request) (*cloud.Respon
 
 	return adapter.Do(ctx, req)
 }
-

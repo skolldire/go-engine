@@ -10,6 +10,12 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
+// NewClient creates a Memcached-backed Service configured by cfg and using log for diagnostics.
+// It validates that cfg.Servers is non-empty (returns ErrConnection if empty), applies default
+// timeout and max idle connection values when unspecified, sets the optional key prefix, and
+// verifies connectivity by pinging the server (returns ErrConnection wrapped with the ping error
+// on failure). On successful connection, a client with logging configured according to cfg is
+// returned.
 func NewClient(cfg Config, log logger.Service) (Service, error) {
 	if len(cfg.Servers) == 0 {
 		return nil, ErrConnection
@@ -251,4 +257,3 @@ func (c *MemcachedClient) removePrefix(key string) string {
 func (c *MemcachedClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }
-

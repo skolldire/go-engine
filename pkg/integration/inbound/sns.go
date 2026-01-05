@@ -5,7 +5,11 @@ import (
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 )
 
-// NormalizeSNSEvent converts SNS Lambda event to normalized Request(s)
+// NormalizeSNSEvent converts an AWS SNS Lambda event into a slice of normalized cloud.Request objects.
+// If the provided event is nil, it returns (nil, nil).
+// For each SNS record it produces a Request with Operation "sns.receive", Path set to the record's TopicArn,
+// Method "POST", headers populated from the SNS metadata (message_id, topic_arn, subject, type, timestamp),
+// and Body set to the raw bytes of the SNS Message when non-empty.
 func NormalizeSNSEvent(event *events.SNSEvent) ([]*cloud.Request, error) {
 	if event == nil {
 		return nil, nil
@@ -37,4 +41,3 @@ func NormalizeSNSEvent(event *events.SNSEvent) ([]*cloud.Request, error) {
 
 	return requests, nil
 }
-

@@ -10,6 +10,8 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
+// NewClient creates and returns a RabbitMQ client configured for the provided AMQP URL.
+// It opens a network connection and channel using cfg.Timeout (or DefaultTimeout when zero) and applies logging/resilience settings from cfg; if cfg.URL is empty or establishing the connection or channel fails, it returns ErrConnection wrapped with the underlying error.
 func NewClient(cfg Config, log logger.Service) (Service, error) {
 	if cfg.URL == "" {
 		return nil, fmt.Errorf("%w: URL is required", ErrConnection)

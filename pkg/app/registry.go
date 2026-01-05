@@ -46,7 +46,7 @@ type ServiceRegistry struct {
 	CustomClients map[string]interface{}
 }
 
-// NewServiceRegistry creates a new empty service registry
+// NewServiceRegistry creates a ServiceRegistry with all categorized client and connection maps initialized.
 func NewServiceRegistry() *ServiceRegistry {
 	return &ServiceRegistry{
 		RESTClients:      make(map[string]rest.Service),
@@ -74,7 +74,8 @@ type ConfigRegistry struct {
 	Batches      map[string]interface{}
 }
 
-// NewConfigRegistry creates a new empty config registry
+// NewConfigRegistry creates a ConfigRegistry with initialized maps for repositories, use cases, handlers, and batches.
+// All maps are created as empty maps so they can be populated immediately without nil-map checks.
 func NewConfigRegistry() *ConfigRegistry {
 	return &ConfigRegistry{
 		Repositories: make(map[string]interface{}),
@@ -83,6 +84,5 @@ func NewConfigRegistry() *ConfigRegistry {
 		Batches:      make(map[string]interface{}),
 	}
 }
-
 
 

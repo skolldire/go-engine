@@ -26,7 +26,7 @@ type awsClient struct {
 }
 
 // New creates a new AWS client with conservative defaults
-// This is the primary way applications initialize the client
+// New creates an AWS client configured with cfg and default options.
 func New(cfg aws.Config) Client {
 	return NewWithOptions(cfg, Options{})
 }
@@ -45,7 +45,10 @@ type RetryPolicy struct {
 	RetriableErrors []string // Which error codes to retry
 }
 
-// NewWithOptions creates a client with custom options
+// NewWithOptions creates a Client configured with the provided AWS config and Options.
+// It uses opts.Timeout (defaults to 30s if zero) and opts.RetryPolicy (defaults MaxAttempts to 3 if zero)
+// to construct the underlying adapter's retry and timeout settings, then applies opts.Middlewares in order
+// to produce the final cloud.Client.
 func NewWithOptions(cfg aws.Config, opts Options) Client {
 	timeout := opts.Timeout
 	if timeout == 0 {
@@ -80,7 +83,9 @@ func (c *awsClient) Do(ctx context.Context, req *cloud.Request) (*cloud.Response
 	return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, "awsClient.Do should not be called directly")
 }
 
-// WithRetry enables retries with sensible defaults
+// WithRetry returns Options that enable retry behavior using sensible defaults.
+// The returned Options enables retries, sets MaxAttempts to 3, and treats
+// throttling and service-unavailable error codes as retriable.
 func WithRetry() Options {
 	return Options{
 		RetryPolicy: RetryPolicy{
@@ -94,7 +99,9 @@ func WithRetry() Options {
 	}
 }
 
-// WithObservability adds logging, metrics, and tracing middleware
+// WithObservability returns Options containing observability middlewares.
+// WithObservability adds logging, metrics, and tracing middleware for the
+// provided collaborators; any nil collaborator is ignored.
 func WithObservability(logger logger.Service, metricsRecorder observability.MetricsRecorder, tracer telemetry.Tracer) Options {
 	middlewares := []cloud.Middleware{}
 	if logger != nil {
@@ -108,4 +115,3 @@ func WithObservability(logger logger.Service, metricsRecorder observability.Metr
 	}
 	return Options{Middlewares: middlewares}
 }
-

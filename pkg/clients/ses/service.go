@@ -13,6 +13,9 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
 )
 
+// NewClient creates and returns a configured SES service client.
+// It initializes an AWS SES client from the provided aws.Config, applies region and timeout settings from cfg,
+// and wraps the underlying client with base configuration for logging and resilience before returning it as a Service.
 func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	sesClient := ses.NewFromConfig(acf, func(o *ses.Options) {
 		if cfg.Region != "" {

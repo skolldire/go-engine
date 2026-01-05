@@ -11,7 +11,8 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-// Logging returns a middleware that logs all requests
+// Logging returns a cloud.Middleware that wraps a cloud.Client to log each request's metadata and outcome.
+// The middleware records a unique request ID, operation/service/verb, start time, duration, response status (and AWS request ID when present), and error details using the provided logger Service.
 func Logging(log logger.Service) cloud.Middleware {
 	return func(next cloud.Client) cloud.Client {
 		return &loggingMiddleware{
@@ -87,7 +88,10 @@ func (m *loggingMiddleware) Do(ctx context.Context, req *cloud.Request) (*cloud.
 	return resp, nil
 }
 
-// extractServiceVerb extracts service and verb from operation (e.g., "sqs.send" -> "sqs", "send")
+// extractServiceVerb returns the service and verb parsed from an operation string.
+// For example, `sqs.send` yields `sqs` as the service and `send` as the verb; if the
+// operation contains no dot, the entire operation is returned as the service and
+// the verb is an empty string.
 func extractServiceVerb(operation string) (service, verb string) {
 	parts := strings.Split(operation, ".")
 	if len(parts) >= 2 {
@@ -95,4 +99,3 @@ func extractServiceVerb(operation string) (service, verb string) {
 	}
 	return operation, ""
 }
-

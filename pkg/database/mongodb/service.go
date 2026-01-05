@@ -11,6 +11,12 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
+// NewClient constructs and returns a MongoDB client configured from cfg and using log for logging.
+// It validates cfg (requires a URI beginning with "mongodb://" or "mongodb+srv://" and a database name),
+// applies pooling and timeout settings (uses DefaultTimeout when cfg.Timeout is zero), connects to the server,
+// and pings the database to verify connectivity.
+// The created client implements Service and is preconfigured with base client settings (logging and resilience).
+// Returns the initialized MongoDB client, or an error when configuration validation, connection, or ping fails.
 func NewClient(cfg Config, log logger.Service) (Service, error) {
 	if cfg.URI == "" {
 		return nil, fmt.Errorf("%w: URI is required", ErrConnection)
@@ -100,4 +106,3 @@ func (c *MongoDBClient) Disconnect(ctx context.Context) error {
 func (c *MongoDBClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }
-

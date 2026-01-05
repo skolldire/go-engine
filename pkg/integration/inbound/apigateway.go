@@ -7,7 +7,9 @@ import (
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 )
 
-// NormalizeAPIGatewayEvent converts API Gateway event to normalized Request
+// NormalizeAPIGatewayEvent converts an AWS API Gateway proxy event into a normalized cloud.Request.
+// It maps Path, HTTP method, headers, and query parameters; decodes a base64-encoded body when present; and appends API Gateway context into headers (`apigateway.request_id`, `apigateway.stage`, `apigateway.resource_path`).
+// If event is nil, it returns (nil, nil). If base64 decoding of the body fails, it returns a non-nil error.
 func NormalizeAPIGatewayEvent(event *events.APIGatewayProxyRequest) (*cloud.Request, error) {
 	if event == nil {
 		return nil, nil
@@ -44,6 +46,5 @@ func NormalizeAPIGatewayEvent(event *events.APIGatewayProxyRequest) (*cloud.Requ
 
 	return req, nil
 }
-
 
 

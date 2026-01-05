@@ -21,6 +21,8 @@ var (
 	once           sync.Once
 )
 
+// GetRegistry returns the singleton Registry instance.
+// The provided logger is used when the registry is first initialized; subsequent calls return the same instance and ignore the logger parameter.
 func GetRegistry(log logger.Service) *Registry {
 	once.Do(func() {
 		globalRegistry = &Registry{

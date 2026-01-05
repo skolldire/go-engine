@@ -103,12 +103,21 @@ func NewValidationError(msg string, err error) *CommonApiError {
 	return NewCommonApiError(CodeValidationFailed, msg, err, http.StatusUnprocessableEntity)
 }
 
+// NewInternalError creates a CommonApiError representing an internal server error with the standard internal error code and HTTP 500 status.
 func NewInternalError(msg string, err error) *CommonApiError {
 	return NewCommonApiError(CodeInternalError, msg, err, http.StatusInternalServerError)
 }
 
 // HandleApiErrorResponse handles API errors and writes JSON response
-// If logger is provided, errors are logged using structured logging
+// HandleApiErrorResponse writes an API-style JSON error response to w and logs the error using the provided logger when present.
+// 
+// If err is a *CommonApiError, the function uses err.Context if set (otherwise context.Background()), logs either a warning when
+// the CommonApiError has no underlying Err or an error with structured fields (including request_id when present), writes the
+// HTTP status from err.HttpCode and the JSON representation of the CommonApiError to the response. For non-*CommonApiError values,
+// it logs an unhandled error event (when a logger is provided) and writes HTTP 500 with a JSON body containing CodeInternalError and
+// the message "Internal server error".
+// 
+// The function always returns nil.
 func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service) error {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -164,7 +173,7 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service
 }
 
 // HandleApiErrorResponseWithRequest handles API errors with request ID and writes JSON response
-// If logger is provided, errors are logged using structured logging
+// JSON body containing CodeInternalError, Msg "Internal server error", and the provided requestID.
 func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, requestID string, log logger.Service) error {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -221,13 +230,15 @@ func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, request
 }
 
 // HandleApiErrorResponseLegacy is a legacy version that doesn't require logger
-// Deprecated: Use HandleApiErrorResponse with logger parameter instead
+// HandleApiErrorResponseLegacy delegates to HandleApiErrorResponse passing a nil logger.
+// Deprecated: Use HandleApiErrorResponse with a logger.Service parameter instead.
 func HandleApiErrorResponseLegacy(err error, w http.ResponseWriter) error {
 	return HandleApiErrorResponse(err, w, nil)
 }
 
 // HandleApiErrorResponseWithRequestLegacy is a legacy version that doesn't require logger
-// Deprecated: Use HandleApiErrorResponseWithRequest with logger parameter instead
+// HandleApiErrorResponseWithRequestLegacy delegates to HandleApiErrorResponseWithRequest using a nil logger.
+// Deprecated: Use HandleApiErrorResponseWithRequest with a logger parameter instead.
 func HandleApiErrorResponseWithRequestLegacy(err error, w http.ResponseWriter, requestID string) error {
 	return HandleApiErrorResponseWithRequest(err, w, requestID, nil)
 }

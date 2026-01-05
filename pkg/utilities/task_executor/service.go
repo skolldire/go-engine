@@ -77,6 +77,10 @@ func startWorkers(ctx context.Context, numWorkers int, taskChan <-chan taskItem,
 	return &wg
 }
 
+// distributeTasksByPriority sends tasks to taskChan in priority order when enabled and closes the channel when done.
+// It orders the provided tasks according to cfg.usePriority, enqueues each task to taskChan, and logs enqueue/dispatch events
+// when a logger is configured. If ctx is cancelled while enqueuing, it logs the cancellation (when a logger is available)
+// and returns immediately; the task channel is closed on function exit.
 func distributeTasksByPriority(ctx context.Context, tasks map[string]Tasker, taskChan chan<- taskItem, cfg *config) {
 	defer close(taskChan)
 
@@ -123,6 +127,9 @@ func sortTasksByPriority(tasks map[string]Tasker, usePriority bool) []taskItem {
 	return taskItems
 }
 
+// waitForWorkersToFinish waits for all worker goroutines to complete, closes the result
+// channel to signal collectors, and logs a debug message using cfg.logger if present.
+// The provided ctx is used only for the debug log call.
 func waitForWorkersToFinish(wg *sync.WaitGroup, resultChan chan<- Result, cfg *config, ctx context.Context) {
 	wg.Wait()
 	close(resultChan)
@@ -166,6 +173,7 @@ func collectResults(ctx context.Context, resultChan <-chan Result, tasks map[str
 	}
 }
 
+// logTimeoutWarning logs a warning that result collection exceeded its timeout, including the total number of tasks and the number of results collected, if a logger is configured.
 func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
 		cfg.logger.Warn(ctx, "timeout exceeded for result collection",
@@ -176,6 +184,9 @@ func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker
 	}
 }
 
+// logCancellationWarning logs that result collection was cancelled and includes
+// the total number of tasks and the number of results collected so far when a
+// logger is configured on the provided config.
 func logCancellationWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
 		cfg.logger.Warn(ctx, "result collection cancelled",
@@ -218,6 +229,9 @@ func BatchWorkPool(ctx context.Context, tasks map[string]Tasker, numWorkers int,
 	return allResults
 }
 
+// worker consumes tasks from taskChan, executes each task with a per-task context (using the configured timeout when set), and sends the resulting Result to resultChan.
+// It exits when the task channel is closed or the provided ctx is canceled and signals completion by calling wg.Done().
+// If the parent ctx is canceled before a result can be sent, the result is discarded.
 func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <-chan taskItem, resultChan chan<- Result, cfg *config) {
 	defer wg.Done()
 
@@ -259,6 +273,13 @@ func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <
 	}
 }
 
+// safeExecuteTask executes the provided Tasker under the provided context, recovering panics
+// and returning a Result that contains the task output, timing information, priority, and any error.
+// It records StartTime, EndTime and Time (duration in milliseconds), sets Result.Res and Result.Err
+// from the task execution, and recovers panics by assigning an error based on ErrTaskPanic.
+// If the context is done before task completion, the returned error is wrapped as ErrTaskTimeout when
+// the context deadline was exceeded or ErrPoolCancelled for other cancellations.
+// If a metrics collector is configured in cfg, the task execution is reported to it.
 func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, workerID string) Result {
 	startTime := time.Now()
 

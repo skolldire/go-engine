@@ -20,6 +20,8 @@ type sqsAdapter struct {
 	retries RetryPolicy
 }
 
+// newSQSAdapter creates a cloud.Client that communicates with Amazon SQS using the provided AWS configuration,
+// applying the given request timeout and retry policy.
 func newSQSAdapter(cfg aws.Config, timeout time.Duration, retries RetryPolicy) cloud.Client {
 	return &sqsAdapter{
 		client:  sqs.NewFromConfig(cfg),
@@ -309,4 +311,3 @@ func (a *sqsAdapter) getQueueURL(ctx context.Context, req *cloud.Request) (*clou
 		},
 	}, nil
 }
-

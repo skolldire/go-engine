@@ -18,6 +18,7 @@ type sesAdapter struct {
 	retries RetryPolicy
 }
 
+// newSESAdapter creates a SES adapter that implements cloud.Client configured with the provided AWS config, operation timeout, and retry policy.
 func newSESAdapter(cfg aws.Config, timeout time.Duration, retries RetryPolicy) cloud.Client {
 	return &sesAdapter{
 		client:  ses.NewFromConfig(cfg),
@@ -303,6 +304,10 @@ func (a *sesAdapter) listVerifiedEmailAddresses(ctx context.Context, req *cloud.
 	}, nil
 }
 
+// normalizeSESError converts a non-nil error into a cloud.Error scoped to the given operation.
+// It creates an error with code "<operation>.error", uses the original error message as the detail,
+// preserves the original error as the cause, and attaches metadata "status_code" = 500.
+// If err is nil, it returns nil.
 func normalizeSESError(err error, operation string) *cloud.Error {
 	if err == nil {
 		return nil
@@ -314,6 +319,5 @@ func normalizeSESError(err error, operation string) *cloud.Error {
 		err,
 	).WithMetadata("status_code", 500)
 }
-
 
 

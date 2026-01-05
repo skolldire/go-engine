@@ -7,7 +7,7 @@ package helpers
 //
 //	m := map[string]int{"a": 1, "b": 2}
 //	value := GetOrDefault(m, "a", 0)  // returns 1
-//	value := GetOrDefault(m, "c", 0)  // returns 0
+// GetOrDefault returns the value associated with key in m or defaultValue when key is not present.
 func GetOrDefault[K comparable, V any](m map[K]V, key K, defaultValue V) V {
 	if val, ok := m[key]; ok {
 		return val
@@ -22,7 +22,8 @@ func GetOrDefault[K comparable, V any](m map[K]V, key K, defaultValue V) V {
 //
 //	m := map[string]int{"a": 1}
 //	HasKey(m, "a")  // returns true
-//	HasKey(m, "b")  // returns false
+// HasKey reports whether the given key is present in m.
+// A nil map is treated as empty and will always report false.
 func HasKey[K comparable, V any](m map[K]V, key K) bool {
 	_, ok := m[key]
 	return ok
@@ -34,7 +35,9 @@ func HasKey[K comparable, V any](m map[K]V, key K) bool {
 //
 //	m := map[string]int{"a": 1, "b": 2}
 //	keys := Keys(m)
-//	// returns []string{"a", "b"} (order may vary)
+// Keys returns a slice containing all keys present in the map.
+// The order of keys is not specified and may vary between calls.
+// The returned slice has length equal to the number of entries in the map.
 func Keys[K comparable, V any](m map[K]V) []K {
 	keys := make([]K, 0, len(m))
 	for k := range m {
@@ -49,7 +52,8 @@ func Keys[K comparable, V any](m map[K]V) []K {
 //
 //	m := map[string]int{"a": 1, "b": 2}
 //	values := Values(m)
-//	// returns []int{1, 2} (order may vary)
+// Values extracts all values from the provided map into a slice.
+// The order of values in the returned slice is unspecified and may vary between iterations.
 func Values[K comparable, V any](m map[K]V) []V {
 	values := make([]V, 0, len(m))
 	for _, v := range m {
@@ -66,7 +70,8 @@ func Values[K comparable, V any](m map[K]V) []V {
 //	m1 := map[string]int{"a": 1, "b": 2}
 //	m2 := map[string]int{"b": 3, "c": 4}
 //	result := Merge(m1, m2)
-//	// returns map[string]int{"a": 1, "b": 3, "c": 4}
+// Merge merges the provided maps into a newly allocated map.
+// When the same key appears in multiple input maps, the value from the later map in the argument list overrides earlier ones.
 func Merge[K comparable, V any](maps ...map[K]V) map[K]V {
 	result := make(map[K]V)
 	for _, m := range maps {
@@ -83,7 +88,7 @@ func Merge[K comparable, V any](maps ...map[K]V) map[K]V {
 // Example:
 //
 //	m := NewStringMap()
-//	m["key"] = "value"
+// NewStringMap creates and returns a new, empty map[string]string.
 func NewStringMap() map[string]string {
 	return make(map[string]string)
 }
@@ -95,7 +100,7 @@ func NewStringMap() map[string]string {
 //
 //	m := NewStringInterfaceMap()
 //	m["key"] = "value"
-//	m["number"] = 42
+// NewStringInterfaceMap creates and returns a new empty map[string]interface{}.
 func NewStringInterfaceMap() map[string]interface{} {
 	return make(map[string]interface{})
 }
@@ -106,10 +111,9 @@ func NewStringInterfaceMap() map[string]interface{} {
 // Example:
 //
 //	m := NewMap[string, int]()
-//	m["key"] = 42
+// NewMap creates a new empty map with the specified key and value types.
 func NewMap[K comparable, V any]() map[K]V {
 	return make(map[K]V)
 }
-
 
 

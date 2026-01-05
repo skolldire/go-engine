@@ -5,7 +5,12 @@ import (
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 )
 
-// NormalizeSQSEvent converts SQS Lambda event to normalized Request(s)
+// NormalizeSQSEvent converts an AWS Lambda SQS event into a slice of normalized cloud.Request pointers.
+// For a nil input it returns (nil, nil). Each returned Request has Operation "sqs.receive", Path set to
+// the record's EventSourceARN, Method "POST", and Headers containing "sqs.message_id", "sqs.receipt_handle",
+// "sqs.event_source", and "sqs.event_source_arn". If a record Body is non-empty it is preserved as raw bytes
+// in Request.Body. Message attributes with string values are collected, serialized, and stored under the
+// "sqs.message_attributes" header. The implementation currently always returns a nil error.
 func NormalizeSQSEvent(event *events.SQSEvent) ([]*cloud.Request, error) {
 	if event == nil {
 		return nil, nil
@@ -51,7 +56,8 @@ func NormalizeSQSEvent(event *events.SQSEvent) ([]*cloud.Request, error) {
 	return requests, nil
 }
 
-// serializeAttrs converts map to JSON string (simple implementation)
+// serializeAttrs converts a map of string attributes into a JSON-like string of key/value pairs in the form {"key":"value",...}.
+// The iteration order is unspecified (map order) and keys/values are not escaped, so this is a simplistic serializer for simple attribute sets.
 func serializeAttrs(attrs map[string]string) string {
 	// Simple serialization - could use json.Marshal for more complex cases
 	result := "{"
@@ -66,6 +72,5 @@ func serializeAttrs(attrs map[string]string) string {
 	result += "}"
 	return result
 }
-
 
 

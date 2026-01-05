@@ -11,6 +11,10 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
+// NewClient creates and returns a configured *RedisClient using cfg and log.
+// It applies default timeouts and pool size when those values are zero, constructs the underlying Redis client (including password when provided), and attaches an optional resilience service when enabled in cfg.
+// The function verifies connectivity by pinging Redis within the configured timeout; on failure it returns an error wrapping ErrConnection.
+// On success, the initialized *RedisClient is returned.
 func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 	timeoutDuration := cfg.Timeout
 	if timeoutDuration == 0 {

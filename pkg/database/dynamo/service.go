@@ -20,6 +20,9 @@ func (dc *DynamoClient) TableName(name string) string {
 	return fmt.Sprintf("%s-%s", dc.tablePrefix, name)
 }
 
+// NewClient creates a DynamoDB-backed Service configured with the provided AWS configuration and package settings.
+// If cfg.Endpoint is set, the client uses that endpoint and logs the connection; the returned client carries the provided logger, logging flag, and table prefix.
+// If cfg.WithResilience is true, a resilience service is created and attached to the client.
 func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	client := dynamodb.NewFromConfig(acf, func(o *dynamodb.Options) {
 		if cfg.Endpoint != "" {

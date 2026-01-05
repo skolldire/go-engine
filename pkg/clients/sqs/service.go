@@ -13,6 +13,9 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
+// NewClient creates and returns a Service that wraps an AWS SQS client configured using acf and cfg.
+// If cfg.Endpoint is provided it is used as the client's base endpoint; if cfg.WithResilience is true a resilience service is attached.
+// When cfg.EnableLogging is true the client will emit a debug log with the endpoint (or "default AWS" when none is set).
 func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
 	sqsClient := sqs.NewFromConfig(acf, func(o *sqs.Options) {
 		if cfg.Endpoint != "" {

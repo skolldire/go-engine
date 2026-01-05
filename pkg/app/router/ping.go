@@ -10,6 +10,8 @@ type PingResponse struct {
 	Message string `json:"message"`
 }
 
+// pingHandler writes a JSON ping response with status "ok" and message "pong".
+// It sets the Content-Type to "application/json" and sends HTTP 200 (OK).
 func pingHandler(w http.ResponseWriter, r *http.Request) {
 	response := PingResponse{
 		Status:  "ok",
@@ -20,4 +22,3 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
-

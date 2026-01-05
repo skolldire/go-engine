@@ -222,6 +222,10 @@ func (s *service) getPropertyFileName() string {
 	return "application"
 }
 
+// loadConfigFile loads the named configuration file from the given path into v.
+// It sets the Viper config path and name, attempts to read the configuration, and
+// returns any error returned by v.ReadInConfig. If the file is not found a warning
+// is logged; other read errors are logged as errors.
 func loadConfigFile(v *viper.Viper, path, name string, logger *logrus.Logger) error {
 	v.AddConfigPath(path)
 	v.SetConfigName(name)
@@ -259,6 +263,7 @@ func envVarDecodeHook() mapstructure.DecodeHookFunc {
 	}
 }
 
+// watchConfig enables watching v's configuration file and logs a warning with the changed file name when a change is detected.
 func watchConfig(v *viper.Viper, logger *logrus.Logger) {
 	v.WatchConfig()
 	v.OnConfigChange(func(e fsnotify.Event) {
@@ -266,6 +271,12 @@ func watchConfig(v *viper.Viper, logger *logrus.Logger) {
 	})
 }
 
+// getPropertyFiles determines the list of required configuration filenames based on
+// the application's profile and which files exist in the configuration directory.
+// It always includes "application.yaml" and, if present in the config path, appends
+// the scope-specific file (application-<scope>.yaml) or, if that is absent, the
+// profile-specific file (application-<profile>.yaml).
+// If the configuration directory cannot be listed, it returns only "application.yaml".
 func getPropertyFiles(logger *logrus.Logger) []string {
 	requiredFiles := []string{"application.yaml"}
 	scopeFile := fmt.Sprintf("application-%s.yaml", app_profile.GetScopeValue())
@@ -288,6 +299,9 @@ func getPropertyFiles(logger *logrus.Logger) []string {
 	return requiredFiles
 }
 
+// getConfigPath determines the directory path used for configuration files.
+// It uses the CONF_DIR environment variable if set; otherwise it returns "config"
+// when the application is running with a local profile, and "/app/config" in all other cases.
 func getConfigPath(logger *logrus.Logger) string {
 	if path := os.Getenv("CONF_DIR"); path != "" {
 		logger.Debugf("using CONF_DIR: %s", path)

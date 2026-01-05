@@ -11,6 +11,12 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
+// RegisterDefaultClients registers default client factories ("rest" and "grpc_client")
+// in the global registry.
+//
+// The "rest" factory expects a rest.Config and returns a REST client created via rest.NewClient.
+// The "grpc_client" factory expects a grpcClient.Config and returns a gRPC client created via grpcClient.NewCliente.
+// Returns an error if a registration fails or if a factory receives an invalid configuration type.
 func RegisterDefaultClients(log logger.Service) error {
 	reg := registry.GetRegistry(log)
 
@@ -39,4 +45,3 @@ func RegisterDefaultClients(log logger.Service) error {
 
 func (i *clients) initializeWithRegistry(conf *viper.Config) {
 }
-

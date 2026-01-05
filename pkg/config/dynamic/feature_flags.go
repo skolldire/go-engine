@@ -15,6 +15,8 @@ type FeatureFlags struct {
 	logger logger.Service
 }
 
+// NewFeatureFlags creates a FeatureFlags manager initialized with the provided flag set and logger.
+// If initialFlags is nil, an empty flag set is used. The returned *FeatureFlags is ready for concurrent use.
 func NewFeatureFlags(initialFlags map[string]interface{}, log logger.Service) *FeatureFlags {
 	ff := &FeatureFlags{
 		logger: log,
@@ -120,4 +122,3 @@ func (ff *FeatureFlags) GetAll() map[string]interface{} {
 func (ff *FeatureFlags) IsEnabled(key string) bool {
 	return ff.GetBool(key)
 }
-

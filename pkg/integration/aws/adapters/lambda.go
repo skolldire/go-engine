@@ -17,6 +17,7 @@ type lambdaAdapter struct {
 	retries RetryPolicy
 }
 
+// newLambdaAdapter creates a cloud.Client that invokes AWS Lambda using the provided AWS configuration, request timeout, and retry policy.
 func newLambdaAdapter(cfg aws.Config, timeout time.Duration, retries RetryPolicy) cloud.Client {
 	return &lambdaAdapter{
 		client:  lambda.NewFromConfig(cfg),
@@ -89,4 +90,3 @@ func (a *lambdaAdapter) invoke(ctx context.Context, req *cloud.Request) (*cloud.
 		},
 	}, nil
 }
-

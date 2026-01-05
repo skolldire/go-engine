@@ -14,6 +14,8 @@ var (
 	ErrOperationFailed = errors.New("operation failed after retries and circuit breaker")
 )
 
+// NewResilienceService creates a Service configured with the provided Config and logger.
+// It initializes a retryer using config.RetryConfig and a circuit breaker using config.CircuitBreakerConfig.
 func NewResilienceService(config Config, log logger.Service) *Service {
 	return &Service{
 		retryer: retry_backoff.NewRetryer(retry_backoff.Dependencies{

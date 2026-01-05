@@ -18,6 +18,8 @@ type snsAdapter struct {
 	retries RetryPolicy
 }
 
+// newSNSAdapter creates a cloud.Client that communicates with Amazon SNS using the provided
+// AWS configuration, request timeout, and retry policy.
 func newSNSAdapter(cfg aws.Config, timeout time.Duration, retries RetryPolicy) cloud.Client {
 	return &snsAdapter{
 		client:  sns.NewFromConfig(cfg),
@@ -82,4 +84,3 @@ func (a *snsAdapter) publish(ctx context.Context, req *cloud.Request) (*cloud.Re
 		},
 	}, nil
 }
-

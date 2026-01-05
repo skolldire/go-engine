@@ -408,6 +408,8 @@ func (i *clients) createClientsRabbitMQ(configs []map[string]rabbitmq.Config) ma
 	return rabbitMQClients
 }
 
+// setLogLevel creates a logger service configured with the provided logging level and path using the given Logrus logger.
+// The returned service wraps the provided *logrus.Logger and applies c.Level and c.Path to the logger configuration.
 func setLogLevel(c logger.Config, l *logrus.Logger) logger.Service {
 	return logger.NewService(logger.Config{
 		Level: c.Level,

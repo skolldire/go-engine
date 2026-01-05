@@ -15,6 +15,10 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
 )
 
+// NewClient constructs a Service backed by an AWS SNS client configured with acf, cfg, and log.
+// If cfg.BaseEndpoint is set it overrides the SNS base endpoint. If cfg.WithResilience is true, a resilience
+// service is attached to the client. When cfg.EnableLogging is true the client logs its initialization and the
+// endpoint being used.
 func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	snsClient := sns.NewFromConfig(acf, func(o *sns.Options) {
 		if cfg.BaseEndpoint != "" {

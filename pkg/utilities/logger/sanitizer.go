@@ -53,7 +53,11 @@ const (
 	sanitizedValue = "[REDACTED]"
 )
 
-// SanitizeFields sanitizes sensitive fields in a map
+// SanitizeFields returns a copy of fields with sensitive values redacted.
+// If fields is nil, it returns nil. Keys whose names match known sensitive
+// identifiers (case-insensitive) have their values replaced with "[REDACTED]".
+// For other keys, string values have any sensitive substrings redacted while
+// non-string values are retained unchanged.
 func SanitizeFields(fields map[string]interface{}) map[string]interface{} {
 	if fields == nil {
 		return nil
@@ -80,7 +84,10 @@ func SanitizeFields(fields map[string]interface{}) map[string]interface{} {
 	return sanitized
 }
 
-// SanitizeString sanitizes sensitive information in a string
+// SanitizeString returns a copy of s with detected sensitive values replaced by "[REDACTED]".
+// It preserves surrounding key formatting when a match contains a "key: value" or "key=value" structure,
+// replacing only the value portion; text that does not match sensitive patterns is left unchanged.
+// If s is empty, it is returned unchanged.
 func SanitizeString(s string) string {
 	if s == "" {
 		return s
@@ -105,10 +112,10 @@ func SanitizeString(s string) string {
 	return result
 }
 
-// ShouldSanitizeField checks if a field name should be sanitized
+// ShouldSanitizeField reports whether the given field name is considered sensitive and should be redacted.
+// It returns `true` if the lowercased field name exists in the sanitizer's sensitive field map, `false` otherwise.
 func ShouldSanitizeField(fieldName string) bool {
 	return sensitiveFieldNames[strings.ToLower(fieldName)]
 }
-
 
 

@@ -16,6 +16,11 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
+// NewClient creates an S3 Service using the provided AWS config, client configuration, and logger.
+// 
+// The returned client is configured with the optional region from cfg, a timeout (defaults to DefaultTimeout
+// when cfg.Timeout is zero), and base client settings for logging and resilience derived from cfg.
+// If logging is enabled the client emits an initialization debug entry containing the region and bucket.
 func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	s3Client := s3.NewFromConfig(acf, func(o *s3.Options) {
 		if cfg.Region != "" {

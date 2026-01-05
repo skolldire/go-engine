@@ -18,6 +18,8 @@ type AppBuilder struct {
 	errors []error
 }
 
+// NewAppBuilder creates a new AppBuilder with an initialized Engine.
+// The Engine is prepopulated with an empty error slice and a background context; the builder's error slice is initialized empty.
 func NewAppBuilder() *AppBuilder {
 	return &AppBuilder{
 		engine: &Engine{

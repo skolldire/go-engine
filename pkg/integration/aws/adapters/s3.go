@@ -21,6 +21,8 @@ type s3Adapter struct {
 	retries RetryPolicy
 }
 
+// newS3Adapter creates a cloud.Client backed by AWS S3 using the provided AWS SDK config.
+// It initializes an S3 client and configures the adapter's request timeout and retry policy.
 func newS3Adapter(cfg aws.Config, timeout time.Duration, retries RetryPolicy) cloud.Client {
 	return &s3Adapter{
 		client:  s3.NewFromConfig(cfg),
@@ -310,6 +312,8 @@ func (a *s3Adapter) copyObject(ctx context.Context, req *cloud.Request) (*cloud.
 	}, nil
 }
 
+// parseS3Path splits an S3 path of the form "bucket/key" and returns the bucket and key.
+// If the path contains no '/', the entire path is returned as the bucket and the key is empty.
 func parseS3Path(path string) (bucket, key string) {
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) >= 2 {
@@ -318,6 +322,9 @@ func parseS3Path(path string) (bucket, key string) {
 	return parts[0], ""
 }
 
+// normalizeS3Error wraps a non-nil error into a cloud.Error using the provided operation name as the error code.
+// If err is nil, it returns nil. The produced cloud.Error uses code "<operation>.error", preserves the original
+// error as the cause, and includes a metadata entry "status_code" with value 500.
 func normalizeS3Error(err error, operation string) *cloud.Error {
 	if err == nil {
 		return nil
@@ -329,4 +336,3 @@ func normalizeS3Error(err error, operation string) *cloud.Error {
 		err,
 	).WithMetadata("status_code", 500)
 }
-

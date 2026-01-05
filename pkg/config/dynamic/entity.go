@@ -27,6 +27,8 @@ type ConfigWatcher interface {
 
 type ReloadHook func(oldConfig, newConfig interface{}) error
 
+// NewDynamicConfig creates a DynamicConfig initialized with initialConfig and the provided logger.
+// The returned DynamicConfig has empty watcher and reload hook slices, stores initialConfig as the current configuration, and sets the last reload timestamp to the current time.
 func NewDynamicConfig(initialConfig interface{}, log logger.Service) *DynamicConfig {
 	dc := &DynamicConfig{
 		logger:      log,
@@ -157,4 +159,3 @@ func (dc *DynamicConfig) validateConfig(config interface{}) error {
 	}
 	return nil
 }
-

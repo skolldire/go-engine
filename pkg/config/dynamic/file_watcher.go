@@ -18,6 +18,16 @@ type FileWatcher struct {
 	stopCh   chan struct{}
 }
 
+// NewFileWatcher creates a FileWatcher that monitors the provided filesystem paths for
+// configuration file changes (.yaml, .yml, .json, .toml). It initializes an fsnotify
+// watcher, registers each path, sets a default debounce interval of 500ms, and
+// prepares an internal stop channel.
+// 
+// The `paths` slice lists filesystem paths to watch. The `log` parameter is used by
+// the FileWatcher for structured logging.
+// 
+// It returns the initialized FileWatcher on success. An error is returned if the
+// underlying watcher cannot be created or if any path cannot be added to the watcher.
 func NewFileWatcher(paths []string, log logger.Service) (*FileWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -104,4 +114,3 @@ func (fw *FileWatcher) isConfigFile(filename string) bool {
 	ext := filepath.Ext(filename)
 	return ext == ".yaml" || ext == ".yml" || ext == ".json" || ext == ".toml"
 }
-
