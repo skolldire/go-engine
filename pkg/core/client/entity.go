@@ -74,7 +74,7 @@ func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName s
 	bc.mu.RLock()
 	logging := bc.logging
 	bc.mu.RUnlock()
-	
+
 	if logging {
 		bc.logger.Debug(ctx, "starting operation with resilience: "+operationName, logFields)
 	}
@@ -94,7 +94,7 @@ func (bc *BaseClient) executeDirectly(ctx context.Context, operationName string,
 	bc.mu.RLock()
 	logging := bc.logging
 	bc.mu.RUnlock()
-	
+
 	if logging {
 		bc.logger.Debug(ctx, "starting operation: "+operationName, logFields)
 	}

@@ -2,6 +2,7 @@ package sqs
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -156,6 +157,9 @@ func TestCliente_ReceiveMsj_DefaultMaxMessages(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
+	
+	// Configure mock to return error when WrapError is called
+	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
 	client := NewClient(acf, cfg, log)
 

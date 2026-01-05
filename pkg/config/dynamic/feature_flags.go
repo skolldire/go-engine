@@ -69,7 +69,9 @@ func (ff *FeatureFlags) GetInt(key string) int {
 		return int(v)
 	case string:
 		var i int
-		fmt.Sscanf(v, "%d", &i)
+		if _, err := fmt.Sscanf(v, "%d", &i); err != nil {
+			return 0
+		}
 		return i
 	default:
 		return 0

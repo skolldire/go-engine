@@ -24,25 +24,25 @@ var (
 
 	// Fields that should always be sanitized
 	sensitiveFieldNames = map[string]bool{
-		"password":        true,
-		"passwd":          true,
-		"pwd":             true,
-		"secret":          true,
-		"token":           true,
-		"key":             true,
-		"apikey":          true,
-		"api_key":         true,
-		"access_key":      true,
-		"secret_key":      true,
-		"authorization":   true,
-		"auth":            true,
-		"credit_card":     true,
-		"creditcard":      true,
-		"card_number":     true,
-		"cvv":             true,
-		"cvc":             true,
-		"ssn":             true,
-		"social_security": true,
+		"password":              true,
+		"passwd":                true,
+		"pwd":                   true,
+		"secret":                true,
+		"token":                 true,
+		"key":                   true,
+		"apikey":                true,
+		"api_key":               true,
+		"access_key":            true,
+		"secret_key":            true,
+		"authorization":         true,
+		"auth":                  true,
+		"credit_card":           true,
+		"creditcard":            true,
+		"card_number":           true,
+		"cvv":                   true,
+		"cvc":                   true,
+		"ssn":                   true,
+		"social_security":       true,
 		"aws_access_key_id":     true,
 		"aws_secret_access_key": true,
 		"aws_session_token":     true,
@@ -62,7 +62,7 @@ func SanitizeFields(fields map[string]interface{}) map[string]interface{} {
 	sanitized := make(map[string]interface{}, len(fields))
 	for k, v := range fields {
 		keyLower := strings.ToLower(k)
-		
+
 		// Check if field name is sensitive
 		if sensitiveFieldNames[keyLower] {
 			sanitized[k] = sanitizedValue
@@ -109,6 +109,3 @@ func SanitizeString(s string) string {
 func ShouldSanitizeField(fieldName string) bool {
 	return sensitiveFieldNames[strings.ToLower(fieldName)]
 }
-
-
-

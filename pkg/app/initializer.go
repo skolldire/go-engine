@@ -6,7 +6,6 @@ import (
 
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
-	"github.com/skolldire/go-engine/pkg/config/viper"
 	"github.com/skolldire/go-engine/pkg/core/registry"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
@@ -36,8 +35,5 @@ func RegisterDefaultClients(log logger.Service) error {
 	}
 
 	return nil
-}
-
-func (i *clients) initializeWithRegistry(conf *viper.Config) {
 }
 
