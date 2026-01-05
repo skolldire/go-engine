@@ -154,8 +154,8 @@ func (c *S3Client) HeadObject(ctx context.Context, key string) (*ObjectMetadata,
 	}
 	return &ObjectMetadata{
 		Key:          key,
-		Size:         *response.ContentLength,
-		LastModified: *response.LastModified,
+		Size:         aws.ToInt64(response.ContentLength),
+		LastModified: aws.ToTime(response.LastModified),
 		ETag:         aws.ToString(response.ETag),
 		ContentType:  aws.ToString(response.ContentType),
 	}, nil
@@ -218,8 +218,8 @@ func (c *S3Client) CopyObject(ctx context.Context, sourceKey, destKey string) er
 	_, err := c.Execute(ctx, "CopyObject", func() (interface{}, error) {
 		return c.s3Client.CopyObject(ctx, &s3.CopyObjectInput{
 			Bucket:     aws.String(c.bucket),
-			CopySource:  aws.String(source),
-			Key:         aws.String(destKey),
+			CopySource: aws.String(source),
+			Key:        aws.String(destKey),
 		})
 	})
 
@@ -240,7 +240,7 @@ func (c *S3Client) GetPresignedURL(ctx context.Context, key string, expiration t
 	}
 
 	presignClient := s3.NewPresignClient(c.s3Client)
-	
+
 	result, err := c.Execute(ctx, "GetPresignedURL", func() (interface{}, error) {
 		request, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(c.bucket),
@@ -268,4 +268,3 @@ func (c *S3Client) GetPresignedURL(ctx context.Context, key string, expiration t
 func (c *S3Client) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }
-
