@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
+	"github.com/skolldire/go-engine/pkg/clients/cognito"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
@@ -125,6 +126,9 @@ func (c *App) Init() *App {
 
 	// Initialize CloudClient (optional - can be nil if not configured)
 	c.Engine.CloudClient = initializer.createCloudClient(c.Engine.Log, c.Engine.Telemetry)
+
+	// Initialize CognitoClient (optional - can be nil if not configured)
+	c.Engine.CognitoClient = initializer.createClientCognito(c.Engine.Conf.Cognito)
 
 	// Initialize config registry using sync.Once to ensure thread-safety
 	// and prevent overwriting if GetConfigs() was called first
@@ -274,6 +278,18 @@ func (i *clients) createCloudClient(log logger.Service, tel telemetry.Telemetry)
 		metricsRecorder = observability.NewTelemetryMetricsRecorder(tel)
 	}
 	return awsclient.NewWithOptions(i.awsConfig, awsclient.WithObservability(log, metricsRecorder, tel))
+}
+
+func (i *clients) createClientCognito(cfg *cognito.Config) cognito.Service {
+	if cfg == nil {
+		return nil
+	}
+	client, err := cognito.NewClient(*cfg, i.log)
+	if err != nil {
+		i.setError(err)
+		return nil
+	}
+	return client
 }
 
 func (i *clients) createClientsSQS(configs []map[string]sqs.Config) map[string]sqs.Service {

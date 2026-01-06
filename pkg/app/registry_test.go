@@ -156,9 +156,7 @@ func TestGetServices_ConcurrentAccess(t *testing.T) {
 			t.Errorf("Goroutine %d got different instance: expected %p, got %p", i, firstResult, result)
 		}
 	}
-}
-
-// TestGetConfigs_ConcurrentAccess verifies that GetConfigs() is thread-safe
+} // TestGetConfigs_ConcurrentAccess verifies that GetConfigs() is thread-safe
 func TestGetConfigs_ConcurrentAccess(t *testing.T) {
 	engine := &Engine{}
 	const numGoroutines = 100
