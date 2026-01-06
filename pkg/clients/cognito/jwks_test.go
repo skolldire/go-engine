@@ -21,7 +21,7 @@ func TestNewJWKSClient(t *testing.T) {
 
 func TestJWKSClient_ClearCache(t *testing.T) {
 	client := NewJWKSClient("https://test.com/jwks.json")
-	
+
 	// Agregar algo al cache manualmente (para testing)
 	client.mu.Lock()
 	client.cache["test-kid"] = nil

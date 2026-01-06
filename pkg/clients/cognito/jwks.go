@@ -19,11 +19,11 @@ const (
 
 // JWKSClient maneja la obtención y cache de claves públicas JWKS de Cognito
 type JWKSClient struct {
-	url            string
-	cache          map[string]*rsa.PublicKey
-	cacheTTL       time.Duration
-	lastFetch      time.Time
-	mu             sync.RWMutex
+	url              string
+	cache            map[string]*rsa.PublicKey
+	cacheTTL         time.Duration
+	lastFetch        time.Time
+	mu               sync.RWMutex
 	refreshThreshold time.Duration
 }
 

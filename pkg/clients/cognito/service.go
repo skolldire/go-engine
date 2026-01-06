@@ -84,8 +84,8 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 
 	// Crear cliente con secret privado
 	client := &Client{
-		config:        cfg,           // Config sin secret (ya limpiado)
-		clientSecret:  clientSecret,  // Secret en campo privado
+		config:        cfg,          // Config sin secret (ya limpiado)
+		clientSecret:  clientSecret, // Secret en campo privado
 		cognitoClient: cognitoClient,
 		jwksClient:    jwksClient,
 		logger:        log,
@@ -212,9 +212,9 @@ func (c *Client) RegisterUser(ctx context.Context, req RegisterUserRequest) (*Us
 
 	// Preparar input
 	input := &cognitoidentityprovider.SignUpInput{
-		ClientId:      aws.String(c.config.ClientID),
-		Username:      aws.String(req.Username),
-		Password:      aws.String(req.Password),
+		ClientId:       aws.String(c.config.ClientID),
+		Username:       aws.String(req.Username),
+		Password:       aws.String(req.Password),
 		UserAttributes: attributes,
 	}
 
@@ -236,15 +236,20 @@ func (c *Client) RegisterUser(ctx context.Context, req RegisterUserRequest) (*Us
 		return nil, handleCognitoError(err)
 	}
 
+	// Verificar que UserSub no sea nil antes de dereferenciar
+	if result.UserSub == nil {
+		return nil, fmt.Errorf("%w: user sub is nil", ErrInvalidConfig)
+	}
+
 	// Convertir a User
 	user := &User{
-		ID:          *result.UserSub,
-		Username:    req.Username,
-		Email:       req.Email,
-		Status:      UserStatusUnconfirmed,
-		Attributes:  req.Attributes,
-		CreatedAt:   time.Now(),
-		Enabled:     true,
+		ID:         *result.UserSub,
+		Username:   req.Username,
+		Email:      req.Email,
+		Status:     UserStatusUnconfirmed,
+		Attributes: req.Attributes,
+		CreatedAt:  time.Now(),
+		Enabled:    true,
 	}
 
 	if c.logging {
@@ -323,8 +328,8 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 	}
 
 	input := &cognitoidentityprovider.InitiateAuthInput{
-		AuthFlow:      types.AuthFlowTypeUserPasswordAuth,
-		ClientId:      aws.String(c.config.ClientID),
+		AuthFlow:       types.AuthFlowTypeUserPasswordAuth,
+		ClientId:       aws.String(c.config.ClientID),
 		AuthParameters: authParams,
 	}
 
@@ -439,15 +444,47 @@ func (c *Client) ValidateToken(ctx context.Context, token string) (*TokenClaims,
 	}
 
 	// Validar issuer (debe ser el User Pool de Cognito)
+	// Construir el issuer esperado: https://cognito-idp.{region}.amazonaws.com/{userPoolId}
+	expectedIssuer := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/%s", c.config.Region, c.config.UserPoolID)
 	iss, ok := claims["iss"].(string)
-	if !ok || !strings.Contains(iss, c.config.UserPoolID) {
-		return nil, fmt.Errorf("%w: issuer mismatch", ErrInvalidToken)
+	if !ok || iss != expectedIssuer {
+		// Fallback: verificar que contiene el UserPoolID en el path
+		if !ok || !strings.HasPrefix(iss, "https://cognito-idp.") || !strings.Contains(iss, "/"+c.config.UserPoolID) {
+			return nil, fmt.Errorf("%w: issuer mismatch (expected %s, got %s)", ErrInvalidToken, expectedIssuer, iss)
+		}
 	}
 
-	// Mejora propuesta: Validación estricta de audience
-	aud, ok := claims["aud"].(string)
-	if !ok || aud != c.config.ClientID {
-		return nil, fmt.Errorf("%w: audience mismatch (expected %s, got %s)", ErrInvalidToken, c.config.ClientID, aud)
+	// Validación mejorada de audience: aceptar "aud" (string o []string) o "client_id"
+	var audMatch bool
+	var audValue string
+
+	// Intentar leer "aud" como string
+	if audStr, ok := claims["aud"].(string); ok {
+		audMatch = audStr == c.config.ClientID
+		audValue = audStr
+	} else {
+		// Intentar leer "aud" como []string
+		if audSlice, ok := claims["aud"].([]interface{}); ok {
+			for _, v := range audSlice {
+				if audStr, ok := v.(string); ok && audStr == c.config.ClientID {
+					audMatch = true
+					audValue = audStr
+					break
+				}
+			}
+		}
+	}
+
+	// Si no hay match con "aud", intentar "client_id"
+	if !audMatch {
+		if clientID, ok := claims["client_id"].(string); ok {
+			audMatch = clientID == c.config.ClientID
+			audValue = clientID
+		}
+	}
+
+	if !audMatch {
+		return nil, fmt.Errorf("%w: audience mismatch (expected %s, got %s)", ErrInvalidToken, c.config.ClientID, audValue)
 	}
 
 	// Validar expiración (Cognito maneja la expiración automáticamente)
@@ -540,21 +577,23 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	// Preparar parámetros
+	// Preparar parámetros (USERNAME es requerido por Cognito)
 	challengeParams := map[string]string{
+		"USERNAME":                req.Username,
 		"SOFTWARE_TOKEN_MFA_CODE": req.MFACode,
 	}
 
 	if req.ChallengeType == MFAChallengeTypeSMS {
 		challengeParams = map[string]string{
+			"USERNAME":     req.Username,
 			"SMS_MFA_CODE": req.MFACode,
 		}
 	}
 
 	input := &cognitoidentityprovider.RespondToAuthChallengeInput{
-		ClientId:          aws.String(c.config.ClientID),
-		ChallengeName:    types.ChallengeNameType(string(req.ChallengeType)),
-		Session:           aws.String(req.SessionToken),
+		ClientId:           aws.String(c.config.ClientID),
+		ChallengeName:      types.ChallengeNameType(string(req.ChallengeType)),
+		Session:            aws.String(req.SessionToken),
 		ChallengeResponses: challengeParams,
 	}
 
@@ -569,15 +608,31 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 		return nil, handleCognitoError(err)
 	}
 
-	// Extraer tokens
+	// Extraer tokens con checks defensivos
 	if result.AuthenticationResult == nil {
 		return nil, fmt.Errorf("authentication result is nil")
 	}
 
+	// Helper para extraer strings de forma segura
+	safeString := func(s *string) string {
+		if s == nil {
+			return ""
+		}
+		return *s
+	}
+
+	// Verificar que los tokens requeridos no sean nil
+	if result.AuthenticationResult.AccessToken == nil {
+		return nil, fmt.Errorf("access token is nil")
+	}
+	if result.AuthenticationResult.IdToken == nil {
+		return nil, fmt.Errorf("id token is nil")
+	}
+
 	tokens := &AuthTokens{
-		AccessToken:  *result.AuthenticationResult.AccessToken,
-		RefreshToken: *result.AuthenticationResult.RefreshToken,
-		IDToken:      *result.AuthenticationResult.IdToken,
+		AccessToken:  safeString(result.AuthenticationResult.AccessToken),
+		RefreshToken: safeString(result.AuthenticationResult.RefreshToken),
+		IDToken:      safeString(result.AuthenticationResult.IdToken),
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(result.AuthenticationResult.ExpiresIn),
 	}
@@ -608,8 +663,8 @@ func (c *Client) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*Au
 	}
 
 	input := &cognitoidentityprovider.InitiateAuthInput{
-		AuthFlow:      types.AuthFlowTypeRefreshTokenAuth,
-		ClientId:      aws.String(c.config.ClientID),
+		AuthFlow:       types.AuthFlowTypeRefreshTokenAuth,
+		ClientId:       aws.String(c.config.ClientID),
 		AuthParameters: authParams,
 	}
 

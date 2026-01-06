@@ -42,15 +42,15 @@ func (m *mockLogger) WrapError(err error, msg string) error {
 func (m *mockLogger) WithField(key string, value interface{}) logger.Service  { return m }
 func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
 func (m *mockLogger) GetLogLevel() string                                     { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                           { return nil }
+func (m *mockLogger) SetLogLevel(level string) error                          { return nil }
 
 func TestNewClient(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
-		ClientSecret: "",
-		EnableLogging: false,
+		Region:         "us-east-1",
+		UserPoolID:     "us-east-1_TestPool123",
+		ClientID:       "test-client-id",
+		ClientSecret:   "",
+		EnableLogging:  false,
 		WithResilience: false,
 	}
 	log := &mockLogger{}
@@ -64,11 +64,11 @@ func TestNewClient(t *testing.T) {
 
 func TestNewClient_WithSecret(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
-		ClientSecret: "test-secret",
-		EnableLogging: false,
+		Region:         "us-east-1",
+		UserPoolID:     "us-east-1_TestPool123",
+		ClientID:       "test-client-id",
+		ClientSecret:   "test-secret",
+		EnableLogging:  false,
 		WithResilience: false,
 	}
 	log := &mockLogger{}
@@ -86,10 +86,10 @@ func TestNewClient_WithSecret(t *testing.T) {
 
 func TestNewClient_WithLogging(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
-		EnableLogging: true,
+		Region:         "us-east-1",
+		UserPoolID:     "us-east-1_TestPool123",
+		ClientID:       "test-client-id",
+		EnableLogging:  true,
 		WithResilience: false,
 	}
 	log := &mockLogger{}
@@ -104,10 +104,10 @@ func TestNewClient_WithLogging(t *testing.T) {
 
 func TestNewClient_WithResilience(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
-		EnableLogging: false,
+		Region:         "us-east-1",
+		UserPoolID:     "us-east-1_TestPool123",
+		ClientID:       "test-client-id",
+		EnableLogging:  false,
 		WithResilience: true,
 		Resilience: resilience.Config{
 			RetryConfig: &retry_backoff.Config{
@@ -177,9 +177,9 @@ func TestNewClient_InvalidConfig(t *testing.T) {
 
 func TestClient_RegisterUser_InvalidRequest(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -234,9 +234,9 @@ func TestClient_RegisterUser_InvalidRequest(t *testing.T) {
 
 func TestClient_Authenticate_InvalidRequest(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -274,9 +274,9 @@ func TestClient_Authenticate_InvalidRequest(t *testing.T) {
 
 func TestClient_ConfirmSignUp_InvalidRequest(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -314,9 +314,9 @@ func TestClient_ConfirmSignUp_InvalidRequest(t *testing.T) {
 
 func TestClient_RespondToMFAChallenge_InvalidRequest(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -331,8 +331,17 @@ func TestClient_RespondToMFAChallenge_InvalidRequest(t *testing.T) {
 		req  MFAChallengeRequest
 	}{
 		{
+			name: "missing username",
+			req: MFAChallengeRequest{
+				SessionToken:  "session-token",
+				MFACode:       "123456",
+				ChallengeType: MFAChallengeTypeSMS,
+			},
+		},
+		{
 			name: "missing session token",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				MFACode:       "123456",
 				ChallengeType: MFAChallengeTypeSMS,
 			},
@@ -340,6 +349,7 @@ func TestClient_RespondToMFAChallenge_InvalidRequest(t *testing.T) {
 		{
 			name: "missing mfa code",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				SessionToken:  "session-token",
 				ChallengeType: MFAChallengeTypeSMS,
 			},
@@ -347,6 +357,7 @@ func TestClient_RespondToMFAChallenge_InvalidRequest(t *testing.T) {
 		{
 			name: "invalid challenge type",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				SessionToken:  "session-token",
 				MFACode:       "123456",
 				ChallengeType: MFAChallengeType("INVALID"),
@@ -364,9 +375,9 @@ func TestClient_RespondToMFAChallenge_InvalidRequest(t *testing.T) {
 
 func TestClient_ValidateToken_InvalidToken(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -404,9 +415,9 @@ func TestClient_ValidateToken_InvalidToken(t *testing.T) {
 
 func TestClient_GetUserByAccessToken_InvalidToken(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -423,9 +434,9 @@ func TestClient_GetUserByAccessToken_InvalidToken(t *testing.T) {
 
 func TestClient_RefreshToken_InvalidRequest(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -443,9 +454,9 @@ func TestClient_RefreshToken_InvalidRequest(t *testing.T) {
 
 func TestClient_ForgotPassword_InvalidRequest(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -463,9 +474,9 @@ func TestClient_ForgotPassword_InvalidRequest(t *testing.T) {
 
 func TestClient_ConfirmForgotPassword_InvalidRequest(t *testing.T) {
 	cfg := Config{
-		Region:       "us-east-1",
-		UserPoolID:   "us-east-1_TestPool123",
-		ClientID:     "test-client-id",
+		Region:        "us-east-1",
+		UserPoolID:    "us-east-1_TestPool123",
+		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
 	log := &mockLogger{}
@@ -512,10 +523,10 @@ func TestClient_ConfirmForgotPassword_InvalidRequest(t *testing.T) {
 
 func TestHandleCognitoError(t *testing.T) {
 	tests := []struct {
-		name          string
-		err           error
-		expectedCode  string
-		expectedType  string
+		name         string
+		err          error
+		expectedCode string
+		expectedType string
 	}{
 		{
 			name:         "NotAuthorizedException",
@@ -576,7 +587,7 @@ func TestHandleCognitoError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := handleCognitoError(tt.err)
 			assert.NotNil(t, result)
-			
+
 			if tt.expectedCode != "" {
 				cognitoErr, ok := result.(*CognitoError)
 				assert.True(t, ok, "expected CognitoError")

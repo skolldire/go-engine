@@ -4,8 +4,11 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 )
 
 // validateConfig valida la configuración del cliente Cognito
@@ -53,7 +56,7 @@ func validateRegisterRequest(req RegisterUserRequest) error {
 		return fmt.Errorf("%w: username", ErrMissingRequiredField)
 	}
 	if req.Email == "" {
-		return fmt.Errorf("%w: email", ErrInvalidEmail)
+		return fmt.Errorf("%w: email", ErrMissingRequiredField)
 	}
 	if req.Password == "" {
 		return fmt.Errorf("%w: password", ErrMissingRequiredField)
@@ -80,6 +83,9 @@ func validateAuthenticateRequest(req AuthenticateRequest) error {
 
 // validateMFAChallengeRequest valida el request de desafío MFA
 func validateMFAChallengeRequest(req MFAChallengeRequest) error {
+	if req.Username == "" {
+		return fmt.Errorf("%w: username", ErrMissingRequiredField)
+	}
 	if req.SessionToken == "" {
 		return fmt.Errorf("%w: session_token", ErrMissingRequiredField)
 	}
@@ -144,21 +150,19 @@ func getFloat64Claim(claims map[string]interface{}, key string) float64 {
 
 // handleCognitoError maneja errores de Cognito y los convierte a errores tipados
 // Retorna CognitoError o MFARequiredError según el caso
+// Usa errors.As para type assertions robustas en lugar de string matching
 func handleCognitoError(err error) error {
 	if err == nil {
 		return nil
 	}
 
-	// Intentar extraer información del error de AWS SDK
-	errStr := err.Error()
-
-	// Detectar errores específicos de Cognito
-	switch {
-	case strings.Contains(errStr, "NotAuthorizedException"):
-		if strings.Contains(errStr, "MFA") || strings.Contains(errStr, "challenge") {
-			// Este es un caso especial: MFA requerido
-			// Necesitamos extraer el SessionToken del error
-			// Por ahora retornamos un error genérico que será manejado en Authenticate
+	// Usar errors.As para type assertions robustas
+	var ae *types.NotAuthorizedException
+	if errors.As(err, &ae) {
+		// Verificar si es un error de MFA requerido
+		if ae.Message != nil && (strings.Contains(*ae.Message, "MFA") || strings.Contains(*ae.Message, "challenge")) {
+			// El SessionToken generalmente viene en el resultado de InitiateAuth, no en el error
+			// Se manejará en el método Authenticate cuando se detecte el ChallengeName
 			return &CognitoError{
 				Code:        "MFARequired",
 				Message:     "MFA authentication required",
@@ -172,73 +176,88 @@ func handleCognitoError(err error) error {
 			StatusCode:  401,
 			OriginalErr: err,
 		}
+	}
 
-	case strings.Contains(errStr, "InvalidParameterException"):
+	var ip *types.InvalidParameterException
+	if errors.As(err, &ip) {
 		return &CognitoError{
 			Code:        "InvalidParameter",
 			Message:     "invalid parameter provided",
 			StatusCode:  400,
 			OriginalErr: err,
 		}
+	}
 
-	case strings.Contains(errStr, "ResourceNotFoundException"):
+	var rnf *types.ResourceNotFoundException
+	if errors.As(err, &rnf) {
 		return &CognitoError{
 			Code:        "ResourceNotFound",
 			Message:     "resource not found",
 			StatusCode:  404,
 			OriginalErr: err,
 		}
+	}
 
-	case strings.Contains(errStr, "UsernameExistsException"):
+	var uee *types.UsernameExistsException
+	if errors.As(err, &uee) {
 		return &CognitoError{
 			Code:        "UsernameExists",
 			Message:     "username already exists",
 			StatusCode:  400,
 			OriginalErr: ErrUserAlreadyExists,
 		}
+	}
 
-	case strings.Contains(errStr, "UserNotFoundException"):
+	var unf *types.UserNotFoundException
+	if errors.As(err, &unf) {
 		return &CognitoError{
 			Code:        "UserNotFound",
 			Message:     "user not found",
 			StatusCode:  404,
 			OriginalErr: ErrUserNotFound,
 		}
+	}
 
-	case strings.Contains(errStr, "CodeMismatchException"):
+	var cm *types.CodeMismatchException
+	if errors.As(err, &cm) {
 		return &CognitoError{
 			Code:        "CodeMismatch",
 			Message:     "confirmation code does not match",
 			StatusCode:  400,
 			OriginalErr: ErrInvalidConfirmationCode,
 		}
+	}
 
-	case strings.Contains(errStr, "ExpiredCodeException"):
+	var ec *types.ExpiredCodeException
+	if errors.As(err, &ec) {
 		return &CognitoError{
 			Code:        "ExpiredCode",
 			Message:     "confirmation code has expired",
 			StatusCode:  400,
 			OriginalErr: ErrCodeExpired,
 		}
+	}
 
-	case strings.Contains(errStr, "LimitExceededException"):
+	var le *types.LimitExceededException
+	if errors.As(err, &le) {
 		return &CognitoError{
 			Code:        "LimitExceeded",
 			Message:     "rate limit exceeded",
 			StatusCode:  429,
 			OriginalErr: err,
 		}
+	}
 
-	case strings.Contains(errStr, "TooManyRequestsException"):
+	var tmr *types.TooManyRequestsException
+	if errors.As(err, &tmr) {
 		return &CognitoError{
 			Code:        "TooManyRequests",
 			Message:     "too many requests",
 			StatusCode:  429,
 			OriginalErr: ErrTooManyRequests,
 		}
-
-	default:
-		// Retornar error original si no se puede mapear
-		return err
 	}
+
+	// Retornar error original si no se puede mapear
+	return err
 }

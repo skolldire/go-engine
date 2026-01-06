@@ -5,8 +5,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/cognito"
+	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/s3"
@@ -54,7 +54,7 @@ type Config struct {
 	MemcachedClients []map[string]memcached.Config  `mapstructure:"memcached_clients"`
 	MongoDBClients   []map[string]mongodb.Config    `mapstructure:"mongodb_clients"`
 	RabbitMQClients  []map[string]rabbitmq.Config   `mapstructure:"rabbitmq_clients"`
-	Cognito          *cognito.Config                 `mapstructure:"cognito"`
+	Cognito          *cognito.Config                `mapstructure:"cognito"`
 	Repositories     map[string]interface{}         `mapstructure:"repositories"`
 	Cases            map[string]interface{}         `mapstructure:"cases"`
 	Endpoints        map[string]interface{}         `mapstructure:"endpoints"`

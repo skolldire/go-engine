@@ -21,7 +21,7 @@ type Config struct {
 	ClientSecret string `mapstructure:"client_secret" json:"-"` // Opcional, carga desde ${VAR_NAME}
 
 	// JWT Configuration
-	JWKSUrl        string        `mapstructure:"jwks_url" json:"jwks_url"` // Auto-generado si está vacío
+	JWKSUrl         string        `mapstructure:"jwks_url" json:"jwks_url"` // Auto-generado si está vacío
 	TokenExpiration time.Duration `mapstructure:"token_expiration" json:"token_expiration"`
 
 	// Resilience
@@ -78,12 +78,12 @@ type AuthTokens struct {
 // Cognito genera y firma los tokens JWT automáticamente
 // Este cliente solo valida y extrae los claims
 type TokenClaims struct {
-	Sub          string                 `json:"sub"`              // User ID (Cognito User Sub)
-	Email        string                 `json:"email"`
-	EmailVerified bool                  `json:"email_verified"`
-	Username     string                 `json:"cognito:username"`
-	Groups       []string               `json:"cognito:groups"`   // Grupos de Cognito
-	CustomClaims map[string]interface{} `json:"-"`                // Claims personalizados
+	Sub           string                 `json:"sub"` // User ID (Cognito User Sub)
+	Email         string                 `json:"email"`
+	EmailVerified bool                   `json:"email_verified"`
+	Username      string                 `json:"cognito:username"`
+	Groups        []string               `json:"cognito:groups"` // Grupos de Cognito
+	CustomClaims  map[string]interface{} `json:"-"`              // Claims personalizados
 
 	// Standard JWT Claims (generados por Cognito)
 	Iss      string `json:"iss"`       // Issuer (Cognito User Pool URL)
@@ -97,18 +97,18 @@ type TokenClaims struct {
 type MFAChallengeType string
 
 const (
-	MFAChallengeTypeSMS          MFAChallengeType = "SMS_MFA"
+	MFAChallengeTypeSMS           MFAChallengeType = "SMS_MFA"
 	MFAChallengeTypeSoftwareToken MFAChallengeType = "SOFTWARE_TOKEN_MFA"
 )
 
 // RegisterUserRequest representa la solicitud de registro
 type RegisterUserRequest struct {
-	Username         string            `json:"username"`
-	Email            string            `json:"email"`
-	Password         string            `json:"password"`
-	PhoneNumber      string            `json:"phone_number,omitempty"`
-	Attributes       map[string]string `json:"attributes,omitempty"`
-	TemporaryPassword bool             `json:"temporary_password,omitempty"`
+	Username          string            `json:"username"`
+	Email             string            `json:"email"`
+	Password          string            `json:"password"`
+	PhoneNumber       string            `json:"phone_number,omitempty"`
+	Attributes        map[string]string `json:"attributes,omitempty"`
+	TemporaryPassword bool              `json:"temporary_password,omitempty"`
 }
 
 // AuthenticateRequest representa la solicitud de autenticación
@@ -119,8 +119,9 @@ type AuthenticateRequest struct {
 
 // MFAChallengeRequest representa la solicitud de desafío MFA
 type MFAChallengeRequest struct {
-	SessionToken  string          `json:"session_token"` // Token de sesión de Cognito
-	MFACode       string          `json:"mfa_code"`      // Código recibido (SMS o TOTP)
+	Username      string           `json:"username"`      // Username requerido por Cognito
+	SessionToken  string           `json:"session_token"` // Token de sesión de Cognito
+	MFACode       string           `json:"mfa_code"`      // Código recibido (SMS o TOTP)
 	ChallengeType MFAChallengeType `json:"challenge_type"`
 }
 
@@ -151,26 +152,26 @@ type RefreshTokenRequest struct {
 var (
 	// Errores de autenticación
 	ErrInvalidCredentials      = errors.New("invalid credentials")
-	ErrUserNotFound             = errors.New("user not found")
-	ErrUserAlreadyExists        = errors.New("user already exists")
-	ErrUserNotConfirmed         = errors.New("user is not confirmed")
-	ErrInvalidToken             = errors.New("invalid token")
-	ErrExpiredToken             = errors.New("token expired")
-	ErrInvalidConfirmationCode  = errors.New("invalid confirmation code")
-	ErrCodeExpired              = errors.New("confirmation code expired")
-	ErrPasswordTooShort         = errors.New("password too short")
-	ErrPasswordTooWeak          = errors.New("password does not meet requirements")
-	ErrPasswordSameAsPrevious   = errors.New("new password must be different from previous")
+	ErrUserNotFound            = errors.New("user not found")
+	ErrUserAlreadyExists       = errors.New("user already exists")
+	ErrUserNotConfirmed        = errors.New("user is not confirmed")
+	ErrInvalidToken            = errors.New("invalid token")
+	ErrExpiredToken            = errors.New("token expired")
+	ErrInvalidConfirmationCode = errors.New("invalid confirmation code")
+	ErrCodeExpired             = errors.New("confirmation code expired")
+	ErrPasswordTooShort        = errors.New("password too short")
+	ErrPasswordTooWeak         = errors.New("password does not meet requirements")
+	ErrPasswordSameAsPrevious  = errors.New("new password must be different from previous")
 
 	// Errores de autorización
-	ErrUnauthorized        = errors.New("unauthorized")
-	ErrForbidden           = errors.New("forbidden")
-	ErrInvalidAccessToken  = errors.New("invalid access token")
+	ErrUnauthorized       = errors.New("unauthorized")
+	ErrForbidden          = errors.New("forbidden")
+	ErrInvalidAccessToken = errors.New("invalid access token")
 
 	// Errores de configuración
-	ErrInvalidConfig     = errors.New("invalid configuration")
-	ErrUserPoolNotFound  = errors.New("user pool not found")
-	ErrClientNotFound    = errors.New("client not found")
+	ErrInvalidConfig    = errors.New("invalid configuration")
+	ErrUserPoolNotFound = errors.New("user pool not found")
+	ErrClientNotFound   = errors.New("client not found")
 
 	// Errores de red/resiliencia
 	ErrServiceUnavailable = errors.New("cognito service unavailable")

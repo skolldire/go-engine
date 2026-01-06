@@ -192,6 +192,7 @@ func TestValidateMFAChallengeRequest(t *testing.T) {
 		{
 			name: "valid SMS request",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				SessionToken:  "session-token",
 				MFACode:       "123456",
 				ChallengeType: MFAChallengeTypeSMS,
@@ -201,6 +202,7 @@ func TestValidateMFAChallengeRequest(t *testing.T) {
 		{
 			name: "valid TOTP request",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				SessionToken:  "session-token",
 				MFACode:       "123456",
 				ChallengeType: MFAChallengeTypeSoftwareToken,
@@ -208,8 +210,18 @@ func TestValidateMFAChallengeRequest(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "missing username",
+			req: MFAChallengeRequest{
+				SessionToken:  "session-token",
+				MFACode:       "123456",
+				ChallengeType: MFAChallengeTypeSMS,
+			},
+			wantErr: true,
+		},
+		{
 			name: "missing session token",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				MFACode:       "123456",
 				ChallengeType: MFAChallengeTypeSMS,
 			},
@@ -218,6 +230,7 @@ func TestValidateMFAChallengeRequest(t *testing.T) {
 		{
 			name: "missing mfa code",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				SessionToken:  "session-token",
 				ChallengeType: MFAChallengeTypeSMS,
 			},
@@ -226,6 +239,7 @@ func TestValidateMFAChallengeRequest(t *testing.T) {
 		{
 			name: "invalid challenge type",
 			req: MFAChallengeRequest{
+				Username:      "testuser",
 				SessionToken:  "session-token",
 				MFACode:       "123456",
 				ChallengeType: MFAChallengeType("INVALID"),
@@ -271,8 +285,8 @@ func TestComputeSecretHash(t *testing.T) {
 
 func TestGetStringClaim(t *testing.T) {
 	claims := map[string]interface{}{
-		"sub":  "user-id-123",
-		"email": "test@example.com",
+		"sub":    "user-id-123",
+		"email":  "test@example.com",
 		"number": 123,
 	}
 
@@ -284,11 +298,11 @@ func TestGetStringClaim(t *testing.T) {
 
 func TestGetBoolClaim(t *testing.T) {
 	claims := map[string]interface{}{
-		"verified": true,
-		"enabled":  false,
-		"string_true": "true",
+		"verified":     true,
+		"enabled":      false,
+		"string_true":  "true",
 		"string_false": "false",
-		"number": 123,
+		"number":       123,
 	}
 
 	assert.True(t, getBoolClaim(claims, "verified"))
@@ -321,8 +335,8 @@ func TestGetStringSliceClaim(t *testing.T) {
 
 func TestGetFloat64Claim(t *testing.T) {
 	claims := map[string]interface{}{
-		"exp": 1234567890.0,
-		"iat": float64(1234567890),
+		"exp":    1234567890.0,
+		"iat":    float64(1234567890),
 		"string": "not-a-number",
 	}
 

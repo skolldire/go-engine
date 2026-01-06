@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/skolldire/go-engine/pkg/app/router"
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/cognito"
+	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/s3"
@@ -281,6 +281,11 @@ func (e *Engine) GetValidator() *validator.Validate {
 
 func (e *Engine) GetCloudClient() awsclient.Client {
 	return e.CloudClient
+}
+
+// GetCognito retorna el cliente Cognito
+func (e *Engine) GetCognito() cognito.Service {
+	return e.CognitoClient
 }
 
 // GetCustomClient retrieves a custom client by name
