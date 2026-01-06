@@ -168,9 +168,7 @@ func TestAppBuilder_WithCustomClient_PreservedAfterInit(t *testing.T) {
 	}
 
 	// Call Init() - this should preserve the existing CustomClients
-	result := app.Init()
-
-	// Verify that CustomClients were preserved
+	result := app.Init() // Verify that CustomClients were preserved
 	// Note: Init() may fail due to AWS config, but CustomClients should still be preserved
 	if result.Engine.Services != nil {
 		preserved := result.Engine.Services.CustomClients["preserved-client"]

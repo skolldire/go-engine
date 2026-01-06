@@ -8,6 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
+	"github.com/skolldire/go-engine/pkg/clients/cognito"
 	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/clients/s3"
@@ -59,7 +60,8 @@ type Engine struct {
 	Validator    *validator.Validate
 
 	// Cloud integration client
-	CloudClient awsclient.Client // Optional: HTTP-like AWS integration facade
+	CloudClient   awsclient.Client // Optional: HTTP-like AWS integration facade
+	CognitoClient cognito.Service  // Optional: Cognito authentication client
 }
 
 func (e *Engine) GetErrors() []error {
