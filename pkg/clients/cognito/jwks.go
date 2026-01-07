@@ -103,13 +103,19 @@ func (c *JWKSClient) fetchKeys(ctx context.Context) (map[string]*rsa.PublicKey, 
 			continue
 		}
 
-		// Convertir a RSA public key
-		var pubkey rsa.PublicKey
-		if err := key.Raw(&pubkey); err != nil {
+		// Obtener la clave pública usando PublicKey() (método recomendado)
+		pubKey, err := key.PublicKey()
+		if err != nil {
 			continue
 		}
 
-		keys[kid] = &pubkey
+		// Extraer la clave RSA usando Raw() en el Key público
+		var rsaPubKey rsa.PublicKey
+		if err := pubKey.Raw(&rsaPubKey); err != nil {
+			continue
+		}
+
+		keys[kid] = &rsaPubKey
 	}
 
 	return keys, nil
