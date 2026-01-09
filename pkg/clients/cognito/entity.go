@@ -148,6 +148,22 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// SoftwareTokenAssociation representa la asociación de un token TOTP
+type SoftwareTokenAssociation struct {
+	SecretCode string `json:"secret_code"` // Código secreto para configuración manual
+	QRCode     string `json:"qr_code"`     // Base64 del código QR (PNG)
+	Session    string `json:"session"`     // Token de sesión para verificación
+}
+
+// MFAStatus representa el estado de MFA de un usuario
+type MFAStatus struct {
+	MFAEnabled      bool     `json:"mfa_enabled"`      // Si MFA está habilitado
+	MFATypes        []string `json:"mfa_types"`        // Tipos configurados: ["SMS_MFA", "SOFTWARE_TOKEN_MFA"]
+	PreferredMethod string   `json:"preferred_method"` // Método preferido: "SMS_MFA" o "SOFTWARE_TOKEN_MFA"
+	SMSEnabled      bool     `json:"sms_enabled"`      // Si SMS MFA está habilitado
+	TOTPEnabled     bool     `json:"totp_enabled"`     // Si TOTP está habilitado y configurado
+}
+
 // Errores del dominio
 var (
 	// Errores de autenticación
@@ -183,6 +199,13 @@ var (
 	ErrInvalidPhoneNumber   = errors.New("invalid phone number format")
 	ErrInvalidUsername      = errors.New("invalid username format")
 	ErrMissingRequiredField = errors.New("missing required field")
+
+	// Errores específicos de MFA
+	ErrMFAAlreadyEnabled        = errors.New("MFA already enabled")
+	ErrMFAConfigurationRequired = errors.New("TOTP configuration required")
+	ErrInvalidMFACode           = errors.New("invalid MFA code")
+	ErrMFACodeMismatch          = errors.New("MFA code mismatch")
+	ErrMFACodeExpired           = errors.New("MFA code expired")
 )
 
 // CognitoError representa un error específico de Cognito
@@ -250,4 +273,14 @@ type Service interface {
 	RefreshToken(ctx context.Context, req RefreshTokenRequest) (*AuthTokens, error)
 	ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error
 	ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPasswordRequest) error
+
+	// MVP 0 - Gestión Completa de MFA
+	AssociateSoftwareToken(ctx context.Context, accessToken string) (*SoftwareTokenAssociation, error)
+	VerifySoftwareToken(ctx context.Context, accessToken, userCode, session string) error
+	SetUserMFAPreference(ctx context.Context, accessToken string, smsEnabled, totpEnabled bool) error
+	GetUserMFAStatus(ctx context.Context, accessToken string) (*MFAStatus, error)
+
+	// MVP 0 - Gestión de Sesiones
+	SignOut(ctx context.Context, accessToken string) error
+	GlobalSignOut(ctx context.Context, accessToken string) error
 }
