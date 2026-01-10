@@ -158,9 +158,24 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 	if err != nil {
 		cognitoErr := handleCognitoError(err)
 		if cognitoErr, ok := cognitoErr.(*CognitoError); ok && cognitoErr.Code == "MFARequired" {
+			sessionToken := ""
+			challengeType := MFAChallengeTypeSMS
+
+			if result != nil {
+				if result.Session != nil {
+					sessionToken = *result.Session
+				}
+				if result.ChallengeName != "" {
+					if string(result.ChallengeName) == string(MFAChallengeTypeSoftwareToken) {
+						challengeType = MFAChallengeTypeSoftwareToken
+					}
+				}
+			}
+
 			return nil, &MFARequiredError{
+				SessionToken:  sessionToken,
 				Message:       "MFA authentication required",
-				ChallengeType: MFAChallengeTypeSMS,
+				ChallengeType: challengeType,
 			}
 		}
 		return nil, cognitoErr
