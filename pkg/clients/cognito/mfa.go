@@ -33,6 +33,11 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 		}
 	}
 
+	if c.clientSecret != "" {
+		secretHash := c.computeSecretHash(req.Username)
+		challengeParams["SECRET_HASH"] = secretHash
+	}
+
 	input := &cognitoidentityprovider.RespondToAuthChallengeInput{
 		ClientId:           aws.String(c.config.ClientID),
 		ChallengeName:      types.ChallengeNameType(string(req.ChallengeType)),
@@ -165,31 +170,35 @@ func (c *Client) AssociateSoftwareToken(ctx context.Context, accessToken string)
 }
 
 func (c *Client) VerifySoftwareToken(ctx context.Context, accessToken, userCode, session string) error {
-	if accessToken == "" {
-		return ErrInvalidAccessToken
-	}
 	if userCode == "" {
 		return ErrMissingRequiredField
 	}
-	if session == "" {
+	if accessToken == "" && session == "" {
 		return ErrMissingRequiredField
 	}
 
-	_, err := c.ValidateToken(ctx, accessToken)
-	if err != nil {
-		return ErrInvalidToken
+	if accessToken != "" {
+		_, err := c.ValidateToken(ctx, accessToken)
+		if err != nil {
+			return ErrInvalidToken
+		}
 	}
 
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.VerifySoftwareTokenInput{
-		AccessToken: aws.String(accessToken),
-		UserCode:    aws.String(userCode),
-		Session:     aws.String(session),
+		UserCode: aws.String(userCode),
 	}
 
-	_, err = c.executeOperation(ctx, "VerifySoftwareToken", func() (interface{}, error) {
+	if accessToken != "" {
+		input.AccessToken = aws.String(accessToken)
+	}
+	if session != "" {
+		input.Session = aws.String(session)
+	}
+
+	_, err := c.executeOperation(ctx, "VerifySoftwareToken", func() (interface{}, error) {
 		return c.cognitoClient.VerifySoftwareToken(ctx, input)
 	})
 
@@ -197,6 +206,11 @@ func (c *Client) VerifySoftwareToken(ctx context.Context, accessToken, userCode,
 		var codeMismatch *types.CodeMismatchException
 		if errors.As(err, &codeMismatch) {
 			return ErrMFACodeMismatch
+		}
+
+		var expiredCode *types.ExpiredCodeException
+		if errors.As(err, &expiredCode) {
+			return ErrMFACodeExpired
 		}
 
 		var invalidCode *types.InvalidParameterException

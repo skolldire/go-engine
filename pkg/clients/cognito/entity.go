@@ -146,6 +146,7 @@ type ConfirmForgotPasswordRequest struct {
 // RefreshTokenRequest representa la solicitud de renovación de token
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
+	Username     string `json:"username,omitempty"` // Requerido si ClientSecret está configurado
 }
 
 // SoftwareTokenAssociation representa la asociación de un token TOTP

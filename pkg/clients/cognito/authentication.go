@@ -72,12 +72,14 @@ func (c *Client) RegisterUser(ctx context.Context, req RegisterUserRequest) (*Us
 	}
 
 	if c.logging {
-		c.logger.Info(ctx, "User registered successfully",
-			map[string]interface{}{
-				"user_id":  user.ID,
-				"username": user.Username,
-				"email":    user.Email,
-			})
+		logFields := map[string]interface{}{
+			"user_id":  user.ID,
+			"username": user.Username,
+		}
+		if user.Email != "" {
+			logFields["email"] = maskEmail(user.Email)
+		}
+		c.logger.Info(ctx, "User registered successfully", logFields)
 	}
 
 	return user, nil

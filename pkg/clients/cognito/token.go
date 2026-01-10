@@ -129,30 +129,41 @@ func (c *Client) GetUserByAccessToken(ctx context.Context, accessToken string) (
 		return nil, handleCognitoError(err)
 	}
 
+	if result == nil {
+		return nil, fmt.Errorf("get user result is nil")
+	}
+
 	user := &User{
-		ID:         *result.Username,
-		Username:   *result.Username,
+		ID:         "",
+		Username:   "",
 		Enabled:    true,
 		Attributes: make(map[string]string),
 		Status:     UserStatusConfirmed,
 	}
 
+	if result.Username != nil {
+		user.ID = *result.Username
+		user.Username = *result.Username
+	}
+
 	for _, attr := range result.UserAttributes {
-		if attr.Name != nil && attr.Value != nil {
-			switch *attr.Name {
-			case "sub":
-				user.ID = *attr.Value
-			case "email":
-				user.Email = *attr.Value
-			case "email_verified":
-				user.EmailVerified = *attr.Value == "true"
-			case "phone_number":
-				user.PhoneNumber = *attr.Value
-			case "phone_number_verified":
-				user.PhoneVerified = *attr.Value == "true"
-			default:
-				user.Attributes[*attr.Name] = *attr.Value
-			}
+		if attr.Name == nil || attr.Value == nil {
+			continue
+		}
+
+		switch *attr.Name {
+		case "sub":
+			user.ID = *attr.Value
+		case "email":
+			user.Email = *attr.Value
+		case "email_verified":
+			user.EmailVerified = *attr.Value == "true"
+		case "phone_number":
+			user.PhoneNumber = *attr.Value
+		case "phone_number_verified":
+			user.PhoneVerified = *attr.Value == "true"
+		default:
+			user.Attributes[*attr.Name] = *attr.Value
 		}
 	}
 
@@ -164,11 +175,20 @@ func (c *Client) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*Au
 		return nil, ErrMissingRequiredField
 	}
 
+	if c.clientSecret != "" && req.Username == "" {
+		return nil, fmt.Errorf("%w: username required when client secret is configured", ErrMissingRequiredField)
+	}
+
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
 	authParams := map[string]string{
 		"REFRESH_TOKEN": req.RefreshToken,
+	}
+
+	if c.clientSecret != "" && req.Username != "" {
+		secretHash := c.computeSecretHash(req.Username)
+		authParams["SECRET_HASH"] = secretHash
 	}
 
 	input := &cognitoidentityprovider.InitiateAuthInput{
@@ -188,14 +208,28 @@ func (c *Client) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*Au
 		return nil, handleCognitoError(err)
 	}
 
-	if result.AuthenticationResult == nil {
+	if result == nil || result.AuthenticationResult == nil {
 		return nil, fmt.Errorf("authentication result is nil")
 	}
 
+	safeString := func(s *string) string {
+		if s == nil {
+			return ""
+		}
+		return *s
+	}
+
+	if result.AuthenticationResult.AccessToken == nil {
+		return nil, fmt.Errorf("access token is nil")
+	}
+	if result.AuthenticationResult.IdToken == nil {
+		return nil, fmt.Errorf("id token is nil")
+	}
+
 	tokens := &AuthTokens{
-		AccessToken:  *result.AuthenticationResult.AccessToken,
-		RefreshToken: *result.AuthenticationResult.RefreshToken,
-		IDToken:      *result.AuthenticationResult.IdToken,
+		AccessToken:  safeString(result.AuthenticationResult.AccessToken),
+		RefreshToken: safeString(result.AuthenticationResult.RefreshToken),
+		IDToken:      safeString(result.AuthenticationResult.IdToken),
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(result.AuthenticationResult.ExpiresIn),
 	}
