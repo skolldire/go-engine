@@ -261,3 +261,16 @@ func handleCognitoError(err error) error {
 	// Retornar error original si no se puede mapear
 	return err
 }
+
+// maskEmail enmascara el email para logging, ocultando la parte local antes del @
+// Ejemplo: "user@example.com" -> "****@example.com"
+func maskEmail(email string) string {
+	if email == "" {
+		return ""
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return "****"
+	}
+	return "****@" + parts[1]
+}
