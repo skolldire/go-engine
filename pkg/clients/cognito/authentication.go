@@ -188,10 +188,24 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 		return nil, fmt.Errorf("authentication result is nil")
 	}
 
+	safeString := func(s *string) string {
+		if s == nil {
+			return ""
+		}
+		return *s
+	}
+
+	if result.AuthenticationResult.AccessToken == nil {
+		return nil, fmt.Errorf("access token is nil")
+	}
+	if result.AuthenticationResult.IdToken == nil {
+		return nil, fmt.Errorf("id token is nil")
+	}
+
 	tokens := &AuthTokens{
-		AccessToken:  *result.AuthenticationResult.AccessToken,
-		RefreshToken: *result.AuthenticationResult.RefreshToken,
-		IDToken:      *result.AuthenticationResult.IdToken,
+		AccessToken:  safeString(result.AuthenticationResult.AccessToken),
+		RefreshToken: safeString(result.AuthenticationResult.RefreshToken),
+		IDToken:      safeString(result.AuthenticationResult.IdToken),
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(result.AuthenticationResult.ExpiresIn),
 	}
