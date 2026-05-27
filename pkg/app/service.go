@@ -23,6 +23,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/mongodb"
 	"github.com/skolldire/go-engine/pkg/database/redis"
 	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
+	kafka "github.com/skolldire/go-engine/pkg/integration/kafka"
 	"github.com/skolldire/go-engine/pkg/integration/observability"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
@@ -123,6 +124,17 @@ func (c *App) Init() *App {
 
 	// Initialize CognitoClient (optional - can be nil if not configured)
 	c.Engine.CognitoClient = initializer.createClientCognito(c.Engine.Conf.Cognito)
+
+	// Initialize KafkaClient (optional - can be nil if not configured)
+	if c.Engine.Conf.Kafka != nil {
+		kafkaClient, err := kafka.NewClient(*c.Engine.Conf.Kafka, c.Engine.Log)
+		if err != nil {
+			initializer.setError(err)
+		} else {
+			c.Engine.KafkaProducer = kafkaClient
+			c.Engine.KafkaConsumer = kafkaClient
+		}
+	}
 
 	// Initialize config registry using sync.Once to ensure thread-safety
 	// and prevent overwriting if GetConfigs() was called first

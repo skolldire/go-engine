@@ -26,6 +26,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/health"
 	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
+	kafka "github.com/skolldire/go-engine/pkg/integration/kafka"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
@@ -64,6 +65,10 @@ type Engine struct {
 	// Cloud integration client
 	CloudClient   awsclient.Client // Optional: HTTP-like AWS integration facade
 	CognitoClient cognito.Service  // Optional: Cognito authentication client
+
+	// Kafka clients
+	KafkaProducer kafka.Producer
+	KafkaConsumer kafka.Consumer
 }
 
 func (e *Engine) GetErrors() []error {
@@ -288,6 +293,14 @@ func (e *Engine) GetCloudClient() awsclient.Client {
 // GetCognito retorna el cliente Cognito
 func (e *Engine) GetCognito() cognito.Service {
 	return e.CognitoClient
+}
+
+func (e *Engine) GetKafkaProducer() kafka.Producer {
+	return e.KafkaProducer
+}
+
+func (e *Engine) GetKafkaConsumer() kafka.Consumer {
+	return e.KafkaConsumer
 }
 
 func (e *Engine) GetHealthService() health.Service {
