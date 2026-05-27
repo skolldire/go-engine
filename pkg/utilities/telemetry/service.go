@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -80,18 +81,45 @@ func NewTelemetry(ctx context.Context, config Config) (Telemetry, error) {
 }
 
 func (t *telemetry) Counter(ctx context.Context, name string, value int64, attrs ...attribute.KeyValue) {
-	counter, _ := t.meter.Int64Counter(name)
-	counter.Add(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
+	if v, ok := t.counters.Load(name); ok {
+		v.(metric.Int64Counter).Add(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
+		return
+	}
+	c, err := t.meter.Int64Counter(name)
+	if err != nil {
+		log.Printf("[telemetry] warning: failed to create counter %q: %v", name, err)
+		return
+	}
+	actual, _ := t.counters.LoadOrStore(name, c)
+	actual.(metric.Int64Counter).Add(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
 }
 
 func (t *telemetry) Gauge(ctx context.Context, name string, value float64, attrs ...attribute.KeyValue) {
-	gauge, _ := t.meter.Float64Gauge(name)
-	gauge.Record(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
+	if v, ok := t.gauges.Load(name); ok {
+		v.(metric.Float64Gauge).Record(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
+		return
+	}
+	g, err := t.meter.Float64Gauge(name)
+	if err != nil {
+		log.Printf("[telemetry] warning: failed to create gauge %q: %v", name, err)
+		return
+	}
+	actual, _ := t.gauges.LoadOrStore(name, g)
+	actual.(metric.Float64Gauge).Record(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
 }
 
 func (t *telemetry) Histogram(ctx context.Context, name string, value float64, attrs ...attribute.KeyValue) {
-	histogram, _ := t.meter.Float64Histogram(name)
-	histogram.Record(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
+	if v, ok := t.histograms.Load(name); ok {
+		v.(metric.Float64Histogram).Record(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
+		return
+	}
+	h, err := t.meter.Float64Histogram(name)
+	if err != nil {
+		log.Printf("[telemetry] warning: failed to create histogram %q: %v", name, err)
+		return
+	}
+	actual, _ := t.histograms.LoadOrStore(name, h)
+	actual.(metric.Float64Histogram).Record(ctx, value, metric.WithAttributes(append(t.attrs, attrs...)...))
 }
 
 func (t *telemetry) Span(ctx context.Context, name string, fn func(ctx context.Context) error, attrs ...attribute.KeyValue) error {

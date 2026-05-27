@@ -2,11 +2,9 @@ package app
 
 import (
 	"context"
-	"os"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/clients/cognito"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
@@ -30,7 +28,6 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
-	"go.elastic.co/ecslogrus"
 )
 
 type clients struct {
@@ -41,10 +38,7 @@ type clients struct {
 }
 
 func (c *App) GetConfigs() *App {
-	tracer := logrus.New()
-	tracer.SetOutput(os.Stdout)
-	tracer.SetFormatter(&ecslogrus.Formatter{})
-	tracer.Level = logrus.DebugLevel
+	tracer := newDefaultLogger()
 
 	v := viper.NewService(tracer)
 	conf, err := v.Apply()
@@ -427,7 +421,7 @@ func (i *clients) createClientsRabbitMQ(configs []map[string]rabbitmq.Config) ma
 	return rabbitMQClients
 }
 
-func setLogLevel(c logger.Config, l *logrus.Logger) logger.Service {
+func setLogLevel(c logger.Config, l logger.LogWriter) logger.Service {
 	return logger.NewService(logger.Config{
 		Level: c.Level,
 		Path:  c.Path,

@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/config/viper"
 	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/health"
 	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"go.elastic.co/ecslogrus"
 )
 
 type AppBuilder struct {
@@ -49,15 +47,10 @@ func (b *AppBuilder) WithConfigs() *AppBuilder {
 }
 
 func (b *AppBuilder) WithDynamicConfig() *AppBuilder {
-	cfgLogger := logrus.New()
-	cfgLogger.SetOutput(os.Stdout)
-	cfgLogger.SetFormatter(&ecslogrus.Formatter{})
-	// Use InfoLevel as default, can be overridden by config
-	cfgLogger.Level = logrus.InfoLevel
+	cfgLogger := newDefaultLogger()
 
 	v := viper.NewService(cfgLogger)
 
-	// Derive log level from environment or use default
 	logLevel := os.Getenv("LOG_LEVEL")
 	if logLevel == "" {
 		logLevel = "info"

@@ -9,7 +9,6 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/mitchellh/mapstructure"
-	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/config/dynamic"
 	"github.com/skolldire/go-engine/pkg/utilities/app_profile"
 	"github.com/skolldire/go-engine/pkg/utilities/file_utils"
@@ -17,12 +16,12 @@ import (
 	"github.com/spf13/viper"
 )
 
-func NewService(logger *logrus.Logger) Service {
+func NewService(log logger.LogWriter) Service {
 	once.Do(func() {
 		instance = &service{
-			propertyFiles: getPropertyFiles(logger),
-			path:          getConfigPath(logger),
-			log:           logger,
+			propertyFiles: getPropertyFiles(log),
+			path:          getConfigPath(log),
+			log:           log,
 		}
 	})
 	return instance
@@ -222,7 +221,7 @@ func (s *service) getPropertyFileName() string {
 	return "application"
 }
 
-func loadConfigFile(v *viper.Viper, path, name string, logger *logrus.Logger) error {
+func loadConfigFile(v *viper.Viper, path, name string, logger logger.LogWriter) error {
 	v.AddConfigPath(path)
 	v.SetConfigName(name)
 
@@ -259,14 +258,14 @@ func envVarDecodeHook() mapstructure.DecodeHookFunc {
 	}
 }
 
-func watchConfig(v *viper.Viper, logger *logrus.Logger) {
+func watchConfig(v *viper.Viper, logger logger.LogWriter) {
 	v.WatchConfig()
 	v.OnConfigChange(func(e fsnotify.Event) {
 		logger.Warnf("configuration file changed: %s", e.Name)
 	})
 }
 
-func getPropertyFiles(logger *logrus.Logger) []string {
+func getPropertyFiles(logger logger.LogWriter) []string {
 	requiredFiles := []string{"application.yaml"}
 	scopeFile := fmt.Sprintf("application-%s.yaml", app_profile.GetScopeValue())
 	profileFile := fmt.Sprintf("application-%s.yaml", app_profile.GetProfileByScope())
@@ -288,7 +287,7 @@ func getPropertyFiles(logger *logrus.Logger) []string {
 	return requiredFiles
 }
 
-func getConfigPath(logger *logrus.Logger) string {
+func getConfigPath(logger logger.LogWriter) string {
 	if path := os.Getenv("CONF_DIR"); path != "" {
 		logger.Debugf("using CONF_DIR: %s", path)
 		return path

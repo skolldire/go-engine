@@ -3,7 +3,6 @@ package viper
 import (
 	"sync"
 
-	"github.com/sirupsen/logrus"
 	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/clients/cognito"
 	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
@@ -71,7 +70,7 @@ type AwsConfig struct {
 type service struct {
 	propertyFiles []string
 	path          string
-	log           *logrus.Logger
+	log           logger.LogWriter
 }
 
 type GracefulShutdownConfig struct {

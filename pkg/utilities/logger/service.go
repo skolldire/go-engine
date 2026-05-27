@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,20 +20,36 @@ var defaultContextExtractor = func(ctx context.Context) map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func NewService(c Config, l *logrus.Logger) Service {
+// logrusUnwrapper is implemented by logrusadapter.adapter to expose the
+// underlying *logrus.Logger for format/output/caller configuration.
+type logrusUnwrapper interface {
+	UnwrapLogrus() *logrus.Logger
+}
+
+// NewService creates a Service backed by the provided LogWriter.
+// If l wraps a *logrus.Logger (e.g. via logrusadapter.New), the full
+// configuration in c (format, output, caller, exit func) is applied.
+// Otherwise, a fresh logrus.Logger is created and a warning is logged.
+func NewService(c Config, l LogWriter) Service {
+	var raw *logrus.Logger
 	if l == nil {
-		l = logrus.New()
+		raw = logrus.New()
+	} else if u, ok := l.(logrusUnwrapper); ok {
+		raw = u.UnwrapLogrus()
+	} else {
+		log.Printf("[logger] warning: LogWriter is not logrus-backed; format/output/caller options ignored")
+		raw = logrus.New()
 	}
 
-	configureLogger(l, c)
+	configureLogger(raw, c)
 
 	svc := &service{
-		Log:              l,
+		Log:              raw,
 		fields:           logrus.Fields{},
 		contextExtractor: getContextExtractor(c.ContextExtractor),
 	}
 
-	l.Info("Logger service initialized")
+	raw.Info("Logger service initialized")
 	return svc
 }
 

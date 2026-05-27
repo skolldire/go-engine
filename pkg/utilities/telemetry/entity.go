@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -41,6 +42,9 @@ type telemetry struct {
 	attrs          []attribute.KeyValue
 	traceProvider  *sdktrace.TracerProvider
 	metricProvider *sdkmetric.MeterProvider
+	counters       sync.Map // map[string]metric.Int64Counter
+	gauges         sync.Map // map[string]metric.Float64Gauge
+	histograms     sync.Map // map[string]metric.Float64Histogram
 }
 
 type Operation struct {

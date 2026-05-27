@@ -3,8 +3,6 @@ package health
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
 
 // HTTPHandler exposes health endpoints over HTTP.
@@ -23,11 +21,11 @@ func NewHTTPHandler(svc Service) *HTTPHandler {
 //	GET /ready → 200 if all dependencies are healthy, 503 otherwise
 //	GET /deps  → JSON with per-dependency status; 503 if any is down
 func (h *HTTPHandler) Routes() http.Handler {
-	r := chi.NewRouter()
-	r.Get("/live", h.liveHandler)
-	r.Get("/ready", h.readyHandler)
-	r.Get("/deps", h.depsHandler)
-	return r
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /live", h.liveHandler)
+	mux.HandleFunc("GET /ready", h.readyHandler)
+	mux.HandleFunc("GET /deps", h.depsHandler)
+	return mux
 }
 
 func (h *HTTPHandler) liveHandler(w http.ResponseWriter, _ *http.Request) {
