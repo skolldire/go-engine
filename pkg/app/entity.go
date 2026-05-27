@@ -23,6 +23,8 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/memcached"
 	"github.com/skolldire/go-engine/pkg/database/mongodb"
 	"github.com/skolldire/go-engine/pkg/database/redis"
+	"github.com/skolldire/go-engine/pkg/health"
+	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
 	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
@@ -286,6 +288,20 @@ func (e *Engine) GetCloudClient() awsclient.Client {
 // GetCognito retorna el cliente Cognito
 func (e *Engine) GetCognito() cognito.Service {
 	return e.CognitoClient
+}
+
+func (e *Engine) GetHealthService() health.Service {
+	if e.Services == nil {
+		return nil
+	}
+	return e.Services.Health
+}
+
+func (e *Engine) GetOTELProvider() pkgotel.Provider {
+	if e.Services == nil {
+		return nil
+	}
+	return e.Services.OTELProvider
 }
 
 // GetCustomClient retrieves a custom client by name

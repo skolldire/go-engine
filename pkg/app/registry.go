@@ -14,6 +14,8 @@ import (
 	"github.com/skolldire/go-engine/pkg/database/memcached"
 	"github.com/skolldire/go-engine/pkg/database/mongodb"
 	"github.com/skolldire/go-engine/pkg/database/redis"
+	"github.com/skolldire/go-engine/pkg/health"
+	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 )
 
 // ServiceRegistry holds all service clients in organized groups
@@ -44,6 +46,12 @@ type ServiceRegistry struct {
 
 	// Custom clients - generic storage for any custom client implementations
 	CustomClients map[string]interface{}
+
+	// Health service
+	Health health.Service
+
+	// OTel provider
+	OTELProvider pkgotel.Provider
 }
 
 // NewServiceRegistry creates a new empty service registry

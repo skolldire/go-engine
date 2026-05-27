@@ -1,7 +1,10 @@
 # Go Engine
 
-![GitHub Release](https://img.shields.io/github/v/release/skolldire/go-engine)
 ![Go Version](https://img.shields.io/github/go-mod/go-version/skolldire/go-engine)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Go Report Card](https://goreportcard.com/badge/github.com/skolldire/go-engine)
+[![Go Reference](https://pkg.go.dev/badge/github.com/skolldire/go-engine.svg)](https://pkg.go.dev/github.com/skolldire/go-engine)
+![GitHub Release](https://img.shields.io/github/v/release/skolldire/go-engine)
 
 **Go Engine** es un framework completo y moderno para construir aplicaciones empresariales en Go siguiendo principios de Clean Architecture. Proporciona una base sólida con integraciones listas para usar con servicios AWS, bases de datos, mensajería y autenticación.
 

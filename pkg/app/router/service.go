@@ -122,6 +122,12 @@ func (a *App) Router() *chi.Mux {
 	return a.router
 }
 
+// RegisterShutdownHook registers fn to be called during graceful shutdown,
+// after the HTTP server stops accepting connections.
+func (a *App) RegisterShutdownHook(fn func(context.Context) error) {
+	a.shutdownHooks = append(a.shutdownHooks, fn)
+}
+
 func (a *App) Run() error {
 	ctx := context.Background()
 
@@ -157,6 +163,14 @@ func (a *App) Run() error {
 			"message": "error during server shutdown",
 		})
 		return err
+	}
+
+	for _, hook := range a.shutdownHooks {
+		if err := hook(shutdownCtx); err != nil {
+			a.logger.Error(ctx, err, map[string]interface{}{
+				"message": "error during shutdown hook",
+			})
+		}
 	}
 
 	a.logger.Info(ctx, "server shut down successfully", nil)

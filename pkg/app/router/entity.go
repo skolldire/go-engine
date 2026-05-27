@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -22,6 +23,7 @@ type Service interface {
 	Mount(pattern string, handler http.Handler)
 	AddRoute(method, pattern string, handler http.HandlerFunc)
 	Router() *chi.Mux
+	RegisterShutdownHook(fn func(context.Context) error)
 }
 
 type App struct {
@@ -30,6 +32,7 @@ type App struct {
 	config          Config
 	shutdownTimeout time.Duration
 	logger          logger.Service
+	shutdownHooks   []func(context.Context) error
 }
 
 type Config struct {

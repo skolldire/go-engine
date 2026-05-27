@@ -6,6 +6,8 @@ import (
 	"io"
 	"time"
 
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
@@ -14,6 +16,16 @@ import (
 const (
 	DefaultTimeout = 30 * time.Second
 )
+
+type s3APIClient interface {
+	transfermanager.S3APIClient
+	DeleteObject(context.Context, *s3.DeleteObjectInput, ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
+	CopyObject(context.Context, *s3.CopyObjectInput, ...func(*s3.Options)) (*s3.CopyObjectOutput, error)
+}
+
+type s3Presigner interface {
+	PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+}
 
 var (
 	ErrObjectNotFound = errors.New("object not found")
@@ -71,7 +83,9 @@ type Service interface {
 
 type S3Client struct {
 	*client.BaseClient
-	s3Client *s3.Client
-	bucket   string
-	region   string
+	s3Client        s3APIClient
+	transferManager *transfermanager.Client
+	presigner       s3Presigner
+	bucket          string
+	region          string
 }

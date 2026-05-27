@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/skolldire/go-engine/pkg/core/client"
@@ -36,10 +36,12 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	}
 
 	c := &S3Client{
-		BaseClient: client.NewBaseClientWithName(baseConfig, log, "S3"),
-		s3Client:   s3Client,
-		bucket:     cfg.Bucket,
-		region:     cfg.Region,
+		BaseClient:      client.NewBaseClientWithName(baseConfig, log, "S3"),
+		s3Client:        s3Client,
+		transferManager: transfermanager.New(s3Client),
+		presigner:       s3.NewPresignClient(s3Client),
+		bucket:          cfg.Bucket,
+		region:          cfg.Region,
 	}
 
 	if c.IsLoggingEnabled() {
@@ -58,9 +60,7 @@ func (c *S3Client) PutObject(ctx context.Context, key string, body io.Reader, co
 		return ErrInvalidInput
 	}
 
-	uploader := manager.NewUploader(c.s3Client)
-
-	input := &s3.PutObjectInput{
+	input := &transfermanager.UploadObjectInput{
 		Bucket:      aws.String(c.bucket),
 		Key:         aws.String(key),
 		Body:        body,
@@ -72,7 +72,7 @@ func (c *S3Client) PutObject(ctx context.Context, key string, body io.Reader, co
 	}
 
 	_, err := c.Execute(ctx, "PutObject", func() (interface{}, error) {
-		return uploader.Upload(ctx, input)
+		return c.transferManager.UploadObject(ctx, input)
 	})
 
 	if err != nil {
@@ -258,10 +258,8 @@ func (c *S3Client) GetPresignedURL(ctx context.Context, key string, expiration t
 		expiration = 15 * time.Minute
 	}
 
-	presignClient := s3.NewPresignClient(c.s3Client)
-
 	result, err := c.Execute(ctx, "GetPresignedURL", func() (interface{}, error) {
-		request, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		request, err := c.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
 		}, func(opts *s3.PresignOptions) {
