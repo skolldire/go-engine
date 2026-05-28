@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // redisPinger is satisfied by *redis.RedisClient (pkg/database/redis).
@@ -14,9 +12,9 @@ type redisPinger interface {
 	Ping(ctx context.Context) error
 }
 
-// sqlDBer is satisfied by *gormsql.DBClient (pkg/database/gormsql).
-type sqlDBer interface {
-	DB() *gorm.DB
+// sqlPinger is satisfied by *gormsql.DBClient (database/sql sub-module).
+type sqlPinger interface {
+	Ping(ctx context.Context) error
 }
 
 // ── RedisChecker ──────────────────────────────────────────────────────────────
@@ -41,24 +39,20 @@ func (c *RedisChecker) Check(ctx context.Context) error {
 
 // ── SQLChecker ────────────────────────────────────────────────────────────────
 
-// SQLChecker verifies SQL database connectivity via GORM's underlying sql.DB.
+// SQLChecker verifies SQL database connectivity via Ping.
+// Pass *gormsql.DBClient from the database/sql sub-module directly.
 type SQLChecker struct {
-	client sqlDBer
+	client sqlPinger
 }
 
-// NewSQLChecker creates a Checker backed by any sqlDBer.
-// Pass *gormsql.DBClient from pkg/database/gormsql directly.
-func NewSQLChecker(client sqlDBer) *SQLChecker {
+// NewSQLChecker creates a Checker backed by any sqlPinger.
+func NewSQLChecker(client sqlPinger) *SQLChecker {
 	return &SQLChecker{client: client}
 }
 
 func (c *SQLChecker) Check(ctx context.Context) error {
-	sqlDB, err := c.client.DB().DB()
-	if err != nil {
-		return fmt.Errorf("sql.DB: %w", err)
-	}
-	if err := sqlDB.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping: %w", err)
+	if err := c.client.Ping(ctx); err != nil {
+		return fmt.Errorf("sql ping: %w", err)
 	}
 	return nil
 }

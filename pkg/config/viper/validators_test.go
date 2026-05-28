@@ -5,10 +5,9 @@ import (
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/app/router"
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
-	"github.com/skolldire/go-engine/pkg/clients/sqs"
-	"github.com/skolldire/go-engine/pkg/database/gormsql"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sqs"
 )
 
 func TestValidateAWSConfig(t *testing.T) {
@@ -246,76 +245,6 @@ func TestValidateSQSConfig(t *testing.T) {
 	}
 }
 
-func TestValidateSQLConfig(t *testing.T) {
-	tests := []struct {
-		name    string
-		config  gormsql.Config
-		wantErr bool
-	}{
-		{
-			name: "valid PostgreSQL config",
-			config: gormsql.Config{
-				Type:     "postgres",
-				Host:     "localhost",
-				Port:     5432,
-				Database: "testdb",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid SQLite config",
-			config: gormsql.Config{
-				Type:     "sqlite",
-				Database: "test.db",
-			},
-			wantErr: false,
-		},
-		{
-			name: "empty type",
-			config: gormsql.Config{
-				Type: "",
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid type",
-			config: gormsql.Config{
-				Type: "invalid",
-			},
-			wantErr: true,
-		},
-		{
-			name: "empty database name",
-			config: gormsql.Config{
-				Type: "postgres",
-				Host: "localhost",
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid port",
-			config: gormsql.Config{
-				Type:     "postgres",
-				Host:     "localhost",
-				Port:     70000, // > 65535
-				Database: "testdb",
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			errors := validateSQLConfig(tt.config)
-			hasError := len(errors) > 0
-
-			if hasError != tt.wantErr {
-				t.Errorf("validateSQLConfig() errors = %v, wantErr %v", errors, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestValidateRouterConfig(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -387,27 +316,3 @@ func TestIsValidURL(t *testing.T) {
 	}
 }
 
-func TestIsValidSQLType(t *testing.T) {
-	tests := []struct {
-		dbType string
-		valid  bool
-	}{
-		{"postgres", true},
-		{"mysql", true},
-		{"sqlite", true},
-		{"sqlserver", true},
-		{"POSTGRES", true}, // converts to lowercase: "postgres"
-		{"MySQL", true},    // converts to lowercase: "mysql"
-		{"invalid", false},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.dbType, func(t *testing.T) {
-			result := isValidSQLType(tt.dbType)
-			if result != tt.valid {
-				t.Errorf("isValidSQLType(%q) = %v, want %v", tt.dbType, result, tt.valid)
-			}
-		})
-	}
-}

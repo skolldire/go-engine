@@ -5,13 +5,12 @@ import (
 	"strings"
 
 	"github.com/skolldire/go-engine/pkg/app/router"
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
-	"github.com/skolldire/go-engine/pkg/clients/sns"
-	"github.com/skolldire/go-engine/pkg/clients/sqs"
-	"github.com/skolldire/go-engine/pkg/database/dynamo"
-	"github.com/skolldire/go-engine/pkg/database/gormsql"
-	"github.com/skolldire/go-engine/pkg/database/redis"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sns"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sqs"
+	"github.com/skolldire/go-engine/aws/pkg/database/dynamo"
+	"github.com/skolldire/go-engine/database/redis/pkg/database/redis"
 )
 
 // ValidationError represents a configuration validation error
@@ -225,13 +224,6 @@ func validateSNSConfig(single *sns.Config, multiple []map[string]sns.Config) []e
 func validateDatabaseConfigs(cfg Config) []error {
 	var errors []error
 
-	// Validate SQL database
-	if cfg.DataBaseSql != nil {
-		if errs := validateSQLConfig(*cfg.DataBaseSql); len(errs) > 0 {
-			errors = append(errors, errs...)
-		}
-	}
-
 	// Validate DynamoDB
 	if cfg.Dynamo != nil {
 		if errs := validateDynamoConfig(*cfg.Dynamo); len(errs) > 0 {
@@ -244,67 +236,6 @@ func validateDatabaseConfigs(cfg Config) []error {
 		if errs := validateRedisConfig(*cfg.Redis); len(errs) > 0 {
 			errors = append(errors, errs...)
 		}
-	}
-
-	// Validate multiple SQL connections
-	for i, connMap := range cfg.SQLConnections {
-		for name, connCfg := range connMap {
-			if name == "" {
-				errors = append(errors, &ValidationError{
-					Field:   fmt.Sprintf("sql_connections[%d].name", i),
-					Message: "SQL connection name cannot be empty",
-				})
-			}
-
-			if errs := validateSQLConfig(connCfg); len(errs) > 0 {
-				for _, err := range errs {
-					if valErr, ok := err.(*ValidationError); ok {
-						valErr.Field = fmt.Sprintf("sql_connections[%d].%s.%s", i, name, valErr.Field)
-					}
-					errors = append(errors, err)
-				}
-			}
-		}
-	}
-
-	return errors
-}
-
-// validateSQLConfig validates SQL database configuration
-func validateSQLConfig(cfg gormsql.Config) []error {
-	var errors []error
-
-	if cfg.Type == "" {
-		errors = append(errors, &ValidationError{
-			Field:   "database_sql.type",
-			Message: "SQL database type is required",
-		})
-	} else if !isValidSQLType(cfg.Type) {
-		errors = append(errors, &ValidationError{
-			Field:   "database_sql.type",
-			Message: fmt.Sprintf("invalid SQL database type: %s (supported: postgres, mysql, sqlite, sqlserver)", cfg.Type),
-		})
-	}
-
-	if cfg.Host == "" && cfg.Type != "sqlite" {
-		errors = append(errors, &ValidationError{
-			Field:   "database_sql.host",
-			Message: "SQL database host is required (except for SQLite)",
-		})
-	}
-
-	if cfg.Database == "" {
-		errors = append(errors, &ValidationError{
-			Field:   "database_sql.database",
-			Message: "SQL database name is required",
-		})
-	}
-
-	if cfg.Port < 0 || cfg.Port > 65535 {
-		errors = append(errors, &ValidationError{
-			Field:   "database_sql.port",
-			Message: "SQL database port must be between 0 and 65535",
-		})
 	}
 
 	return errors
@@ -384,12 +315,3 @@ func isValidURL(url string) bool {
 	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
-func isValidSQLType(dbType string) bool {
-	validTypes := []string{"postgres", "mysql", "sqlite", "sqlserver"}
-	for _, t := range validTypes {
-		if strings.ToLower(dbType) == t {
-			return true
-		}
-	}
-	return false
-}

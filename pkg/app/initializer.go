@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/core/registry"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"

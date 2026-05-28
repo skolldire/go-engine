@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/skolldire/go-engine/pkg/integration/aws/adapters"
+	"github.com/skolldire/go-engine/aws/pkg/integration/aws/adapters"
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/skolldire/go-engine/pkg/integration/observability"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"

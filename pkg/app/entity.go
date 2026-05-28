@@ -7,27 +7,26 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/skolldire/go-engine/pkg/app/router"
-	"github.com/skolldire/go-engine/pkg/clients/cognito"
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
+	"github.com/skolldire/go-engine/aws/pkg/clients/cognito"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
+	"github.com/skolldire/go-engine/messaging/pkg/integration/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
-	"github.com/skolldire/go-engine/pkg/clients/s3"
-	"github.com/skolldire/go-engine/pkg/clients/ses"
-	"github.com/skolldire/go-engine/pkg/clients/sns"
-	"github.com/skolldire/go-engine/pkg/clients/sqs"
-	"github.com/skolldire/go-engine/pkg/clients/ssm"
+	"github.com/skolldire/go-engine/aws/pkg/clients/s3"
+	"github.com/skolldire/go-engine/aws/pkg/clients/ses"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sns"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sqs"
+	"github.com/skolldire/go-engine/aws/pkg/clients/ssm"
 	"github.com/skolldire/go-engine/pkg/config/dynamic"
 	"github.com/skolldire/go-engine/pkg/config/viper"
-	"github.com/skolldire/go-engine/pkg/database/dynamo"
-	"github.com/skolldire/go-engine/pkg/database/gormsql"
-	"github.com/skolldire/go-engine/pkg/database/memcached"
-	"github.com/skolldire/go-engine/pkg/database/mongodb"
-	"github.com/skolldire/go-engine/pkg/database/redis"
+	"github.com/skolldire/go-engine/aws/pkg/database/dynamo"
+	"github.com/skolldire/go-engine/database/memcached/pkg/database/memcached"
+	"github.com/skolldire/go-engine/database/mongodb/pkg/database/mongodb"
+	"github.com/skolldire/go-engine/database/redis/pkg/database/redis"
 	"github.com/skolldire/go-engine/pkg/health"
 	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
-	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
-	kafka "github.com/skolldire/go-engine/pkg/integration/kafka"
-	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
+	awsclient "github.com/skolldire/go-engine/aws/pkg/integration/aws"
+	kafka "github.com/skolldire/go-engine/messaging/pkg/integration/kafka"
+	grpcServer "github.com/skolldire/go-engine/messaging/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 )
@@ -46,7 +45,6 @@ type Engine struct {
 	SNSClient      sns.Service
 	DynamoDBClient dynamo.Service
 	RedisClient    *redis.RedisClient
-	SqlConnection  *gormsql.DBClient
 
 	// Service registry (composition pattern)
 	Services *ServiceRegistry
@@ -126,10 +124,6 @@ func (e *Engine) GetDynamoDBClient() dynamo.Service {
 
 func (e *Engine) GetRedisClient() *redis.RedisClient {
 	return e.RedisClient
-}
-
-func (e *Engine) GetSQLConnection() *gormsql.DBClient {
-	return e.SqlConnection
 }
 
 func (e *Engine) GetGRPCServer() grpcServer.Service {
@@ -227,13 +221,6 @@ func (e *Engine) GetRedisClientByName(name string) *redis.RedisClient {
 		return nil
 	}
 	return e.Services.RedisClients[name]
-}
-
-func (e *Engine) GetSQLConnectionByName(name string) *gormsql.DBClient {
-	if e.Services == nil || e.Services.SQLConnections == nil {
-		return nil
-	}
-	return e.Services.SQLConnections[name]
 }
 
 func (e *Engine) GetFeatureFlags() *dynamic.FeatureFlags {

@@ -12,8 +12,6 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 // ── mocks ─────────────────────────────────────────────────────────────────────
@@ -74,10 +72,10 @@ func (m *mockRedisPinger) Ping(ctx context.Context) error {
 	return nil
 }
 
-// mockSQLDBer implements sqlDBer using a real *gorm.DB (SQLite).
-type mockSQLDBer struct{ db *gorm.DB }
+// mockSQLPinger implements sqlPinger for testing.
+type mockSQLDBer struct{ err error }
 
-func (m *mockSQLDBer) DB() *gorm.DB { return m.db }
+func (m *mockSQLDBer) Ping(_ context.Context) error { return m.err }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -405,23 +403,15 @@ func TestRedisChecker_Error(t *testing.T) {
 // ── SQLChecker ────────────────────────────────────────────────────────────────
 
 func TestSQLChecker_Success(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
-
-	checker := NewSQLChecker(&mockSQLDBer{db: db})
+	checker := NewSQLChecker(&mockSQLDBer{err: nil})
 	assert.NoError(t, checker.Check(context.Background()))
 }
 
 func TestSQLChecker_Error_ClosedConnection(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
-
-	sqlDB, err := db.DB()
-	assert.NoError(t, err)
-	sqlDB.Close()
-
-	checker := NewSQLChecker(&mockSQLDBer{db: db})
-	assert.Error(t, checker.Check(context.Background()))
+	checker := NewSQLChecker(&mockSQLDBer{err: errors.New("connection closed")})
+	err := checker.Check(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "sql ping")
 }
 
 // ── HTTPChecker ───────────────────────────────────────────────────────────────

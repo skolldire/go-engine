@@ -8,21 +8,18 @@ import (
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
-	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
 
-func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
-	var db *gorm.DB
-	var err error
-
+// New opens a GORM connection using the caller-supplied dialector.
+// The caller is responsible for importing the appropriate driver and building
+// the dialector (e.g. postgres.Open(dsn), mysql.Open(dsn)).
+func New(cfg Config, dialector gorm.Dialector, log logger.Service) (*DBClient, error) {
 	gormConfig := &gorm.Config{}
+
 	if cfg.TablePrefix != "" {
 		gormConfig.NamingStrategy = schema.NamingStrategy{
 			TablePrefix: cfg.TablePrefix,
@@ -30,33 +27,10 @@ func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
 	}
 
 	if cfg.EnableLogging {
-		gormLogger := createGormLogger(log, cfg.LogLevel)
-		gormConfig.Logger = gormLogger
+		gormConfig.Logger = createGormLogger(log, cfg.LogLevel)
 	}
 
-	switch cfg.Type {
-	case PostgresSQL:
-		dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-			cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, cfg.SSLMode)
-		db, err = gorm.Open(postgres.Open(dsn), gormConfig)
-
-	case MySQL:
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-			cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-		db, err = gorm.Open(mysql.Open(dsn), gormConfig)
-
-	case SQLite:
-		db, err = gorm.Open(sqlite.Open(cfg.Database), gormConfig)
-
-	case SQLServer:
-		dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s",
-			cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-		db, err = gorm.Open(sqlserver.Open(dsn), gormConfig)
-
-	default:
-		return nil, ErrInvalidDBType
-	}
-
+	db, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
 		return nil, log.WrapError(err, ErrConnection.Error())
 	}
@@ -66,23 +40,23 @@ func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
 		return nil, log.WrapError(err, ErrConnection.Error())
 	}
 
-	maxIdleConnections := DefaultMaxIdleConnections
+	maxIdle := DefaultMaxIdleConnections
 	if cfg.MaxIdleConnections > 0 {
-		maxIdleConnections = cfg.MaxIdleConnections
+		maxIdle = cfg.MaxIdleConnections
 	}
-	sqlDB.SetMaxIdleConns(maxIdleConnections)
+	sqlDB.SetMaxIdleConns(maxIdle)
 
-	maxOpenConnections := DefaultMaxOpenConnections
+	maxOpen := DefaultMaxOpenConnections
 	if cfg.MaxOpenConnections > 0 {
-		maxOpenConnections = cfg.MaxOpenConnections
+		maxOpen = cfg.MaxOpenConnections
 	}
-	sqlDB.SetMaxOpenConns(maxOpenConnections)
+	sqlDB.SetMaxOpenConns(maxOpen)
 
-	connMaxLifetime := DefaultConnMaxLifetime
+	lifetime := DefaultConnMaxLifetime
 	if cfg.ConnMaxLifetime > 0 {
-		connMaxLifetime = cfg.ConnMaxLifetime
+		lifetime = cfg.ConnMaxLifetime
 	}
-	sqlDB.SetConnMaxLifetime(connMaxLifetime)
+	sqlDB.SetConnMaxLifetime(lifetime)
 
 	client := &DBClient{
 		db:      db,
@@ -92,8 +66,7 @@ func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
 	}
 
 	if cfg.WithResilience {
-		resilienceService := resilience.NewResilienceService(cfg.Resilience, log)
-		client.resilience = resilienceService
+		client.resilience = resilience.NewResilienceService(cfg.Resilience, log)
 	}
 
 	if err := sqlDB.Ping(); err != nil {
@@ -101,56 +74,58 @@ func NewClient(cfg Config, log logger.Service) (*DBClient, error) {
 	}
 
 	if client.logging {
-		msg := fmt.Sprintf("database connection to %s established", cfg.Type)
-		logFields := map[string]interface{}{"type": cfg.Type, "database": cfg.Database}
-		log.Debug(context.Background(), msg, logFields)
+		log.Debug(context.Background(), fmt.Sprintf("database connection to %s established", cfg.Type),
+			map[string]interface{}{"type": cfg.Type})
 	}
 
 	return client, nil
 }
 
 func (dbc *DBClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+	if _, ok := ctx.Deadline(); !ok {
 		return context.WithTimeout(ctx, DefaultTimeout)
 	}
 	return context.WithCancel(ctx)
 }
 
-func (dbc *DBClient) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+func (dbc *DBClient) execute(ctx context.Context, op string, fn func() (interface{}, error)) (interface{}, error) {
 	ctx, cancel := dbc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	logFields := map[string]interface{}{"operation": operationName, "db_type": dbc.dbType}
+	fields := map[string]interface{}{"operation": op, "db_type": dbc.dbType}
 
 	if dbc.resilience != nil {
 		if dbc.logging {
-			dbc.logger.Debug(ctx, fmt.Sprintf("starting DB operation with resilience: %s", operationName), logFields)
+			dbc.logger.Debug(ctx, fmt.Sprintf("starting DB operation with resilience: %s", op), fields)
 		}
-
-		result, err := dbc.resilience.Execute(ctx, operation)
-
+		result, err := dbc.resilience.Execute(ctx, fn)
 		if err != nil && dbc.logging {
-			dbc.logger.Error(ctx, fmt.Errorf("error in DB operation: %w", err), logFields)
+			dbc.logger.Error(ctx, fmt.Errorf("error in DB operation: %w", err), fields)
 		} else if dbc.logging {
-			dbc.logger.Debug(ctx, fmt.Sprintf("DB operation completed with resilience: %s", operationName), logFields)
+			dbc.logger.Debug(ctx, fmt.Sprintf("DB operation completed with resilience: %s", op), fields)
 		}
-
 		return result, err
 	}
 
 	if dbc.logging {
-		dbc.logger.Debug(ctx, fmt.Sprintf("starting DB operation: %s", operationName), logFields)
+		dbc.logger.Debug(ctx, fmt.Sprintf("starting DB operation: %s", op), fields)
 	}
-
-	result, err := operation()
-
+	result, err := fn()
 	if err != nil && dbc.logging {
-		dbc.logger.Error(ctx, err, logFields)
+		dbc.logger.Error(ctx, err, fields)
 	} else if dbc.logging {
-		dbc.logger.Debug(ctx, fmt.Sprintf("DB operation completed: %s", operationName), logFields)
+		dbc.logger.Debug(ctx, fmt.Sprintf("DB operation completed: %s", op), fields)
 	}
-
 	return result, err
+}
+
+// Ping verifies database connectivity using the underlying sql.DB.
+func (dbc *DBClient) Ping(ctx context.Context) error {
+	sqlDB, err := dbc.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.PingContext(ctx)
 }
 
 func (dbc *DBClient) WithContext(ctx context.Context) *gorm.DB {
@@ -159,18 +134,15 @@ func (dbc *DBClient) WithContext(ctx context.Context) *gorm.DB {
 
 func (dbc *DBClient) Create(ctx context.Context, value interface{}) error {
 	_, err := dbc.execute(ctx, "Create", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Create(value)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Create(value).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) First(ctx context.Context, dest interface{}, conditions ...interface{}) error {
 	_, err := dbc.execute(ctx, "First", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).First(dest, conditions...)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).First(dest, conditions...).Error
 	})
-
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrNotFound
 	}
@@ -179,44 +151,39 @@ func (dbc *DBClient) First(ctx context.Context, dest interface{}, conditions ...
 
 func (dbc *DBClient) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error {
 	_, err := dbc.execute(ctx, "Find", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Find(dest, conditions...)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Find(dest, conditions...).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Update(ctx context.Context, model interface{}, updates interface{}) error {
 	_, err := dbc.execute(ctx, "Update", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Model(model).Updates(updates)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Model(model).Updates(updates).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Delete(ctx context.Context, value interface{}, conditions ...interface{}) error {
 	_, err := dbc.execute(ctx, "Delete", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Delete(value, conditions...)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Delete(value, conditions...).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error {
 	_, err := dbc.execute(ctx, "Count", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Model(model)
+		q := dbc.db.WithContext(ctx).Model(model)
 		if len(conditions) > 0 {
-			result = result.Where(conditions[0], conditions[1:]...)
+			q = q.Where(conditions[0], conditions[1:]...)
 		}
-		result = result.Count(count)
-		return nil, result.Error
+		return nil, q.Count(count).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Exec(ctx context.Context, sql string, values ...interface{}) error {
 	_, err := dbc.execute(ctx, "Exec", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Exec(sql, values...)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Exec(sql, values...).Error
 	})
 	return err
 }
@@ -225,73 +192,63 @@ func (dbc *DBClient) Transaction(ctx context.Context, fn func(tx *gorm.DB) error
 	_, err := dbc.execute(ctx, "Transaction", func() (interface{}, error) {
 		return nil, dbc.db.WithContext(ctx).Transaction(fn)
 	})
-
 	if err != nil {
 		return dbc.logger.WrapError(err, ErrTransaction.Error())
 	}
-
 	return nil
 }
 
 func (dbc *DBClient) Preload(ctx context.Context, dest interface{}, relation string, conditions ...interface{}) error {
 	_, err := dbc.execute(ctx, "Preload", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Preload(relation, conditions...).Find(dest)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Preload(relation, conditions...).Find(dest).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Where(ctx context.Context, dest interface{}, query interface{}, args ...interface{}) error {
 	_, err := dbc.execute(ctx, "Where", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Where(query, args...).Find(dest)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Where(query, args...).Find(dest).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Order(ctx context.Context, dest interface{}, value interface{}) error {
 	_, err := dbc.execute(ctx, "Order", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Order(value).Find(dest)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Order(value).Find(dest).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Limit(ctx context.Context, dest interface{}, limit int) error {
 	_, err := dbc.execute(ctx, "Limit", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Limit(limit).Find(dest)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Limit(limit).Find(dest).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Offset(ctx context.Context, dest interface{}, offset int) error {
 	_, err := dbc.execute(ctx, "Offset", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Offset(offset).Find(dest)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Offset(offset).Find(dest).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Upsert(ctx context.Context, value interface{}, conflictColumns []string, updateColumns []string) error {
-	columns := make([]clause.Column, len(conflictColumns))
-	for i, col := range conflictColumns {
-		columns[i] = clause.Column{Name: col}
+	cols := make([]clause.Column, len(conflictColumns))
+	for i, c := range conflictColumns {
+		cols[i] = clause.Column{Name: c}
 	}
-
 	_, err := dbc.execute(ctx, "Upsert", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns:   columns,
+		return nil, dbc.db.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns:   cols,
 			DoUpdates: clause.AssignmentColumns(updateColumns),
-		}).Create(value)
-		return nil, result.Error
+		}).Create(value).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) AutoMigrate(models ...interface{}) error {
-	err := dbc.db.AutoMigrate(models...)
-	if err != nil {
+	if err := dbc.db.AutoMigrate(models...); err != nil {
 		return dbc.logger.WrapError(err, "error in auto migration")
 	}
 	return nil
@@ -299,8 +256,7 @@ func (dbc *DBClient) AutoMigrate(models ...interface{}) error {
 
 func (dbc *DBClient) Raw(ctx context.Context, dest interface{}, sql string, values ...interface{}) error {
 	_, err := dbc.execute(ctx, "Raw", func() (interface{}, error) {
-		result := dbc.db.WithContext(ctx).Raw(sql, values...).Scan(dest)
-		return nil, result.Error
+		return nil, dbc.db.WithContext(ctx).Raw(sql, values...).Scan(dest).Error
 	})
 	return err
 }
@@ -317,54 +273,41 @@ func (dbc *DBClient) Close() error {
 	return sqlDB.Close()
 }
 
+// ── gorm logger adapter ───────────────────────────────────────────────────────
+
 type gormLogAdapter struct {
 	logger   logger.Service
 	logLevel string
 }
 
-func (l *gormLogAdapter) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
-	return l
-}
+func (l *gormLogAdapter) LogMode(_ gormlogger.LogLevel) gormlogger.Interface { return l }
 
 func (l *gormLogAdapter) Info(ctx context.Context, msg string, data ...interface{}) {
-	logMsg := fmt.Sprintf(msg, data...)
-	fields := map[string]interface{}{"type": "info"}
-	l.logger.Info(ctx, logMsg, fields)
+	l.logger.Info(ctx, fmt.Sprintf(msg, data...), map[string]interface{}{"type": "info"})
 }
 
 func (l *gormLogAdapter) Warn(ctx context.Context, msg string, data ...interface{}) {
-	logMsg := fmt.Sprintf(msg, data...)
-	fields := map[string]interface{}{"type": "warn"}
-	l.logger.Warn(ctx, logMsg, fields)
+	l.logger.Warn(ctx, fmt.Sprintf(msg, data...), map[string]interface{}{"type": "warn"})
 }
 
 func (l *gormLogAdapter) Error(ctx context.Context, msg string, data ...interface{}) {
-	logMsg := fmt.Sprintf(msg, data...)
-	fields := map[string]interface{}{"type": "error"}
-	l.logger.Error(ctx, errors.New(logMsg), fields)
+	l.logger.Error(ctx, errors.New(fmt.Sprintf(msg, data...)), map[string]interface{}{"type": "error"})
 }
 
-func (l *gormLogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	elapsed := time.Since(begin)
+func (l *gormLogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	sql, rows := fc()
-
 	fields := map[string]interface{}{
-		"elapsed": elapsed,
+		"elapsed": time.Since(begin),
 		"rows":    rows,
 		"sql":     sql,
 	}
-
 	if err != nil {
 		l.logger.Error(ctx, err, fields)
 		return
 	}
-
 	l.logger.Debug(ctx, "SQL executed", fields)
 }
 
 func createGormLogger(log logger.Service, logLevel string) gormlogger.Interface {
-	return &gormLogAdapter{
-		logger:   log,
-		logLevel: logLevel,
-	}
+	return &gormLogAdapter{logger: log, logLevel: logLevel}
 }

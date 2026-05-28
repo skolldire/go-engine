@@ -6,26 +6,25 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/skolldire/go-engine/pkg/app/router"
-	"github.com/skolldire/go-engine/pkg/clients/cognito"
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
+	"github.com/skolldire/go-engine/aws/pkg/clients/cognito"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
+	"github.com/skolldire/go-engine/messaging/pkg/integration/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
-	"github.com/skolldire/go-engine/pkg/clients/s3"
-	"github.com/skolldire/go-engine/pkg/clients/ses"
-	"github.com/skolldire/go-engine/pkg/clients/sns"
-	"github.com/skolldire/go-engine/pkg/clients/sqs"
-	"github.com/skolldire/go-engine/pkg/clients/ssm"
+	"github.com/skolldire/go-engine/aws/pkg/clients/s3"
+	"github.com/skolldire/go-engine/aws/pkg/clients/ses"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sns"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sqs"
+	"github.com/skolldire/go-engine/aws/pkg/clients/ssm"
 	"github.com/skolldire/go-engine/pkg/config/dynamic"
 	"github.com/skolldire/go-engine/pkg/config/viper"
-	"github.com/skolldire/go-engine/pkg/database/dynamo"
-	"github.com/skolldire/go-engine/pkg/database/gormsql"
-	"github.com/skolldire/go-engine/pkg/database/memcached"
-	"github.com/skolldire/go-engine/pkg/database/mongodb"
-	"github.com/skolldire/go-engine/pkg/database/redis"
-	awsclient "github.com/skolldire/go-engine/pkg/integration/aws"
-	kafka "github.com/skolldire/go-engine/pkg/integration/kafka"
+	"github.com/skolldire/go-engine/aws/pkg/database/dynamo"
+	"github.com/skolldire/go-engine/database/memcached/pkg/database/memcached"
+	"github.com/skolldire/go-engine/database/mongodb/pkg/database/mongodb"
+	"github.com/skolldire/go-engine/database/redis/pkg/database/redis"
+	awsclient "github.com/skolldire/go-engine/aws/pkg/integration/aws"
+	kafka "github.com/skolldire/go-engine/messaging/pkg/integration/kafka"
 	"github.com/skolldire/go-engine/pkg/integration/observability"
-	grpcServer "github.com/skolldire/go-engine/pkg/server/grpc"
+	grpcServer "github.com/skolldire/go-engine/messaging/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
@@ -102,20 +101,19 @@ func (c *App) Init() *App {
 	c.Engine.SNSClient = initializer.createClientSNS(c.Engine.Conf.SNS)
 	c.Engine.DynamoDBClient = initializer.createClientDynamo(c.Engine.Conf.Dynamo)
 	c.Engine.RedisClient = initializer.createClientRedis(c.Engine.Conf.Redis)
-	c.Engine.SqlConnection = initializer.createClientSQL(c.Engine.Conf.DataBaseSql)
 
 	// Multiple clients in registry
 	c.Engine.Services.SQSClients = initializer.createClientsSQS(c.Engine.Conf.SQSClients)
 	c.Engine.Services.SNSClients = initializer.createClientsSNS(c.Engine.Conf.SNSClients)
 	c.Engine.Services.DynamoDBClients = initializer.createClientsDynamo(c.Engine.Conf.DynamoClients)
 	c.Engine.Services.RedisClients = initializer.createClientsRedis(c.Engine.Conf.RedisClients)
-	c.Engine.Services.SQLConnections = initializer.createClientsSQL(c.Engine.Conf.SQLConnections)
 	c.Engine.Services.SSMClients = initializer.createClientsSSM(c.Engine.Conf.SSMClients)
 	c.Engine.Services.SESClients = initializer.createClientsSES(c.Engine.Conf.SESClients)
 	c.Engine.Services.S3Clients = initializer.createClientsS3(c.Engine.Conf.S3Clients)
 	c.Engine.Services.MemcachedClients = initializer.createClientsMemcached(c.Engine.Conf.MemcachedClients)
 	c.Engine.Services.MongoDBClients = initializer.createClientsMongoDB(c.Engine.Conf.MongoDBClients)
 	c.Engine.Services.RabbitMQClients = initializer.createClientsRabbitMQ(c.Engine.Conf.RabbitMQClients)
+	// SQL connections are no longer auto-initialized; use engine.WithCustomClient instead.
 
 	c.Engine.Telemetry = initializer.createTelemetry(c.Engine.Conf.Telemetry)
 
@@ -250,20 +248,6 @@ func (i *clients) createClientRedis(cfg *redis.Config) *redis.RedisClient {
 	return client
 }
 
-func (i *clients) createClientSQL(cfg *gormsql.Config) *gormsql.DBClient {
-	if cfg == nil {
-		return nil
-	}
-
-	client, err := gormsql.NewClient(*cfg, i.log)
-	if err != nil {
-		i.setError(err)
-		return nil
-	}
-
-	return client
-}
-
 func (i *clients) createTelemetry(cfg *telemetry.Config) telemetry.Telemetry {
 	if cfg == nil {
 		return nil
@@ -341,21 +325,6 @@ func (i *clients) createClientsRedis(configs []map[string]redis.Config) map[stri
 		}
 	}
 	return redisClients
-}
-
-func (i *clients) createClientsSQL(configs []map[string]gormsql.Config) map[string]*gormsql.DBClient {
-	sqlConnections := make(map[string]*gormsql.DBClient)
-	for _, v := range configs {
-		for k, cfg := range v {
-			client, err := gormsql.NewClient(cfg, i.log)
-			if err != nil {
-				i.setError(err)
-				continue
-			}
-			sqlConnections[k] = client
-		}
-	}
-	return sqlConnections
 }
 
 func (i *clients) createClientsSSM(configs []map[string]ssm.Config) map[string]ssm.Service {

@@ -1,19 +1,18 @@
 package app
 
 import (
-	grpcClient "github.com/skolldire/go-engine/pkg/clients/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rabbitmq"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
+	"github.com/skolldire/go-engine/messaging/pkg/integration/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
-	"github.com/skolldire/go-engine/pkg/clients/s3"
-	"github.com/skolldire/go-engine/pkg/clients/ses"
-	"github.com/skolldire/go-engine/pkg/clients/sns"
-	"github.com/skolldire/go-engine/pkg/clients/sqs"
-	"github.com/skolldire/go-engine/pkg/clients/ssm"
-	"github.com/skolldire/go-engine/pkg/database/dynamo"
-	"github.com/skolldire/go-engine/pkg/database/gormsql"
-	"github.com/skolldire/go-engine/pkg/database/memcached"
-	"github.com/skolldire/go-engine/pkg/database/mongodb"
-	"github.com/skolldire/go-engine/pkg/database/redis"
+	"github.com/skolldire/go-engine/aws/pkg/clients/s3"
+	"github.com/skolldire/go-engine/aws/pkg/clients/ses"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sns"
+	"github.com/skolldire/go-engine/aws/pkg/clients/sqs"
+	"github.com/skolldire/go-engine/aws/pkg/clients/ssm"
+	"github.com/skolldire/go-engine/aws/pkg/database/dynamo"
+	"github.com/skolldire/go-engine/database/memcached/pkg/database/memcached"
+	"github.com/skolldire/go-engine/database/mongodb/pkg/database/mongodb"
+	"github.com/skolldire/go-engine/database/redis/pkg/database/redis"
 	"github.com/skolldire/go-engine/pkg/health"
 	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 )
@@ -35,7 +34,6 @@ type ServiceRegistry struct {
 	// Database clients
 	DynamoDBClients  map[string]dynamo.Service
 	RedisClients     map[string]*redis.RedisClient
-	SQLConnections   map[string]*gormsql.DBClient
 	MemcachedClients map[string]memcached.Service
 	MongoDBClients   map[string]mongodb.Service
 
@@ -64,7 +62,6 @@ func NewServiceRegistry() *ServiceRegistry {
 		RabbitMQClients:  make(map[string]rabbitmq.Service),
 		DynamoDBClients:  make(map[string]dynamo.Service),
 		RedisClients:     make(map[string]*redis.RedisClient),
-		SQLConnections:   make(map[string]*gormsql.DBClient),
 		MemcachedClients: make(map[string]memcached.Service),
 		MongoDBClients:   make(map[string]mongodb.Service),
 		S3Clients:        make(map[string]s3.Service),

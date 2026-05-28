@@ -36,10 +36,6 @@ func TestNewServiceRegistry(t *testing.T) {
 		t.Error("RedisClients map not initialized")
 	}
 
-	if registry.SQLConnections == nil {
-		t.Error("SQLConnections map not initialized")
-	}
-
 	if registry.SSMClients == nil {
 		t.Error("SSMClients map not initialized")
 	}
