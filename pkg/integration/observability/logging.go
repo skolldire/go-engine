@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Logging returns a middleware that logs all requests
@@ -41,6 +42,13 @@ func (m *loggingMiddleware) Do(ctx context.Context, req *cloud.Request) (*cloud.
 		"service":    service,
 		"verb":       verb,
 		"path":       req.Path,
+	}
+
+	// Inject trace correlation when an active OTel span is present in the context.
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		sc := span.SpanContext()
+		logFields["trace.id"] = sc.TraceID().String()
+		logFields["span.id"] = sc.SpanID().String()
 	}
 
 	// Add method only if present (mainly for inbound/APIGateway)

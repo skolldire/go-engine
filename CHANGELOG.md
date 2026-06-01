@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `make lint-arch` Makefile target: scans `pkg/` for `gorm.io/gorm` imports and exits 1 on violation. Enforces the architectural boundary that GORM stays inside the `database/sql` sub-module.
+- README section `## SQL and hexagonal architecture`: anti-pattern vs correct pattern with full code examples (domain port → use case → adapter → `main.go` wiring).
 - `GET /health` unified endpoint returning `{status:"healthy"/"unhealthy", checks[], latency_ms}` — designed for ECS Fargate health checks.
 - `AppBuilder.RegisterHealthChecker(name, checker)` — registers checkers fluently; auto-mounts `GET /health` on the router when both the health service and router are available.
 - `health.HealthResponse` and `health.CheckResult` public types for the new endpoint.

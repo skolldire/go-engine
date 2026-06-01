@@ -8,11 +8,15 @@ import (
 )
 
 type producer struct {
-	writer *kafka.Writer
+	writer writerIface // uses the same interface defined in consumer.go
 	cfg    Config
 	log    logger.Service
 }
 
+// NewProducer creates a Kafka producer that writes to cfg.Topic.
+// The writer uses RequireAll acks by default to guarantee durability.
+// Set cfg.Async = true for fire-and-forget semantics (higher throughput, less safety).
+// The underlying kafka.Writer connection is lazy; no network call is made here.
 func NewProducer(cfg Config, log logger.Service) Producer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(cfg.Brokers...),
@@ -29,6 +33,13 @@ func NewProducer(cfg Config, log logger.Service) Producer {
 	}
 }
 
+// Publish sends one or more messages to Kafka. When the producer was created
+// with cfg.Async = false (default), Publish blocks until all brokers
+// acknowledge the messages (RequireAll). Headers in each Message are forwarded
+// as Kafka record headers.
+//
+// A single call with multiple messages is more efficient than multiple single
+// calls because segmentio/kafka-go batches them in one request.
 func (p *producer) Publish(ctx context.Context, msgs ...Message) error {
 	km := make([]kafka.Message, len(msgs))
 	for i, m := range msgs {
@@ -46,6 +57,8 @@ func (p *producer) Publish(ctx context.Context, msgs ...Message) error {
 	return p.writer.WriteMessages(ctx, km...)
 }
 
+// Close flushes any buffered messages and closes the underlying connection.
+// It must be called before the process exits to avoid losing buffered async messages.
 func (p *producer) Close() error {
 	return p.writer.Close()
 }

@@ -72,6 +72,11 @@ func newTestConsumer(r readerIface, dlq writerIface, cfg Config) *consumer {
 	}
 }
 
+// newTestProducer builds a producer with a mock writer — no broker required.
+func newTestProducer(w writerIface) *producer {
+	return &producer{writer: w, cfg: testConfig(), log: &testutil.MockLogger{}}
+}
+
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 func TestNewProducer(t *testing.T) {
@@ -179,4 +184,132 @@ func TestConsumer_RetryLogic(t *testing.T) {
 	if assert.Len(t, dlq.msgs, 1) {
 		assert.Equal(t, msg.Value, dlq.msgs[0].Value)
 	}
+}
+
+// ── producer tests ────────────────────────────────────────────────────────────
+
+func TestProducer_Publish_SingleMessage(t *testing.T) {
+	w := &mockWriter{}
+	p := newTestProducer(w)
+
+	err := p.Publish(context.Background(), Message{
+		Key:   []byte("student-42"),
+		Value: []byte(`{"event":"ExamCompleted"}`),
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, int32(1), w.count.Load())
+	assert.Equal(t, []byte("student-42"), w.msgs[0].Key)
+}
+
+func TestProducer_Publish_WithHeaders(t *testing.T) {
+	w := &mockWriter{}
+	p := newTestProducer(w)
+
+	err := p.Publish(context.Background(), Message{
+		Value:   []byte("payload"),
+		Headers: map[string]string{"trace-id": "abc123", "source": "assessment"},
+	})
+
+	assert.NoError(t, err)
+	if assert.Len(t, w.msgs, 1) {
+		headerMap := make(map[string]string)
+		for _, h := range w.msgs[0].Headers {
+			headerMap[h.Key] = string(h.Value)
+		}
+		assert.Equal(t, "abc123", headerMap["trace-id"])
+		assert.Equal(t, "assessment", headerMap["source"])
+	}
+}
+
+func TestProducer_Publish_Batch(t *testing.T) {
+	w := &mockWriter{}
+	p := newTestProducer(w)
+
+	msgs := []Message{
+		{Value: []byte("msg-1")},
+		{Value: []byte("msg-2")},
+		{Value: []byte("msg-3")},
+	}
+	err := p.Publish(context.Background(), msgs...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, int32(1), w.count.Load()) // single WriteMessages call
+	assert.Len(t, w.msgs, 3)
+}
+
+func TestProducer_Close(t *testing.T) {
+	w := &mockWriter{}
+	p := newTestProducer(w)
+	assert.NoError(t, p.Close())
+}
+
+// ── sendToDLQ nil writer ──────────────────────────────────────────────────────
+
+func TestConsumer_SendToDLQ_NilWriter_LogsError(t *testing.T) {
+	// When DLQ is nil, sendToDLQ should log the error and not panic.
+	r := newMockReader([]kgo.Message{
+		{Topic: "t", Value: []byte("payload"), Offset: 1},
+	})
+	c := newTestConsumer(r, nil, testConfig()) // no DLQ
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handlerErr := errors.New("processing failed")
+	done := make(chan error, 1)
+	go func() {
+		done <- c.Subscribe(ctx, func(_ context.Context, _ Message) error {
+			return handlerErr
+		})
+	}()
+
+	// Wait for the message to be retried and sent to DLQ (nil → log only).
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return")
+	}
+}
+
+// ── headersToMap ──────────────────────────────────────────────────────────────
+
+func TestHeadersToMap_Empty(t *testing.T) {
+	result := headersToMap([]kgo.Header{})
+	assert.Nil(t, result)
+}
+
+func TestHeadersToMap_NonEmpty(t *testing.T) {
+	headers := []kgo.Header{
+		{Key: "trace-id", Value: []byte("xyz")},
+		{Key: "version", Value: []byte("1")},
+	}
+	result := headersToMap(headers)
+	assert.Equal(t, "xyz", result["trace-id"])
+	assert.Equal(t, "1", result["version"])
+}
+
+// ── composite client (service.go) ─────────────────────────────────────────────
+
+func TestNewClient_And_Close(t *testing.T) {
+	cfg := testConfig()
+	c, err := NewClient(cfg, &testutil.MockLogger{})
+	assert.NoError(t, err)
+	assert.NotNil(t, c)
+	// kafka.Writer and kafka.Reader connect lazily; Close is safe without a broker.
+	assert.NoError(t, c.Close())
+}
+
+func TestClient_Ping_NoConnection(t *testing.T) {
+	cfg := testConfig()
+	c, err := NewClient(cfg, &testutil.MockLogger{})
+	assert.NoError(t, err)
+	// No broker running → Ping must return an error.
+	err = c.Ping(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no brokers reachable")
 }

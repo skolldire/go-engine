@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/stretchr/testify/assert"
@@ -120,15 +121,56 @@ func TestMetricsMiddleware_GenericError(t *testing.T) {
 	mockRecorder.AssertExpectations(t)
 }
 
-func TestTelemetryMetricsRecorder(t *testing.T) {
-	// This test would require a mock telemetry.Telemetry
-	// For now, we'll test the structure
-	recorder := &TelemetryMetricsRecorder{}
-	assert.NotNil(t, recorder)
+func TestTelemetryMetricsRecorder_RecordRequest_Success(t *testing.T) {
+	tel := new(mockTelemetry)
+	bg := context.Background()
+
+	tel.On("Histogram", bg, "aws.request.duration", mock.AnythingOfType("float64"), mock.Anything).Return()
+	tel.On("Counter", bg, "aws.request.count", int64(1), mock.Anything).Return()
+
+	recorder := NewTelemetryMetricsRecorder(tel)
+	recorder.RecordRequest("sqs.send", 10*time.Millisecond, 200, "")
+
+	tel.AssertExpectations(t)
 }
 
-func TestNewTelemetryMetricsRecorder(t *testing.T) {
-	// This test would require a mock telemetry.Telemetry
-	// For now, we'll test that it returns a non-nil recorder
-	// In a real scenario, you'd pass a mock telemetry.Telemetry
+func TestTelemetryMetricsRecorder_RecordRequest_Error4xx(t *testing.T) {
+	tel := new(mockTelemetry)
+	bg := context.Background()
+
+	tel.On("Histogram", bg, "aws.request.duration", mock.AnythingOfType("float64"), mock.Anything).Return()
+	tel.On("Counter", bg, "aws.request.count", int64(1), mock.Anything).Return()
+	tel.On("Counter", bg, "aws.request.error", int64(1), mock.Anything).Return()
+
+	recorder := NewTelemetryMetricsRecorder(tel)
+	recorder.RecordRequest("sqs.send", 5*time.Millisecond, 404, "not-found")
+
+	tel.AssertExpectations(t)
+}
+
+func TestTelemetryMetricsRecorder_RecordRetry(t *testing.T) {
+	tel := new(mockTelemetry)
+	bg := context.Background()
+
+	tel.On("Counter", bg, "aws.request.retry", int64(1), mock.Anything).Return()
+
+	NewTelemetryMetricsRecorder(tel).RecordRetry("sqs.send")
+
+	tel.AssertExpectations(t)
+}
+
+func TestTelemetryMetricsRecorder_RecordThrottle(t *testing.T) {
+	tel := new(mockTelemetry)
+	bg := context.Background()
+
+	tel.On("Counter", bg, "aws.request.throttle", int64(1), mock.Anything).Return()
+
+	NewTelemetryMetricsRecorder(tel).RecordThrottle("sqs.send")
+
+	tel.AssertExpectations(t)
+}
+
+func TestNewTelemetryMetricsRecorder_ReturnsNonNil(t *testing.T) {
+	recorder := NewTelemetryMetricsRecorder(new(mockTelemetry))
+	assert.NotNil(t, recorder)
 }

@@ -102,3 +102,30 @@ func (m *mockTracer) Span(ctx context.Context, name string, fn func(context.Cont
 	}
 	return fn(ctx)
 }
+
+// mockTelemetry is a mock implementation of telemetry.Telemetry.
+type mockTelemetry struct {
+	mock.Mock
+}
+
+func (m *mockTelemetry) Counter(ctx context.Context, name string, value int64, attrs ...attribute.KeyValue) {
+	m.Called(ctx, name, value, attrs)
+}
+
+func (m *mockTelemetry) Gauge(ctx context.Context, name string, value float64, attrs ...attribute.KeyValue) {
+	m.Called(ctx, name, value, attrs)
+}
+
+func (m *mockTelemetry) Histogram(ctx context.Context, name string, value float64, attrs ...attribute.KeyValue) {
+	m.Called(ctx, name, value, attrs)
+}
+
+func (m *mockTelemetry) Span(ctx context.Context, name string, fn func(context.Context) error, attrs ...attribute.KeyValue) error {
+	args := m.Called(ctx, name, fn, attrs)
+	return args.Error(0)
+}
+
+func (m *mockTelemetry) Shutdown(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}

@@ -8,6 +8,8 @@ import (
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestLoggingMiddleware_Success(t *testing.T) {
@@ -136,6 +138,56 @@ func TestLoggingMiddleware_WithMethod(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, resp, result)
 	mockCli.AssertExpectations(t)
+	mockLog.AssertExpectations(t)
+}
+
+func TestLoggingMiddleware_WithActiveSpan(t *testing.T) {
+	mockLog := new(mockLogger)
+	mockCli := new(mockClient)
+
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	ctx, span := tp.Tracer("test").Start(context.Background(), "test-op")
+	defer span.End()
+
+	req := &cloud.Request{Operation: "sqs.send_message", Path: "q"}
+	resp := &cloud.Response{StatusCode: 200}
+
+	mockCli.On("Do", ctx, req).Return(resp, nil)
+	mockLog.On("Info", mock.Anything, mock.AnythingOfType("string"),
+		mock.MatchedBy(func(fields map[string]interface{}) bool {
+			traceID, ok1 := fields["trace.id"].(string)
+			spanID, ok2 := fields["span.id"].(string)
+			return ok1 && ok2 && traceID != "" && spanID != ""
+		})).Return()
+
+	result, err := Logging(mockLog)(mockCli).Do(ctx, req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, resp, result)
+	mockLog.AssertExpectations(t)
+}
+
+func TestLoggingMiddleware_NoActiveSpan_NoTraceFields(t *testing.T) {
+	mockLog := new(mockLogger)
+	mockCli := new(mockClient)
+
+	ctx := context.Background()
+	req := &cloud.Request{Operation: "sqs.send_message", Path: "q"}
+	resp := &cloud.Response{StatusCode: 200}
+
+	mockCli.On("Do", ctx, req).Return(resp, nil)
+	mockLog.On("Info", ctx, mock.AnythingOfType("string"),
+		mock.MatchedBy(func(fields map[string]interface{}) bool {
+			_, hasTrace := fields["trace.id"]
+			_, hasSpan := fields["span.id"]
+			return !hasTrace && !hasSpan
+		})).Return()
+
+	result, err := Logging(mockLog)(mockCli).Do(ctx, req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, resp, result)
 	mockLog.AssertExpectations(t)
 }
 
