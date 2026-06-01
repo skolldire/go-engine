@@ -623,6 +623,104 @@ handlers := configs.GetHandlers()
 processors := configs.GetBatches()
 ```
 
+## 🏥 Health Checks
+
+`pkg/health` expone health checks configurables para microservicios desplegados en ECS Fargate.
+El builder registra `GET /health` automáticamente; ECS apunta a ese endpoint para determinar
+si el contenedor está sano.
+
+### Configuración en `config/application.yaml`
+
+No se requiere configuración YAML para health checks. El timeout del servicio se pasa al builder:
+
+```yaml
+# (opcional) el timeout se configura en código, no en YAML
+```
+
+### Uso en `main.go`
+
+```go
+import (
+    "github.com/skolldire/go-engine/pkg/app"
+    "github.com/skolldire/go-engine/pkg/health"
+)
+
+engine, err := app.NewAppBuilder().
+    WithContext(ctx).
+    WithDynamicConfig().
+    WithHealth(health.Config{Timeout: 5 * time.Second}).
+    RegisterHealthChecker("postgres", health.NewSQLChecker(sqlDB)).
+    RegisterHealthChecker("redis",    health.NewRedisChecker(redisClient)).
+    RegisterHealthChecker("payments", health.NewHTTPChecker("https://api.payments.internal/ping", 2*time.Second)).
+    WithInitialization().
+    WithRouter().
+    Build()
+```
+
+El builder monta `GET /health` en el router principal en cuanto ambos (servicio + router) estén
+inicializados. El orden de llamadas es flexible: `RegisterHealthChecker` puede ir antes o después
+de `WithRouter`.
+
+### Respuesta del endpoint
+
+**200 OK** — todos los checkers pasan:
+```json
+{
+  "status": "healthy",
+  "checks": [
+    { "name": "postgres", "status": "ok", "latency_ms": 3 },
+    { "name": "redis",    "status": "ok", "latency_ms": 1 }
+  ],
+  "latency_ms": 4,
+  "timestamp": "2026-06-01T12:00:00Z"
+}
+```
+
+**503 Service Unavailable** — algún checker falla:
+```json
+{
+  "status": "unhealthy",
+  "checks": [
+    { "name": "postgres", "status": "ok",    "latency_ms": 3 },
+    { "name": "redis",    "status": "error", "error": "dial tcp: connection refused", "latency_ms": 5001 }
+  ],
+  "latency_ms": 5001,
+  "timestamp": "2026-06-01T12:00:00Z"
+}
+```
+
+### Checkers disponibles
+
+| Constructor | Dependencia verificada |
+|---|---|
+| `health.NewSQLChecker(db sqlPinger)` | Cualquier cliente SQL que implemente `Ping(ctx)` (e.g. `*gormsql.DBClient`) |
+| `health.NewRedisChecker(client redisPinger)` | Cualquier cliente Redis que implemente `Ping(ctx)` (e.g. `*redis.RedisClient`) |
+| `health.NewHTTPChecker(url string, timeout)` | Servicio HTTP externo vía GET; falla si responde 5xx o no responde |
+
+### Checker personalizado
+
+```go
+type myChecker struct{}
+
+func (c *myChecker) Check(ctx context.Context) error {
+    // lógica propia
+    return nil
+}
+
+builder.RegisterHealthChecker("mi-servicio", &myChecker{})
+```
+
+### Endpoints adicionales (montaje manual)
+
+Además de `GET /health`, el handler expone sub-rutas para uso específico de ECS:
+
+```go
+router.Mount("/internal", health.NewHTTPHandler(engine.GetHealthService()).Routes())
+// GET /internal/live  → 200 mientras el proceso esté corriendo
+// GET /internal/ready → 200 si todas las dependencias están sanas
+// GET /internal/deps  → JSON con estado por dependencia
+```
+
 ## 🔧 Utilidades Avanzadas
 
 ### Circuit Breaker

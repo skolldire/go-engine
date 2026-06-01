@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -471,4 +472,99 @@ func TestHTTPChecker_ContextCancelled(t *testing.T) {
 
 	err := NewHTTPChecker(srv.URL, 2*time.Second).Check(ctx)
 	assert.Error(t, err)
+}
+
+// ── HealthHandler ─────────────────────────────────────────────────────────────
+
+func TestHealthHandler_200_AllHealthy(t *testing.T) {
+	hs := HealthStatus{
+		Status:    StatusUp,
+		Timestamp: time.Now(),
+		Dependencies: []DependencyStatus{
+			{Name: "db", Status: StatusUp, LatencyMs: 3},
+			{Name: "cache", Status: StatusUp, LatencyMs: 1},
+		},
+	}
+	svc := &mockService{}
+	svc.On("GetStatus").Return(hs)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	NewHTTPHandler(svc).HealthHandler(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	body := rec.Body.String()
+	assert.Contains(t, body, `"status":"healthy"`)
+	assert.Contains(t, body, `"checks"`)
+	assert.Contains(t, body, `"latency_ms"`)
+	assert.Contains(t, body, `"name":"db"`)
+	assert.Contains(t, body, `"status":"ok"`)
+}
+
+func TestHealthHandler_503_SomeUnhealthy(t *testing.T) {
+	hs := HealthStatus{
+		Status:    StatusDown,
+		Timestamp: time.Now(),
+		Dependencies: []DependencyStatus{
+			{Name: "db", Status: StatusUp, LatencyMs: 2},
+			{Name: "cache", Status: StatusDown, Error: "connection refused", LatencyMs: 5001},
+		},
+	}
+	svc := &mockService{}
+	svc.On("GetStatus").Return(hs)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	NewHTTPHandler(svc).HealthHandler(rec, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `"status":"unhealthy"`)
+	assert.Contains(t, body, `"name":"cache"`)
+	assert.Contains(t, body, `"status":"error"`)
+	assert.Contains(t, body, "connection refused")
+}
+
+func TestHealthHandler_NoCheckers_200(t *testing.T) {
+	hs := HealthStatus{
+		Status:       StatusUp,
+		Timestamp:    time.Now(),
+		Dependencies: []DependencyStatus{},
+	}
+	svc := &mockService{}
+	svc.On("GetStatus").Return(hs)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	NewHTTPHandler(svc).HealthHandler(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"status":"healthy"`)
+	assert.Contains(t, rec.Body.String(), `"checks":[]`)
+}
+
+func TestHealthHandler_CheckResult_MapsCorrectly(t *testing.T) {
+	hs := HealthStatus{
+		Status:    StatusDown,
+		Timestamp: time.Now(),
+		Dependencies: []DependencyStatus{
+			{Name: "postgres", Status: StatusUp, LatencyMs: 4},
+			{Name: "redis", Status: StatusDown, Error: "timeout", LatencyMs: 5000},
+		},
+	}
+	svc := &mockService{}
+	svc.On("GetStatus").Return(hs)
+
+	rec := httptest.NewRecorder()
+	NewHTTPHandler(svc).HealthHandler(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	var resp HealthResponse
+	assert.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, HealthStatusUnhealthy, resp.Status)
+	assert.Len(t, resp.Checks, 2)
+	assert.Equal(t, CheckStatusOK, resp.Checks[0].Status)
+	assert.Empty(t, resp.Checks[0].Error)
+	assert.Equal(t, CheckStatusError, resp.Checks[1].Status)
+	assert.Equal(t, "timeout", resp.Checks[1].Error)
 }

@@ -17,6 +17,7 @@ type AppBuilder struct {
 	engine        *Engine
 	errors        []error
 	shutdownHooks []func(context.Context) error
+	healthMounted bool
 }
 
 func NewAppBuilder() *AppBuilder {
@@ -114,6 +115,7 @@ func (b *AppBuilder) WithRouter() *AppBuilder {
 		}
 		b.shutdownHooks = nil
 	}
+	b.mountHealthIfReady()
 	return b
 }
 
@@ -173,7 +175,44 @@ func (b *AppBuilder) WithHealth(cfg health.Config) *AppBuilder {
 		b.engine.Services = NewServiceRegistry()
 	}
 	b.engine.Services.Health = health.NewService(cfg, b.engine.Log)
+	b.mountHealthIfReady()
 	return b
+}
+
+// RegisterHealthChecker adds a named checker to the health service.
+// If WithHealth has not been called yet, the service is initialized with default config.
+// Call after WithDynamicConfig or SetLogger so the logger is available.
+func (b *AppBuilder) RegisterHealthChecker(name string, c health.Checker) *AppBuilder {
+	if len(b.errors) > 0 {
+		return b
+	}
+	if b.engine.Services == nil {
+		b.engine.Services = NewServiceRegistry()
+	}
+	if b.engine.Services.Health == nil {
+		if b.engine.Log == nil {
+			b.addError(fmt.Errorf("call WithDynamicConfig or SetLogger before RegisterHealthChecker"))
+			return b
+		}
+		b.engine.Services.Health = health.NewService(health.Config{}, b.engine.Log)
+	}
+	b.engine.Services.Health.Register(name, c)
+	b.mountHealthIfReady()
+	return b
+}
+
+// mountHealthIfReady registers GET /health on the router when both the health
+// service and router are available. It is idempotent.
+func (b *AppBuilder) mountHealthIfReady() {
+	if b.healthMounted {
+		return
+	}
+	if b.engine.Router == nil || b.engine.Services == nil || b.engine.Services.Health == nil {
+		return
+	}
+	h := health.NewHTTPHandler(b.engine.Services.Health)
+	b.engine.Router.AddRoute("GET", "/health", h.HealthHandler)
+	b.healthMounted = true
 }
 
 func (b *AppBuilder) WithCustomClient(name string, client interface{}) *AppBuilder {

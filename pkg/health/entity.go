@@ -16,6 +16,29 @@ const (
 	StatusDown Status = "down"
 )
 
+const (
+	HealthStatusHealthy   = "healthy"
+	HealthStatusUnhealthy = "unhealthy"
+	CheckStatusOK         = "ok"
+	CheckStatusError      = "error"
+)
+
+// HealthResponse is the unified response shape for GET /health.
+type HealthResponse struct {
+	Status    string        `json:"status"`
+	Checks    []CheckResult `json:"checks"`
+	LatencyMs int64         `json:"latency_ms"`
+	Timestamp time.Time     `json:"timestamp"`
+}
+
+// CheckResult is a single dependency's result within HealthResponse.
+type CheckResult struct {
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+	LatencyMs int64  `json:"latency_ms"`
+}
+
 // Status represents a dependency's health state.
 type Status string
 

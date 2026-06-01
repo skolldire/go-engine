@@ -46,7 +46,7 @@ type ServiceRegistry struct {
 	CustomClients map[string]interface{}
 
 	// Health service
-	Health health.Service
+	Health *health.HealthService
 
 	// OTel provider
 	OTELProvider pkgotel.Provider
