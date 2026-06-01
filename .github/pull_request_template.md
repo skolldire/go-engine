@@ -1,39 +1,48 @@
-## 🗓 Prioriodad & deadline
+## What this PR does
 
-- [ ] 🔴 Alta
-- [ ] 🟡 Media
-- [ ] 🟢 Baja
+<!-- One or two sentences. What problem it solves or what it adds. -->
 
-Definir fecha maxima en la que debería ya estar en la rama base. [Borrar si no aplica]
+Closes #<!-- issue number -->
 
-## 📋 Descripción
-[Completar - Agregar una descripción de que trata el PR, agregar link del documento de especificación si aplica]
+## Type of change
 
-## 📦 Evidencias
-[Borrar si no aplica]
+<!-- Mark with x all that apply -->
 
-## ⚠️ Breaking changes
-Describir cambios de objetos canónicos de servicio, firmas de métodos y/o interfaces. [Borrar si no aplica]
+- [ ] `feat` — new functionality
+- [ ] `fix` — bug correction
+- [ ] `refactor` — internal change with no new behavior
+- [ ] `docs` — documentation only
+- [ ] `test` — tests only
+- [ ] `chore` — dependencies, CI, configuration
+- [ ] `perf` — performance improvement
 
-## ✅ Checklist de control:
+## Breaking changes
 
-🩺 `Quality Checks`
-- [ ] Desarrolle pruebas unitarias.
-- [ ] Desarrolle pruebas de integración.
-- [ ] Verifique porcentaje de cobertura en local
-- [ ] Realize revision de los code smells.
-- [ ] Realize formateo de código según el estándar.
-- [ ] Verifique que diff representa los cambios.
+<!-- Describe changes to public interfaces, method signatures, or observable behavior. Delete if not applicable. -->
 
-🧪 `Testing`
-- [ ] Realize pruebas en ambiente local.
-- [ ] Realize pruebas en scopes de test.
-- [ ] Realize pruebas en scopes de productivos (Si aplica).
+**BREAKING:**
 
-🛎 `Checks para integrantes externos`
-- [ ] Comuniqué el cambio y cual es su propósito al equipo.
-- [ ] Identifiqué a las mejores personas que pueden revisar el cambio.
-- [ ] Acordé los tiempos de revisión con los reviewers si el cambio debe tener una fecha específica de salida.
+## Key changes
 
-🔉 `Antes de hacer merge`
-- [ ] Atendí y puse en debate los comentarios que se realizaron durante el proceso de Code Review.
+<!-- List the most relevant files or packages and what changed in each. -->
+
+- `pkg/...`:
+- `pkg/app/builder.go`:
+
+## How to test
+
+<!-- Concrete steps to verify the change. Include the test command if relevant. -->
+
+```bash
+go test ./pkg/... -v -run TestNameOfTest
+```
+
+## Checklist
+
+- [ ] `go build ./...` passes (all affected modules)
+- [ ] `go test ./...` passes — coverage ≥ 85% in modified packages
+- [ ] `golangci-lint run` with no new warnings
+- [ ] `CHANGELOG.md` updated under `[Unreleased]`
+- [ ] README updated if the public API changed (builder, getters, YAML config)
+- [ ] No secrets, tokens, or credentials in the diff
+- [ ] Reviewers identified
