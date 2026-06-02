@@ -1,9 +1,6 @@
 package app
 
 import (
-	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
-	"github.com/skolldire/go-engine/messaging/pkg/integration/rabbitmq"
-	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/aws/pkg/clients/s3"
 	"github.com/skolldire/go-engine/aws/pkg/clients/ses"
 	"github.com/skolldire/go-engine/aws/pkg/clients/sns"
@@ -13,6 +10,9 @@ import (
 	"github.com/skolldire/go-engine/database/memcached/pkg/database/memcached"
 	"github.com/skolldire/go-engine/database/mongodb/pkg/database/mongodb"
 	"github.com/skolldire/go-engine/database/redis/pkg/database/redis"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
+	"github.com/skolldire/go-engine/messaging/pkg/integration/rabbitmq"
+	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/health"
 	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 )

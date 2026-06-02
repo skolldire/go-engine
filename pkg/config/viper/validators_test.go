@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skolldire/go-engine/pkg/app/router"
-	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/aws/pkg/clients/sqs"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
+	"github.com/skolldire/go-engine/pkg/app/router"
+	"github.com/skolldire/go-engine/pkg/clients/rest"
 )
 
 func TestValidateAWSConfig(t *testing.T) {
@@ -315,4 +315,3 @@ func TestIsValidURL(t *testing.T) {
 		})
 	}
 }
-

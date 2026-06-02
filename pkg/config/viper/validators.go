@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/skolldire/go-engine/pkg/app/router"
-	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
-	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/aws/pkg/clients/sns"
 	"github.com/skolldire/go-engine/aws/pkg/clients/sqs"
 	"github.com/skolldire/go-engine/aws/pkg/database/dynamo"
 	"github.com/skolldire/go-engine/database/redis/pkg/database/redis"
+	grpcClient "github.com/skolldire/go-engine/messaging/pkg/integration/grpc"
+	"github.com/skolldire/go-engine/pkg/app/router"
+	"github.com/skolldire/go-engine/pkg/clients/rest"
 )
 
 // ValidationError represents a configuration validation error
@@ -314,4 +314,3 @@ func isValidAWSRegion(region string) bool {
 func isValidURL(url string) bool {
 	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
-

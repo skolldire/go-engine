@@ -22,7 +22,7 @@ type devNull struct{}
 func (devNull) Write(p []byte) (int, error) { return len(p), nil }
 
 func TestNew_ImplementsLogWriter(t *testing.T) {
-	var _ logger.LogWriter = New(logrus.New())
+	var _ logger.LogWriter = New(logrus.New()) //nolint:staticcheck // compile-time interface check; explicit type is required
 }
 
 func TestAdapter_LogMethods_DoNotPanic(t *testing.T) {
@@ -43,7 +43,7 @@ func TestAdapter_WithField_ReturnsLogWriter(t *testing.T) {
 	w2 := w.WithField("key", "value")
 
 	require.NotNil(t, w2)
-	var _ logger.LogWriter = w2
+	var _ logger.LogWriter = w2 //nolint:staticcheck // compile-time interface check
 }
 
 func TestAdapter_WithFields_ReturnsLogWriter(t *testing.T) {
@@ -51,7 +51,7 @@ func TestAdapter_WithFields_ReturnsLogWriter(t *testing.T) {
 	w2 := w.WithFields(logrus.Fields{"a": 1, "b": "two"})
 
 	require.NotNil(t, w2)
-	var _ logger.LogWriter = w2
+	var _ logger.LogWriter = w2 //nolint:staticcheck // compile-time interface check
 }
 
 func TestEntryAdapter_Chaining(t *testing.T) {

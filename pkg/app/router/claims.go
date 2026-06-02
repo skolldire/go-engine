@@ -40,6 +40,14 @@ func ClaimsFromContext(ctx context.Context) *Claims {
 	return c
 }
 
+// InjectClaimsForTest injects claims into ctx using the same mechanism as
+// JWTMiddleware. Use this in tests that need to simulate an authenticated request
+// without going through the full JWT validation flow.
+// Must not be called from production code.
+func InjectClaimsForTest(ctx context.Context, c *Claims) context.Context {
+	return context.WithValue(ctx, claimsKey{}, c)
+}
+
 // RequireGroup returns a chi middleware that allows only requests where the
 // authenticated user belongs to at least one of the specified Cognito groups.
 // It must be applied after JWTMiddleware — if claims are absent it returns 401.

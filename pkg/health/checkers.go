@@ -62,8 +62,8 @@ func (c *SQLChecker) Check(ctx context.Context) error {
 // HTTPChecker verifies an external URL by issuing a GET request.
 // It considers any 5xx status code a failure.
 type HTTPChecker struct {
-	url     string
-	client  *http.Client
+	url    string
+	client *http.Client
 }
 
 // NewHTTPChecker creates a Checker that GETs url.
@@ -87,7 +87,7 @@ func (c *HTTPChecker) Check(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("http get: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= http.StatusInternalServerError {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}

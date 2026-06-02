@@ -1,3 +1,4 @@
+// Package rest provides an HTTP client with retry, circuit breaker, and logging support.
 package rest
 
 import (

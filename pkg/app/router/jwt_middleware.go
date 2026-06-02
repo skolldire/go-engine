@@ -260,7 +260,7 @@ func fetchJWKS(ctx context.Context, endpoint string) (map[string]*rsa.PublicKey,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var jwks jwksResponse
 	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
@@ -302,5 +302,5 @@ func rsaKeyFromJWK(nB64, eB64 string) (*rsa.PublicKey, error) {
 func writeJSONError(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	fmt.Fprintf(w, `{"code":%q,"msg":%q}`, code, msg)
+	_, _ = fmt.Fprintf(w, `{"code":%q,"msg":%q}`, code, msg)
 }

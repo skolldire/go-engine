@@ -1,3 +1,4 @@
+// Package build provides request and response construction helpers for the application layer.
 package build
 
 import "context"

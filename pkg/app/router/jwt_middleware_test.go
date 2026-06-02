@@ -405,7 +405,7 @@ func TestRSAKeyFromJWK_InvalidBase64(t *testing.T) {
 
 func TestRSAKeyFromJWK_InvalidExponent(t *testing.T) {
 	key := generateTestKey(t)
-	nB64 := base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes())
+	nB64 := base64.RawURLEncoding.EncodeToString(key.N.Bytes())
 	_, err := rsaKeyFromJWK(nB64, "!!!invalid")
 	assert.Error(t, err)
 }

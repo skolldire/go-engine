@@ -17,6 +17,8 @@ const (
 	defaultShutdownTimeout = 30 * time.Second
 )
 
+// Service is the public interface for the HTTP router returned by NewService.
+// Consumers use it to register routes, middleware, and shutdown hooks.
 type Service interface {
 	Run() error
 	Use(middlewares ...func(http.Handler) http.Handler)
@@ -26,6 +28,7 @@ type Service interface {
 	RegisterShutdownHook(fn func(context.Context) error)
 }
 
+// App is the concrete implementation of Service backed by chi.
 type App struct {
 	router          *chi.Mux
 	server          *http.Server
@@ -35,6 +38,7 @@ type App struct {
 	shutdownHooks   []func(context.Context) error
 }
 
+// Config holds the HTTP server settings populated from the `router:` YAML section.
 type Config struct {
 	Port            string        `mapstructure:"port" json:"port"`
 	Name            string        `mapstructure:"name" json:"name"`
@@ -47,6 +51,7 @@ type Config struct {
 	TrustedProxies  []string      `mapstructure:"trusted_proxies" json:"trusted_proxies"`
 }
 
+// Cors holds the CORS policy applied when Config.EnableCORS is true.
 type Cors struct {
 	AllowOrigins     []string `mapstructure:"allow_origins" json:"allow_origins"`
 	AllowMethods     []string `mapstructure:"allow_methods" json:"allow_methods"`
@@ -56,4 +61,5 @@ type Cors struct {
 	AllowMaxAge      int      `mapstructure:"allow_max_age" json:"allow_max_age"`
 }
 
+// RouterOption is a functional option applied to App during construction.
 type RouterOption func(*App)

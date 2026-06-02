@@ -66,7 +66,7 @@ func NewService(c Config, opts ...RouterOption) *App {
 
 func (a *App) configureMiddlewares() {
 	a.router.Use(middleware.RequestID)
-	a.router.Use(middleware.RealIP)
+	a.router.Use(middleware.RealIP) //nolint:staticcheck // tracked: replace with trusted-proxy-aware alternative
 	a.router.Use(middleware.Logger)
 	a.router.Use(middleware.Recoverer)
 	a.router.Use(middleware.Timeout(60 * time.Second))
