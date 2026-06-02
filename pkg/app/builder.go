@@ -215,6 +215,26 @@ func (b *AppBuilder) mountHealthIfReady() {
 	b.healthMounted = true
 }
 
+// WithJWTAuth registers the JWT validation middleware on the router.
+// It must be called after WithRouter. The middleware validates Bearer tokens
+// on every request not listed in cfg.SkipPaths and injects *router.Claims
+// into the context. Use router.ClaimsFromContext in handlers to read them.
+//
+// For Cognito, set JWKSEndpoint to:
+//
+//	https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/jwks.json
+func (b *AppBuilder) WithJWTAuth(cfg router.JWTAuthConfig) *AppBuilder {
+	if len(b.errors) > 0 {
+		return b
+	}
+	if b.engine.Router == nil {
+		b.addError(fmt.Errorf("router not initialized, call WithRouter before WithJWTAuth"))
+		return b
+	}
+	b.engine.Router.Use(router.JWTMiddleware(cfg))
+	return b
+}
+
 func (b *AppBuilder) WithCustomClient(name string, client interface{}) *AppBuilder {
 	if name == "" {
 		b.addError(fmt.Errorf("client name cannot be empty"))

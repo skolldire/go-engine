@@ -9,8 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **JWT middleware** (`pkg/app/router`): `JWTMiddleware(cfg)` validates RS256 Bearer tokens offline via JWKS with a TTL-based cache (default 1 h). Falls back to stale keys on JWKS fetch failure.
+- `AppBuilder.WithJWTAuth(cfg router.JWTAuthConfig)` — registers the middleware after `WithRouter`.
+- `router.Claims` struct with `Sub`, `Email`, `Username`, `Groups`, `TokenUse`, `Raw`.
+- `router.ClaimsFromContext(ctx)` — retrieves validated claims from the request context.
+- `router.RequireGroup(groups...)` — chi middleware that enforces Cognito group membership (403 on failure).
+- 25 tests for JWT middleware covering: valid token, expired, wrong key, issuer/audience mismatch, slice audience, `client_id` audience (Cognito access tokens), skip paths, `RequireGroup`, stale cache fallback, JWKS server unreachable. Coverage: 81.4%.
 - `make lint-arch` Makefile target: scans `pkg/` for `gorm.io/gorm` imports and exits 1 on violation. Enforces the architectural boundary that GORM stays inside the `database/sql` sub-module.
-- README section `## SQL and hexagonal architecture`: anti-pattern vs correct pattern with full code examples (domain port → use case → adapter → `main.go` wiring).
+- `make lint` Makefile target: runs `golangci-lint run ./...`.
+- README section `## JWT authentication` with builder wiring, claims extraction, and `RequireGroup` examples.
+- README section `## SQL and hexagonal architecture`: anti-pattern vs correct pattern with full code examples.
+- 6 sub-module READMEs: `aws/`, `messaging/`, `database/sql/`, `database/redis/`, `database/mongodb/`, `database/memcached/`.
+- Main README rewritten: 366 lines covering all builder methods, Engine getters, health, resilience, error_handler, app_profile, OTEL, observability, JWT, and messaging decision table.
 - `GET /health` unified endpoint returning `{status:"healthy"/"unhealthy", checks[], latency_ms}` — designed for ECS Fargate health checks.
 - `AppBuilder.RegisterHealthChecker(name, checker)` — registers checkers fluently; auto-mounts `GET /health` on the router when both the health service and router are available.
 - `health.HealthResponse` and `health.CheckResult` public types for the new endpoint.
