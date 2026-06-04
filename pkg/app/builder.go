@@ -220,7 +220,7 @@ func (b *AppBuilder) mountHealthIfReady() {
 // on every request not listed in cfg.SkipPaths and injects *router.Claims
 // into the context. Use router.ClaimsFromContext in handlers to read them.
 //
-// For Cognito, set JWKSEndpoint to:
+// For Cognito, set JWKSURL to:
 //
 //	https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/jwks.json
 func (b *AppBuilder) WithJWTAuth(cfg router.JWTAuthConfig) *AppBuilder {
@@ -231,7 +231,7 @@ func (b *AppBuilder) WithJWTAuth(cfg router.JWTAuthConfig) *AppBuilder {
 		b.addError(fmt.Errorf("router not initialized, call WithRouter before WithJWTAuth"))
 		return b
 	}
-	b.engine.Router.Use(router.JWTMiddleware(cfg))
+	b.engine.Router.Use(router.JWTAuth(cfg))
 	return b
 }
 

@@ -17,46 +17,50 @@ import (
 
 // JWTAuthConfig configures the JWT validation middleware.
 type JWTAuthConfig struct {
-	// JWKSEndpoint is the URL of the JSON Web Key Set.
+	// JWKSURL is the URL of the JSON Web Key Set endpoint.
 	// For Cognito: https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/jwks.json
-	JWKSEndpoint string
+	JWKSURL string
+
+	// JWKSCache controls how long JWKS public keys are cached.
+	// Defaults to 1 hour. Refreshes automatically 10 minutes before expiry.
+	// Falls back to stale keys on network failure.
+	JWKSCache time.Duration
 
 	// Issuer is the expected "iss" claim value.
-	// For Cognito: https://cognito-idp.{region}.amazonaws.com/{pool_id}
 	// Leave empty to skip issuer validation.
 	Issuer string
 
 	// Audience is the expected "aud" or "client_id" claim value.
-	// For Cognito ID tokens this is the App Client ID.
-	// For Cognito access tokens the field is "client_id", not "aud" — both are checked.
+	// For Cognito access tokens the field is "client_id" — both are checked.
 	// Leave empty to skip audience validation.
 	Audience string
 
+	// GroupsClaim is the JWT claim name that holds the user's groups.
+	// Defaults to "cognito:groups".
+	GroupsClaim string
+
 	// SkipPaths lists request paths that bypass JWT validation entirely.
 	// Matching is by prefix: "/health" also skips "/health/live", "/health/ready".
-	// Always include at least: ["/health", "/ping", "/live", "/ready"].
 	SkipPaths []string
-
-	// CacheTTL controls how long JWKS public keys are cached.
-	// Defaults to 1 hour. The cache refreshes automatically 10 minutes before
-	// expiry and falls back to the stale key on fetch failure.
-	CacheTTL time.Duration
 }
 
-// JWTMiddleware returns a chi-compatible HTTP middleware that validates Bearer
-// tokens on every non-skipped request.
+// JWTAuth returns a chi-compatible HTTP middleware that validates Bearer tokens
+// on every non-skipped request.
 //
 // On success it injects *Claims into the request context; use ClaimsFromContext
-// to retrieve them in handlers.
-// On failure it writes HTTP 401 with a JSON body {code, msg} and short-circuits
+// or MustClaimsFromContext to retrieve them in handlers.
+// On failure it writes HTTP 401 with body {"error":"<code>"} and short-circuits
 // the handler chain.
-func JWTMiddleware(cfg JWTAuthConfig) func(http.Handler) http.Handler {
-	if cfg.CacheTTL == 0 {
-		cfg.CacheTTL = time.Hour
+func JWTAuth(cfg JWTAuthConfig) func(http.Handler) http.Handler {
+	if cfg.JWKSCache == 0 {
+		cfg.JWKSCache = time.Hour
+	}
+	if cfg.GroupsClaim == "" {
+		cfg.GroupsClaim = "cognito:groups"
 	}
 	cache := &jwksCache{
-		endpoint: cfg.JWKSEndpoint,
-		ttl:      cfg.CacheTTL,
+		endpoint: cfg.JWKSURL,
+		ttl:      cfg.JWKSCache,
 		keys:     make(map[string]*rsa.PublicKey),
 	}
 	return func(next http.Handler) http.Handler {
@@ -68,13 +72,13 @@ func JWTMiddleware(cfg JWTAuthConfig) func(http.Handler) http.Handler {
 
 			tokenStr := extractBearer(r)
 			if tokenStr == "" {
-				writeJSONError(w, http.StatusUnauthorized, "ER-401", "missing or invalid Authorization header")
+				writeAuthError(w, http.StatusUnauthorized, "missing_token")
 				return
 			}
 
 			claims, err := parseAndValidate(r.Context(), tokenStr, cfg, cache)
 			if err != nil {
-				writeJSONError(w, http.StatusUnauthorized, "ER-401", err.Error())
+				writeAuthError(w, http.StatusUnauthorized, errorCode(err))
 				return
 			}
 
@@ -82,6 +86,15 @@ func JWTMiddleware(cfg JWTAuthConfig) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// errorCode maps a validation error to the error code string defined in KAN-7.
+func errorCode(err error) string {
+	msg := err.Error()
+	if strings.Contains(msg, "expired") {
+		return "token_expired"
+	}
+	return "invalid_token"
 }
 
 // ── internal ──────────────────────────────────────────────────────────────────
@@ -119,7 +132,7 @@ func parseAndValidate(ctx context.Context, tokenStr string, cfg JWTAuthConfig, c
 		return cache.getKey(ctx, kid)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("token validation failed: %w", err)
+		return nil, err
 	}
 	if !parsed.Valid {
 		return nil, fmt.Errorf("invalid token")
@@ -141,7 +154,7 @@ func parseAndValidate(ctx context.Context, tokenStr string, cfg JWTAuthConfig, c
 		return nil, fmt.Errorf("audience mismatch")
 	}
 
-	return buildClaims(mapClaims), nil
+	return buildClaims(mapClaims, cfg.GroupsClaim), nil
 }
 
 func audienceMatches(claims jwt.MapClaims, expected string) bool {
@@ -162,7 +175,7 @@ func audienceMatches(claims jwt.MapClaims, expected string) bool {
 	return false
 }
 
-func buildClaims(m jwt.MapClaims) *Claims {
+func buildClaims(m jwt.MapClaims, groupsClaim string) *Claims {
 	c := &Claims{Raw: make(map[string]interface{})}
 	for k, v := range m {
 		c.Raw[k] = v
@@ -179,7 +192,7 @@ func buildClaims(m jwt.MapClaims) *Claims {
 	if v, ok := m["token_use"].(string); ok {
 		c.TokenUse = v
 	}
-	if raw, ok := m["cognito:groups"].([]interface{}); ok {
+	if raw, ok := m[groupsClaim].([]interface{}); ok {
 		for _, g := range raw {
 			if s, ok := g.(string); ok {
 				c.Groups = append(c.Groups, s)
@@ -222,7 +235,7 @@ func (c *jwksCache) getKey(ctx context.Context, kid string) (*rsa.PublicKey, err
 	newKeys, err := fetchJWKS(ctx, c.endpoint)
 	if err != nil {
 		if key != nil {
-			return key, nil // return stale key on network failure
+			return key, nil // stale fallback on network failure
 		}
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
@@ -299,8 +312,8 @@ func rsaKeyFromJWK(nB64, eB64 string) (*rsa.PublicKey, error) {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func writeJSONError(w http.ResponseWriter, status int, code, msg string) {
+func writeAuthError(w http.ResponseWriter, status int, errCode string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(w, `{"code":%q,"msg":%q}`, code, msg)
+	_, _ = fmt.Fprintf(w, `{"error":%q}`, errCode)
 }

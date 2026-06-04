@@ -91,8 +91,8 @@ func TestJWTMiddleware_ValidToken(t *testing.T) {
 	srv := jwksServer(t, key)
 	defer srv.Close()
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL, Issuer: testIssuer, Audience: testAudience}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	token := signToken(t, key, validClaims())
 	rec := httptest.NewRecorder()
@@ -115,8 +115,8 @@ func TestJWTMiddleware_ClaimsInContext(t *testing.T) {
 		captured = ClaimsFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL, Issuer: testIssuer, Audience: testAudience}
-	mw := JWTMiddleware(cfg)(handler)
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer, Audience: testAudience}
+	mw := JWTAuth(cfg)(handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
 	req.Header.Set("Authorization", "Bearer "+signToken(t, key, validClaims()))
@@ -136,15 +136,14 @@ func TestJWTMiddleware_MissingHeader(t *testing.T) {
 	srv := jwksServer(t, key)
 	defer srv.Close()
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	mw.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/users", nil))
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), "ER-401")
-	assert.Contains(t, rec.Body.String(), "missing or invalid Authorization header")
+	assert.Contains(t, rec.Body.String(), `"missing_token"`)
 }
 
 func TestJWTMiddleware_MalformedHeader(t *testing.T) {
@@ -152,8 +151,8 @@ func TestJWTMiddleware_MalformedHeader(t *testing.T) {
 	srv := jwksServer(t, key)
 	defer srv.Close()
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	for _, bad := range []string{"Basic abc", "Bearer", "token-without-prefix"} {
 		rec := httptest.NewRecorder()
@@ -172,8 +171,8 @@ func TestJWTMiddleware_ExpiredToken(t *testing.T) {
 	claims := validClaims()
 	claims["exp"] = time.Now().Add(-time.Hour).Unix() // already expired
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL, Issuer: testIssuer, Audience: testAudience}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -181,7 +180,7 @@ func TestJWTMiddleware_ExpiredToken(t *testing.T) {
 	mw.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), "ER-401")
+	assert.Contains(t, rec.Body.String(), "token_expired")
 }
 
 func TestJWTMiddleware_WrongSigningKey(t *testing.T) {
@@ -195,8 +194,8 @@ func TestJWTMiddleware_WrongSigningKey(t *testing.T) {
 	tok.Header["kid"] = testKID
 	token, _ := tok.SignedString(wrongKey)
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -214,8 +213,8 @@ func TestJWTMiddleware_IssuerMismatch(t *testing.T) {
 	claims := validClaims()
 	claims["iss"] = "https://wrong-issuer.example.com"
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL, Issuer: testIssuer}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -223,7 +222,7 @@ func TestJWTMiddleware_IssuerMismatch(t *testing.T) {
 	mw.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), "issuer mismatch")
+	assert.Contains(t, rec.Body.String(), `"invalid_token"`)
 }
 
 func TestJWTMiddleware_AudienceMismatch(t *testing.T) {
@@ -234,8 +233,8 @@ func TestJWTMiddleware_AudienceMismatch(t *testing.T) {
 	claims := validClaims()
 	claims["aud"] = "wrong-client-id"
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL, Audience: testAudience}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -255,8 +254,8 @@ func TestJWTMiddleware_AudienceViaClientID(t *testing.T) {
 	delete(claims, "aud")
 	claims["client_id"] = testAudience
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL, Audience: testAudience}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -268,10 +267,10 @@ func TestJWTMiddleware_AudienceViaClientID(t *testing.T) {
 
 func TestJWTMiddleware_SkipPaths(t *testing.T) {
 	cfg := JWTAuthConfig{
-		JWKSEndpoint: "http://unreachable-jwks.invalid",
-		SkipPaths:    []string{"/health", "/ping"},
+		JWKSURL:   "http://unreachable-jwks.invalid",
+		SkipPaths: []string{"/health", "/ping"},
 	}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	mw := JWTAuth(cfg)(echoHandler())
 
 	for _, path := range []string{"/health", "/health/live", "/health/ready", "/ping"} {
 		rec := httptest.NewRecorder()
@@ -282,10 +281,10 @@ func TestJWTMiddleware_SkipPaths(t *testing.T) {
 
 func TestJWTMiddleware_SkipPath_NonSkippedRequiresAuth(t *testing.T) {
 	cfg := JWTAuthConfig{
-		JWKSEndpoint: "http://unreachable-jwks.invalid",
-		SkipPaths:    []string{"/health"},
+		JWKSURL:   "http://unreachable-jwks.invalid",
+		SkipPaths: []string{"/health"},
 	}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	mw.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/users", nil))
@@ -301,8 +300,8 @@ func TestJWTMiddleware_NoIssuerValidation(t *testing.T) {
 	claims := validClaims()
 	claims["iss"] = "https://anything.example.com"
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL} // no Issuer set
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL} // no Issuer set
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -348,7 +347,7 @@ func TestRequireGroup_BlocksNonMatchingGroup(t *testing.T) {
 	RequireGroup("admins")(echoHandler()).ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), "ER-403")
+	assert.Contains(t, rec.Body.String(), `"forbidden"`)
 }
 
 func TestRequireGroup_NoClaims_Returns401(t *testing.T) {
@@ -368,6 +367,48 @@ func TestRequireGroup_MultipleGroupsAllowed(t *testing.T) {
 	RequireGroup("admins", "teachers", "staff")(echoHandler()).ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+// ── MustClaimsFromContext tests ───────────────────────────────────────────────
+
+func TestMustClaimsFromContext_PanicsWhenAbsent(t *testing.T) {
+	assert.Panics(t, func() {
+		MustClaimsFromContext(context.Background())
+	})
+}
+
+func TestMustClaimsFromContext_ReturnsClaimsWhenPresent(t *testing.T) {
+	c := &Claims{Sub: "u1"}
+	ctx := InjectClaimsForTest(context.Background(), c)
+	assert.Equal(t, "u1", MustClaimsFromContext(ctx).Sub)
+}
+
+// ── Concurrent requests (race detector) ──────────────────────────────────────
+
+func TestJWTMiddleware_ConcurrentRequests(t *testing.T) {
+	key := generateTestKey(t)
+	srv := jwksServer(t, key)
+	defer srv.Close()
+
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
+
+	token := signToken(t, key, validClaims())
+
+	const n = 100
+	results := make(chan int, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/users", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			mw.ServeHTTP(rec, req)
+			results <- rec.Code
+		}()
+	}
+	for i := 0; i < n; i++ {
+		assert.Equal(t, http.StatusOK, <-results)
+	}
 }
 
 // ── shouldSkip tests ──────────────────────────────────────────────────────────
@@ -421,8 +462,8 @@ func TestJWTMiddleware_AudienceAsSlice(t *testing.T) {
 	claims := validClaims()
 	claims["aud"] = []interface{}{testAudience, "other-client"}
 
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL, Audience: testAudience}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -435,8 +476,8 @@ func TestJWTMiddleware_AudienceAsSlice(t *testing.T) {
 // ── fetchJWKS error paths ─────────────────────────────────────────────────────
 
 func TestJWTMiddleware_JWKSServerUnreachable(t *testing.T) {
-	cfg := JWTAuthConfig{JWKSEndpoint: "http://127.0.0.1:1"}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: "http://127.0.0.1:1"}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -453,8 +494,8 @@ func TestJWTMiddleware_JWKSReturnsInvalidJSON(t *testing.T) {
 	defer srv.Close()
 
 	key := generateTestKey(t)
-	cfg := JWTAuthConfig{JWKSEndpoint: srv.URL}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	mw := JWTAuth(cfg)(echoHandler())
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims(validClaims()))
 	tok.Header["kid"] = testKID
@@ -491,10 +532,10 @@ func TestJWTMiddleware_StaleKeyUsedWhenJWKSDown(t *testing.T) {
 	defer srv.Close()
 
 	cfg := JWTAuthConfig{
-		JWKSEndpoint: srv.URL,
-		CacheTTL:     1 * time.Millisecond, // expire immediately
+		JWKSURL:   srv.URL,
+		JWKSCache: 1 * time.Millisecond, // expire immediately
 	}
-	mw := JWTMiddleware(cfg)(echoHandler())
+	mw := JWTAuth(cfg)(echoHandler())
 
 	doRequest := func() int {
 		rec := httptest.NewRecorder()
