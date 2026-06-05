@@ -17,11 +17,11 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skolldire/go-engine/aws v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/database/memcached v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/database/mongodb v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/database/redis v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/messaging v0.0.0-00010101000000-000000000000
+	github.com/skolldire/go-engine/aws v0.17.0
+	github.com/skolldire/go-engine/database/memcached v0.17.0
+	github.com/skolldire/go-engine/database/mongodb v0.17.0
+	github.com/skolldire/go-engine/database/redis v0.17.0
+	github.com/skolldire/go-engine/messaging v0.17.0
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
@@ -124,9 +124,9 @@ require (
 )
 
 replace (
-	github.com/skolldire/go-engine/aws v0.0.0-00010101000000-000000000000 => ./aws
-	github.com/skolldire/go-engine/database/memcached v0.0.0-00010101000000-000000000000 => ./database/memcached
-	github.com/skolldire/go-engine/database/mongodb v0.0.0-00010101000000-000000000000 => ./database/mongodb
-	github.com/skolldire/go-engine/database/redis v0.0.0-00010101000000-000000000000 => ./database/redis
-	github.com/skolldire/go-engine/messaging v0.0.0-00010101000000-000000000000 => ./messaging
+	github.com/skolldire/go-engine/aws v0.17.0 => ./aws
+	github.com/skolldire/go-engine/database/memcached v0.17.0 => ./database/memcached
+	github.com/skolldire/go-engine/database/mongodb v0.17.0 => ./database/mongodb
+	github.com/skolldire/go-engine/database/redis v0.17.0 => ./database/redis
+	github.com/skolldire/go-engine/messaging v0.17.0 => ./messaging
 )
