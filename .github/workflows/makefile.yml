@@ -27,11 +27,5 @@ jobs:
     - name: Run Makefile
       run: make all
 
-    - name: Build sub-modules
-      run: |
-        cd aws              && go build ./... && cd ..
-        cd database/sql     && go build ./... && cd ../..
-        cd database/redis   && go build ./... && cd ../..
-        cd database/mongodb && go build ./... && cd ../..
-        cd database/memcached && go build ./... && cd ../..
-        cd messaging        && go build ./... && cd ..
+    - name: Build
+      run: go build ./...
