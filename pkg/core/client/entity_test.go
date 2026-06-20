@@ -232,6 +232,32 @@ func TestBaseClient_Execute_WithContextDeadline(t *testing.T) {
 	}
 }
 
+func TestBaseClient_ContextWithTimeout_AppliesClientTimeout(t *testing.T) {
+	client := NewBaseClient(BaseConfig{Timeout: 50 * time.Millisecond}, &mockLogger{})
+
+	ctx, cancel := client.ContextWithTimeout(context.Background())
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	assert.True(t, ok, "a deadline must be applied when the parent context has none")
+	assert.WithinDuration(t, time.Now().Add(50*time.Millisecond), deadline, 20*time.Millisecond)
+}
+
+func TestBaseClient_ContextWithTimeout_RespectsExistingDeadline(t *testing.T) {
+	client := NewBaseClient(BaseConfig{Timeout: 5 * time.Second}, &mockLogger{})
+
+	parent, parentCancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer parentCancel()
+
+	ctx, cancel := client.ContextWithTimeout(parent)
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	assert.True(t, ok)
+	// The existing (shorter) parent deadline must be respected, not the 5s client timeout.
+	assert.WithinDuration(t, time.Now().Add(30*time.Millisecond), deadline, 20*time.Millisecond)
+}
+
 func TestBaseClient_SetLogging(t *testing.T) {
 	config := BaseConfig{
 		EnableLogging:  false,

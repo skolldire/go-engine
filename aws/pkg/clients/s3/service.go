@@ -258,6 +258,11 @@ func (c *S3Client) GetPresignedURL(ctx context.Context, key string, expiration t
 		expiration = 15 * time.Minute
 	}
 
+	// Bound the context to the client timeout before Execute so the presign
+	// call below uses the same managed context (Operation receives no ctx).
+	ctx, cancel := c.ContextWithTimeout(ctx)
+	defer cancel()
+
 	result, err := c.Execute(ctx, "GetPresignedURL", func() (interface{}, error) {
 		request, err := c.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(c.bucket),
@@ -290,6 +295,11 @@ func (c *S3Client) GetPresignedPutURL(ctx context.Context, key, contentType stri
 	if expiration == 0 {
 		expiration = 15 * time.Minute
 	}
+
+	// Bound the context to the client timeout before Execute so the presign
+	// call below uses the same managed context (Operation receives no ctx).
+	ctx, cancel := c.ContextWithTimeout(ctx)
+	defer cancel()
 
 	result, err := c.Execute(ctx, "GetPresignedPutURL", func() (interface{}, error) {
 		input := &s3.PutObjectInput{

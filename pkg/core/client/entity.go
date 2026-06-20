@@ -180,6 +180,19 @@ func (bc *BaseClient) ensureContextWithTimeout(ctx context.Context) (context.Con
 	return context.WithTimeout(ctx, bc.timeout)
 }
 
+// ContextWithTimeout returns a context derived from ctx and bounded by the
+// client's timeout (DefaultTimeout if none was configured). If ctx already has
+// a deadline, that deadline is respected as-is. The caller must invoke the
+// returned cancel function.
+//
+// Use this when an operation needs to pass the timeout-managed context into an
+// SDK call: Operation receives no context, so the closure would otherwise close
+// over an unbounded context. Bounding it before Execute keeps the operation's
+// context consistent with the one Execute manages.
+func (bc *BaseClient) ContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return bc.ensureContextWithTimeout(ctx)
+}
+
 // SetLogging enables or disables operation logging at runtime. Safe for concurrent use.
 func (bc *BaseClient) SetLogging(enable bool) {
 	bc.mu.Lock()
