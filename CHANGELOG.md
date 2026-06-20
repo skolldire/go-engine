@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Cognito group management** (`aws/pkg/clients/cognito`): `Service.AddUserToGroup(ctx, username, group)`, `RemoveUserFromGroup(ctx, username, group)` and `ListGroupsForUser(ctx, username)`. They map `AdminAddUserToGroup` / `AdminRemoveUserFromGroup` / `AdminListGroupsForUser` (paginated) and read `UserPoolID` from the client `Config`. Consumers no longer need a direct dependency on the AWS SDK to assign roles.
+- **S3 presigned uploads** (`aws/pkg/clients/s3`): `Service.GetPresignedPutURL(ctx, key, contentType, expiration)` — symmetric to `GetPresignedURL`; generates a presigned `PUT` URL for direct client→S3 uploads. `expiration=0` defaults to 15 minutes.
 - **JWT middleware** (`pkg/app/router`): `JWTMiddleware(cfg)` validates RS256 Bearer tokens offline via JWKS with a TTL-based cache (default 1 h). Falls back to stale keys on JWKS fetch failure.
 - `AppBuilder.WithJWTAuth(cfg router.JWTAuthConfig)` — registers the middleware after `WithRouter`.
 - `router.Claims` struct with `Sub`, `Email`, `Username`, `Groups`, `TokenUse`, `Raw`.
@@ -29,6 +31,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - `.github/CONTRIBUTING.md` contribution guide.
 
 ### Changed
+- **Single Go module (BREAKING — module layout)**: go-engine is now a single module. The nested `go.mod`/`go.sum` of `aws/`, `messaging/`, `database/memcached/`, `database/mongodb/`, `database/redis/` and `database/sql/` were removed; their packages now belong to the root module. **Import paths are unchanged** (`github.com/skolldire/go-engine/aws/...`, `.../database/sql/...`, etc.). Consumers can now run `go get github.com/skolldire/go-engine@vX && go mod tidy` with **no `replace` directives**. Removed the local `replace` block from the root `go.mod` and the `go.work`/`go.work.sum` workspace files.
+- **JWT auth error shape (BREAKING — minor)**: `JWTAuth` and `RequireGroup` (`pkg/app/router`) now respond with an `error_handler.CommonApiError` body (`{"code","msg","details":{"reason":...}}`) instead of the flat `{"error":"<code>"}`. 401 responses use `code: "ER-401"`; 403 (RequireGroup) uses `code: "ER-403"`. `details.reason` holds a stable value: `missing_token`, `invalid_token`, `expired_token` or `forbidden`. This unifies the error taxonomy with the rest of the API (same shape as `error_handler.HandleApiErrorResponse`). Note: the expired-token reason changed from `token_expired` to `expired_token`.
 - `ServiceRegistry.Health` type changed from `health.Service` to `*health.HealthService` to allow direct `Register` calls from the builder without type assertions.
 - `AppBuilder.WithHealth` now calls `mountHealthIfReady()` internally; health routes mount regardless of whether `WithRouter` is called before or after.
 - README rewritten as a persistent API reference: builder method table, Engine getter tables, module map, and package conventions.

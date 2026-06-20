@@ -282,6 +282,44 @@ func (c *S3Client) GetPresignedURL(ctx context.Context, key string, expiration t
 	return urlStr, nil
 }
 
+func (c *S3Client) GetPresignedPutURL(ctx context.Context, key, contentType string, expiration time.Duration) (string, error) {
+	if key == "" {
+		return "", ErrInvalidInput
+	}
+
+	if expiration == 0 {
+		expiration = 15 * time.Minute
+	}
+
+	result, err := c.Execute(ctx, "GetPresignedPutURL", func() (interface{}, error) {
+		input := &s3.PutObjectInput{
+			Bucket: aws.String(c.bucket),
+			Key:    aws.String(key),
+		}
+		if contentType != "" {
+			input.ContentType = aws.String(contentType)
+		}
+
+		request, err := c.presigner.PresignPutObject(ctx, input, func(opts *s3.PresignOptions) {
+			opts.Expires = expiration
+		})
+		if err != nil {
+			return nil, err
+		}
+		return request.URL, nil
+	})
+
+	if err != nil {
+		return "", c.GetLogger().WrapError(err, "error generating presigned PUT URL")
+	}
+
+	urlStr, err := client.SafeTypeAssert[string](result)
+	if err != nil {
+		return "", c.GetLogger().WrapError(err, "error generating presigned PUT URL")
+	}
+	return urlStr, nil
+}
+
 func (c *S3Client) EnableLogging(enable bool) {
 	c.SetLogging(enable)
 }

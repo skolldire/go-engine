@@ -3,7 +3,7 @@
 AWS clients for go-engine: Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, and an observability-aware AWS facade.
 
 ```bash
-go get github.com/skolldire/go-engine/aws
+go get github.com/skolldire/go-engine
 ```
 
 All clients are wired automatically when declared in `config/application.yaml` and `WithInitialization()` is called on the builder. Multi-instance clients use the `*_clients` YAML array format.
@@ -55,6 +55,11 @@ newTokens, err := cog.RefreshToken(ctx, cognito.RefreshTokenRequest{
 // Sign out
 cog.SignOut(ctx, tokens.AccessToken)
 cog.GlobalSignOut(ctx, tokens.AccessToken)
+
+// Group (role) management — UserPoolID is taken from the client config
+cog.AddUserToGroup(ctx, "john", "administrador")
+cog.RemoveUserFromGroup(ctx, "john", "administrador")
+groups, _ := cog.ListGroupsForUser(ctx, "john")
 
 // MFA setup (TOTP)
 assoc, _ := cog.AssociateSoftwareToken(ctx, tokens.AccessToken)
@@ -147,6 +152,8 @@ s3c := engine.GetS3ClientByName("assets")
 err := s3c.UploadFile(ctx, "path/to/file.pdf", fileBytes, "application/pdf")
 data, err := s3c.DownloadFile(ctx, "path/to/file.pdf")
 url, err := s3c.GetPresignedURL(ctx, "path/to/file.pdf", 15*time.Minute)
+// Direct client→S3 upload (no file routed through the backend):
+putURL, err := s3c.GetPresignedPutURL(ctx, "path/to/file.pdf", "application/pdf", 15*time.Minute)
 err = s3c.DeleteFile(ctx, "path/to/file.pdf")
 ```
 

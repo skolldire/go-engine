@@ -340,10 +340,11 @@ r.With(router.RequireGroup("teachers", "admins")).Get("/content", contentHandler
 
 **`Claims` fields:** `Sub`, `Email`, `Username` (`cognito:username`), `Groups` (`cognito:groups`), `TokenUse` (`"id"` or `"access"`), `Raw` (full payload map for custom attributes like `custom:school_id`).
 
-**Error responses:**
-- Missing / malformed header → `401 {"code":"ER-401","msg":"missing or invalid Authorization header"}`
-- Invalid / expired token → `401 {"code":"ER-401","msg":"token validation failed: ..."}`
-- Wrong group → `403 {"code":"ER-403","msg":"insufficient group permissions"}`
+**Error responses** use the same `error_handler.CommonApiError` shape as the rest of the API (`{"code","msg","details":{"reason":...}}`). The `details.reason` field carries a stable machine-readable value:
+- Missing / malformed header → `401 {"code":"ER-401","msg":"authentication token is missing","details":{"reason":"missing_token"}}`
+- Invalid token → `401 {"code":"ER-401","msg":"authentication token is invalid","details":{"reason":"invalid_token"}}`
+- Expired token → `401 {"code":"ER-401","msg":"authentication token has expired","details":{"reason":"expired_token"}}`
+- Wrong group → `403 {"code":"ER-403","msg":"access forbidden: insufficient permissions","details":{"reason":"forbidden"}}`
 
 ## WithCustomClient — external clients
 

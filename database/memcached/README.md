@@ -3,7 +3,7 @@
 Memcached client for go-engine built on [bradfitz/gomemcache](https://github.com/bradfitz/gomemcache).
 
 ```bash
-go get github.com/skolldire/go-engine/database/memcached
+go get github.com/skolldire/go-engine
 ```
 
 ---

@@ -128,6 +128,14 @@ func (m *mockPresigner) PresignGetObject(ctx context.Context, params *awss3.GetO
 	return args.Get(0).(*v4.PresignedHTTPRequest), args.Error(1)
 }
 
+func (m *mockPresigner) PresignPutObject(ctx context.Context, params *awss3.PutObjectInput, _ ...func(*awss3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*v4.PresignedHTTPRequest), args.Error(1)
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func newTestS3Client(api *mockS3API, presigner *mockPresigner) *S3Client {
@@ -496,6 +504,50 @@ func TestS3Client_GetPresignedURL_Error(t *testing.T) {
 
 	c := newTestS3Client(&mockS3API{}, presigner)
 	_, err := c.GetPresignedURL(context.Background(), "test-key", 15*time.Minute)
+	assert.Error(t, err)
+}
+
+// ── GetPresignedPutURL ────────────────────────────────────────────────────────
+
+func TestS3Client_GetPresignedPutURL_InvalidInput(t *testing.T) {
+	c := newTestS3Client(&mockS3API{}, &mockPresigner{})
+	_, err := c.GetPresignedPutURL(context.Background(), "", "image/png", 15*time.Minute)
+	assert.ErrorIs(t, err, ErrInvalidInput)
+}
+
+func TestS3Client_GetPresignedPutURL_Success(t *testing.T) {
+	presigner := &mockPresigner{}
+	presigner.On("PresignPutObject", mock.Anything, mock.MatchedBy(func(in *awss3.PutObjectInput) bool {
+		return in.Key != nil && *in.Key == "uploads/photo.png" &&
+			in.ContentType != nil && *in.ContentType == "image/png"
+	})).Return(&v4.PresignedHTTPRequest{URL: "https://s3.example.com/test-bucket/uploads/photo.png?sig=put"}, nil)
+
+	c := newTestS3Client(&mockS3API{}, presigner)
+	url, err := c.GetPresignedPutURL(context.Background(), "uploads/photo.png", "image/png", 30*time.Minute)
+	assert.NoError(t, err)
+	assert.Equal(t, "https://s3.example.com/test-bucket/uploads/photo.png?sig=put", url)
+	presigner.AssertExpectations(t)
+}
+
+func TestS3Client_GetPresignedPutURL_DefaultExpiration(t *testing.T) {
+	presigner := &mockPresigner{}
+	presigner.On("PresignPutObject", mock.Anything, mock.Anything).
+		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/signed-put"}, nil)
+
+	c := newTestS3Client(&mockS3API{}, presigner)
+	url, err := c.GetPresignedPutURL(context.Background(), "test-key", "", 0)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, url)
+	presigner.AssertExpectations(t)
+}
+
+func TestS3Client_GetPresignedPutURL_Error(t *testing.T) {
+	presigner := &mockPresigner{}
+	presigner.On("PresignPutObject", mock.Anything, mock.Anything).
+		Return(nil, errors.New("presign failed"))
+
+	c := newTestS3Client(&mockS3API{}, presigner)
+	_, err := c.GetPresignedPutURL(context.Background(), "test-key", "application/pdf", 15*time.Minute)
 	assert.Error(t, err)
 }
 

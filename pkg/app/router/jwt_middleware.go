@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/skolldire/go-engine/pkg/utilities/error_handler"
 )
 
 // JWTAuthConfig configures the JWT validation middleware.
@@ -49,8 +50,9 @@ type JWTAuthConfig struct {
 //
 // On success it injects *Claims into the request context; use ClaimsFromContext
 // or MustClaimsFromContext to retrieve them in handlers.
-// On failure it writes HTTP 401 with body {"error":"<code>"} and short-circuits
-// the handler chain.
+// On failure it writes HTTP 401 with an error_handler.CommonApiError body
+// (code "ER-401", and "details.reason" set to a stable value: "missing_token",
+// "invalid_token" or "expired_token") and short-circuits the handler chain.
 func JWTAuth(cfg JWTAuthConfig) func(http.Handler) http.Handler {
 	if cfg.JWKSCache == 0 {
 		cfg.JWKSCache = time.Hour
@@ -88,11 +90,12 @@ func JWTAuth(cfg JWTAuthConfig) func(http.Handler) http.Handler {
 	}
 }
 
-// errorCode maps a validation error to the error code string defined in KAN-7.
+// errorCode maps a validation error to a stable reason string surfaced in
+// the CommonApiError "details.reason" field.
 func errorCode(err error) string {
 	msg := err.Error()
 	if strings.Contains(msg, "expired") {
-		return "token_expired"
+		return "expired_token"
 	}
 	return "invalid_token"
 }
@@ -312,8 +315,38 @@ func rsaKeyFromJWK(nB64, eB64 string) (*rsa.PublicKey, error) {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func writeAuthError(w http.ResponseWriter, status int, errCode string) {
+// writeAuthError writes an error_handler.CommonApiError body so that auth
+// failures share the same error taxonomy as the rest of the API
+// (same shape produced by error_handler.HandleApiErrorResponse).
+// reason is a stable machine-readable value exposed under "details.reason"
+// (e.g. "missing_token", "invalid_token", "expired_token", "forbidden").
+func writeAuthError(w http.ResponseWriter, status int, reason string) {
+	var apiErr *error_handler.CommonApiError
+	if status == http.StatusForbidden {
+		apiErr = error_handler.NewForbiddenError(authErrorMsg(reason), nil)
+	} else {
+		apiErr = error_handler.NewUnauthorizedError(authErrorMsg(reason), nil)
+	}
+	apiErr.WithDetail("reason", reason)
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(w, `{"error":%q}`, errCode)
+	w.WriteHeader(apiErr.HttpCode)
+	b, _ := json.Marshal(apiErr)
+	_, _ = w.Write(b)
+}
+
+// authErrorMsg returns a human-readable message for a given auth failure reason.
+func authErrorMsg(reason string) string {
+	switch reason {
+	case "missing_token":
+		return "authentication token is missing"
+	case "invalid_token":
+		return "authentication token is invalid"
+	case "expired_token":
+		return "authentication token has expired"
+	case "forbidden":
+		return "access forbidden: insufficient permissions"
+	default:
+		return "authentication failed"
+	}
 }

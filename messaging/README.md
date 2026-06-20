@@ -3,7 +3,7 @@
 Kafka, RabbitMQ, gRPC client, and gRPC server for go-engine.
 
 ```bash
-go get github.com/skolldire/go-engine/messaging
+go get github.com/skolldire/go-engine
 ```
 
 ---

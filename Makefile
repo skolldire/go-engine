@@ -73,8 +73,8 @@ coverage-module:
 	@rm -f coverage_module.out
 
 # lint-arch enforces the hexagonal architecture boundary:
-# gorm.io/gorm must NOT be imported in the root module's pkg/ packages.
-# GORM is confined to the database/sql sub-module; consumers inject a
+# gorm.io/gorm must NOT be imported in the root pkg/ packages.
+# GORM is confined to the database/sql sub-package; consumers inject a
 # *gorm.DB (or gormsql.DBClient) via app.NewAppBuilder().WithCustomClient().
 lint-arch:
 	@echo "==> Checking architectural constraints..."

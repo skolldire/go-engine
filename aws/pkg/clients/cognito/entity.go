@@ -284,4 +284,12 @@ type Service interface {
 	// MVP 0 - Gestión de Sesiones
 	SignOut(ctx context.Context, accessToken string) error
 	GlobalSignOut(ctx context.Context, accessToken string) error
+
+	// MVP 1 - Gestión de Grupos (roles)
+	// AddUserToGroup agrega un usuario a un grupo del User Pool (mapea AdminAddUserToGroup).
+	AddUserToGroup(ctx context.Context, username, group string) error
+	// RemoveUserFromGroup quita un usuario de un grupo del User Pool (mapea AdminRemoveUserFromGroup).
+	RemoveUserFromGroup(ctx context.Context, username, group string) error
+	// ListGroupsForUser lista los grupos a los que pertenece un usuario (mapea AdminListGroupsForUser).
+	ListGroupsForUser(ctx context.Context, username string) ([]string, error)
 }
