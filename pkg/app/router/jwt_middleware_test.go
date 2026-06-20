@@ -143,7 +143,22 @@ func TestJWTMiddleware_MissingHeader(t *testing.T) {
 	mw.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/users", nil))
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), `"missing_token"`)
+	assertAuthErrorBody(t, rec.Body.Bytes(), "ER-401", "missing_token")
+}
+
+// assertAuthErrorBody verifies the response body matches the CommonApiError
+// shape used across the API: {"code","msg","details":{"reason":...}}.
+func assertAuthErrorBody(t *testing.T, body []byte, wantCode, wantReason string) {
+	t.Helper()
+	var parsed struct {
+		Code    string            `json:"code"`
+		Msg     string            `json:"msg"`
+		Details map[string]string `json:"details"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	assert.Equal(t, wantCode, parsed.Code)
+	assert.NotEmpty(t, parsed.Msg)
+	assert.Equal(t, wantReason, parsed.Details["reason"])
 }
 
 func TestJWTMiddleware_MalformedHeader(t *testing.T) {
@@ -180,7 +195,7 @@ func TestJWTMiddleware_ExpiredToken(t *testing.T) {
 	mw.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), "token_expired")
+	assertAuthErrorBody(t, rec.Body.Bytes(), "ER-401", "expired_token")
 }
 
 func TestJWTMiddleware_WrongSigningKey(t *testing.T) {
@@ -222,7 +237,7 @@ func TestJWTMiddleware_IssuerMismatch(t *testing.T) {
 	mw.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), `"invalid_token"`)
+	assertAuthErrorBody(t, rec.Body.Bytes(), "ER-401", "invalid_token")
 }
 
 func TestJWTMiddleware_AudienceMismatch(t *testing.T) {
@@ -347,7 +362,7 @@ func TestRequireGroup_BlocksNonMatchingGroup(t *testing.T) {
 	RequireGroup("admins")(echoHandler()).ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), `"forbidden"`)
+	assertAuthErrorBody(t, rec.Body.Bytes(), "ER-403", "forbidden")
 }
 
 func TestRequireGroup_NoClaims_Returns401(t *testing.T) {

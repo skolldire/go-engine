@@ -25,6 +25,7 @@ type s3APIClient interface {
 
 type s3Presigner interface {
 	PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
 var (
@@ -76,6 +77,12 @@ type Service interface {
 	// GetPresignedURL generates a presigned URL for temporary access to an object.
 	// If expiration is 0, defaults to 15 minutes.
 	GetPresignedURL(ctx context.Context, key string, expiration time.Duration) (string, error)
+
+	// GetPresignedPutURL generates a presigned URL for uploading an object directly
+	// to S3 via PUT (client→S3), without routing the file through the backend.
+	// The upload must use the same contentType supplied here.
+	// If expiration is 0, defaults to 15 minutes.
+	GetPresignedPutURL(ctx context.Context, key, contentType string, expiration time.Duration) (string, error)
 
 	// EnableLogging enables or disables logging for this client.
 	EnableLogging(enable bool)

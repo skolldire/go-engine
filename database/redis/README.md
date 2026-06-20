@@ -3,7 +3,7 @@
 Redis client for go-engine built on [go-redis/v9](https://github.com/redis/go-redis).
 
 ```bash
-go get github.com/skolldire/go-engine/database/redis
+go get github.com/skolldire/go-engine
 ```
 
 ---

@@ -291,7 +291,7 @@ func (l *gormLogAdapter) Warn(ctx context.Context, msg string, data ...interface
 }
 
 func (l *gormLogAdapter) Error(ctx context.Context, msg string, data ...interface{}) {
-	l.logger.Error(ctx, errors.New(fmt.Sprintf(msg, data...)), map[string]interface{}{"type": "error"})
+	l.logger.Error(ctx, fmt.Errorf(msg, data...), map[string]interface{}{"type": "error"})
 }
 
 func (l *gormLogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {

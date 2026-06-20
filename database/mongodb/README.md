@@ -3,7 +3,7 @@
 MongoDB client for go-engine built on the official [mongo-driver](https://github.com/mongodb/mongo-go-driver).
 
 ```bash
-go get github.com/skolldire/go-engine/database/mongodb
+go get github.com/skolldire/go-engine
 ```
 
 ---

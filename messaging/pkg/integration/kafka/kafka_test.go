@@ -36,7 +36,7 @@ func (r *mockReader) FetchMessage(ctx context.Context) (kgo.Message, error) {
 }
 
 func (r *mockReader) CommitMessages(_ context.Context, _ ...kgo.Message) error { return nil }
-func (r *mockReader) Close() error                                              { return nil }
+func (r *mockReader) Close() error                                             { return nil }
 
 // ── mock writer (DLQ) ────────────────────────────────────────────────────────
 

@@ -3,7 +3,7 @@
 GORM wrapper (`gormsql.DBClient`) for go-engine. Exposes a method-level API that hides GORM from the domain layer.
 
 ```bash
-go get github.com/skolldire/go-engine/database/sql
+go get github.com/skolldire/go-engine
 ```
 
 **Important:** `DBClient` is NOT auto-initialized by the engine. Build the GORM connection yourself and inject it via `WithCustomClient`.
