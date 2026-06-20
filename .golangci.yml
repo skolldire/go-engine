@@ -17,19 +17,19 @@ linters:
   # unused-parameter) trigger on ~50 pre-existing symbols making CI unusable.
   # Revisit when the project adopts a godoc-first policy or upgrades the linter.
 
-issues:
-  exclude-rules:
-    - path: ".*_test\\.go"
-      linters:
-        - errcheck
+  exclusions:
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - errcheck
 
-    # middleware.RealIP deprecation — removal requires infrastructure changes; tracked separately
-    - linters: [staticcheck]
-      text: "SA1019.*middleware\\.RealIP"
+      # middleware.RealIP deprecation — removal requires infrastructure changes; tracked separately
+      - linters: [staticcheck]
+        text: "SA1019.*middleware\\.RealIP"
 
-    # Explicit interface satisfaction guards (var _ I = val) are intentional in tests
-    - linters: [staticcheck]
-      text: "QF1011"
+      # Explicit interface satisfaction guards (var _ I = val) are intentional in tests
+      - linters: [staticcheck]
+        text: "QF1011"
 
 formatters:
   enable:

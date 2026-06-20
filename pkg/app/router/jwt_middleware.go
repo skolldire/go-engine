@@ -327,7 +327,7 @@ func writeAuthError(w http.ResponseWriter, status int, reason string) {
 	} else {
 		apiErr = error_handler.NewUnauthorizedError(authErrorMsg(reason), nil)
 	}
-	apiErr.WithDetail("reason", reason)
+	apiErr = apiErr.WithDetail("reason", reason)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(apiErr.HttpCode)
