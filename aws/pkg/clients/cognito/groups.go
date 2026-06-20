@@ -2,6 +2,7 @@ package cognito
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
@@ -36,10 +37,11 @@ func (c *Client) AddUserToGroup(ctx context.Context, username, group string) err
 	}
 
 	if c.logging {
+		// No se registra el username: puede ser PII (email/teléfono).
+		// group es el nombre del rol, no es PII.
 		c.logger.Info(ctx, "User added to group successfully",
 			map[string]interface{}{
-				"username": username,
-				"group":    group,
+				"group": group,
 			})
 	}
 
@@ -74,10 +76,10 @@ func (c *Client) RemoveUserFromGroup(ctx context.Context, username, group string
 	}
 
 	if c.logging {
+		// No se registra el username: puede ser PII (email/teléfono).
 		c.logger.Info(ctx, "User removed from group successfully",
 			map[string]interface{}{
-				"username": username,
-				"group":    group,
+				"group": group,
 			})
 	}
 
@@ -115,7 +117,9 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 
 		output, ok := result.(*cognitoidentityprovider.AdminListGroupsForUserOutput)
 		if !ok || output == nil {
-			break
+			// No enmascarar un fallo real como éxito: la operación terminó sin
+			// error pero la respuesta no tiene la forma esperada.
+			return nil, fmt.Errorf("%w: AdminListGroupsForUser returned %T", ErrUnexpectedResponse, result)
 		}
 
 		for _, g := range output.Groups {
@@ -131,10 +135,10 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 	}
 
 	if c.logging {
+		// No se registra el username: puede ser PII (email/teléfono).
 		c.logger.Info(ctx, "Listed groups for user successfully",
 			map[string]interface{}{
-				"username": username,
-				"count":    len(groups),
+				"count": len(groups),
 			})
 	}
 

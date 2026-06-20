@@ -190,6 +190,9 @@ var (
 	ErrUserPoolNotFound = errors.New("user pool not found")
 	ErrClientNotFound   = errors.New("client not found")
 
+	// Errores de protocolo
+	ErrUnexpectedResponse = errors.New("unexpected response from cognito")
+
 	// Errores de red/resiliencia
 	ErrServiceUnavailable = errors.New("cognito service unavailable")
 	ErrTimeout            = errors.New("request timeout")
@@ -286,6 +289,13 @@ type Service interface {
 	GlobalSignOut(ctx context.Context, accessToken string) error
 
 	// MVP 1 - Gestión de Grupos (roles)
+	GroupService
+}
+
+// GroupService agrupa las operaciones de gestión de grupos (roles) de Cognito.
+// Se compone dentro de Service; consumirla por separado permite depender solo
+// de la gestión de grupos.
+type GroupService interface {
 	// AddUserToGroup agrega un usuario a un grupo del User Pool (mapea AdminAddUserToGroup).
 	AddUserToGroup(ctx context.Context, username, group string) error
 	// RemoveUserFromGroup quita un usuario de un grupo del User Pool (mapea AdminRemoveUserFromGroup).

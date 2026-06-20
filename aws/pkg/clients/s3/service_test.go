@@ -118,7 +118,10 @@ func (m *mockS3API) CopyObject(ctx context.Context, params *awss3.CopyObjectInpu
 	return args.Get(0).(*awss3.CopyObjectOutput), args.Error(1)
 }
 
-type mockPresigner struct{ mock.Mock }
+type mockPresigner struct {
+	mock.Mock
+	lastPutExpires time.Duration // Expires applied by the last PresignPutObject call
+}
 
 func (m *mockPresigner) PresignGetObject(ctx context.Context, params *awss3.GetObjectInput, _ ...func(*awss3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
 	args := m.Called(ctx, params)
@@ -128,7 +131,14 @@ func (m *mockPresigner) PresignGetObject(ctx context.Context, params *awss3.GetO
 	return args.Get(0).(*v4.PresignedHTTPRequest), args.Error(1)
 }
 
-func (m *mockPresigner) PresignPutObject(ctx context.Context, params *awss3.PutObjectInput, _ ...func(*awss3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+func (m *mockPresigner) PresignPutObject(ctx context.Context, params *awss3.PutObjectInput, optFns ...func(*awss3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	// Capture the effective Expires so tests can assert the default is applied.
+	var opts awss3.PresignOptions
+	for _, fn := range optFns {
+		fn(&opts)
+	}
+	m.lastPutExpires = opts.Expires
+
 	args := m.Called(ctx, params)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -538,6 +548,7 @@ func TestS3Client_GetPresignedPutURL_DefaultExpiration(t *testing.T) {
 	url, err := c.GetPresignedPutURL(context.Background(), "test-key", "", 0)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, url)
+	assert.Equal(t, 15*time.Minute, presigner.lastPutExpires, "expiration=0 must default to 15 minutes")
 	presigner.AssertExpectations(t)
 }
 
