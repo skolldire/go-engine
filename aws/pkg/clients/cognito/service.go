@@ -121,7 +121,7 @@ func (c *Client) ensureContextWithTimeout(ctx context.Context) (context.Context,
 }
 
 func (c *Client) executeOperation(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
+	operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{
 		"operation": operationName,
 		"service":   "Cognito",
@@ -135,7 +135,7 @@ func (c *Client) executeOperation(ctx context.Context, operationName string,
 }
 
 func (c *Client) executeWithResilience(ctx context.Context, operationName string,
-	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting Cognito operation with resilience: %s", operationName), logFields)
 	}
@@ -152,12 +152,12 @@ func (c *Client) executeWithResilience(ctx context.Context, operationName string
 }
 
 func (c *Client) executeWithLogging(ctx context.Context, operationName string,
-	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting Cognito operation: %s", operationName), logFields)
 	}
 
-	result, err := operation()
+	result, err := operation(ctx)
 
 	if err != nil && c.logging {
 		c.logger.Error(ctx, err, logFields)

@@ -56,6 +56,9 @@ type Engine struct {
 	servicesOnce sync.Once
 	configsOnce  sync.Once
 
+	// lifecycle tracks resources to release (LIFO) during shutdown.
+	lifecycle *lifecycle
+
 	// Feature flags and validation
 	FeatureFlags *dynamic.FeatureFlags
 	Validator    *validator.Validate
@@ -77,7 +80,7 @@ func (e *Engine) Run() error {
 	if e.Router == nil {
 		return fmt.Errorf("router not initialized")
 	}
-	return e.Router.Run()
+	return e.Router.Run(e.ctx)
 }
 
 func (e *Engine) GetContext() context.Context {

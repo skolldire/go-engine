@@ -16,6 +16,11 @@ const (
 	defaultRetryBackoff = time.Second
 )
 
+// ErrNoDLQ is returned by sendToDLQ when the handler failed but no DLQ is
+// configured, so the message could not be parked. The caller uses it to decide
+// not to commit the offset (preserving at-least-once delivery).
+var ErrNoDLQ = errors.New("handler failed and no DLQ is configured")
+
 // readerIface abstracts kafka.Reader to enable unit testing without a real broker.
 type readerIface interface {
 	FetchMessage(ctx context.Context) (kafka.Message, error)
@@ -44,9 +49,13 @@ type consumer struct {
 // retries are exhausted the message is routed to the DLQ (cfg.DLQTopic) or
 // logged as an error if no DLQ is configured.
 //
-// Offset commit: the offset is committed after every message regardless of
-// handler success, ensuring at-least-once delivery. The commit is synchronous
-// when cfg.CommitInterval is 0 (default).
+// Offset commit: the offset is committed only after the handler succeeds or the
+// message is successfully written to the DLQ. If the handler fails and the DLQ
+// write also fails (or no DLQ is configured), the offset is NOT committed, so
+// the message is re-fetched and reprocessed. This preserves at-least-once
+// delivery and avoids silently dropping messages. Configure a DLQ (cfg.DLQTopic)
+// to divert poison messages and prevent reprocessing loops. The commit is
+// synchronous when cfg.CommitInterval is 0 (default).
 //
 // Defaults applied when zero: MaxRetries = 3, RetryBackoff = 1 s.
 func NewConsumer(cfg Config, log logger.Service) Consumer {
@@ -116,15 +125,34 @@ func (c *consumer) Subscribe(ctx context.Context, handler Handler) error {
 		var handlerErr error
 		for attempt := 0; attempt <= c.cfg.MaxRetries; attempt++ {
 			if attempt > 0 {
-				time.Sleep(c.cfg.RetryBackoff * time.Duration(attempt))
+				// Cancelable backoff: abort promptly on shutdown instead of
+				// sleeping through it.
+				select {
+				case <-time.After(c.cfg.RetryBackoff * time.Duration(attempt)):
+				case <-ctx.Done():
+					return nil
+				}
 			}
 			if handlerErr = handler(ctx, msg); handlerErr == nil {
 				break
 			}
 		}
 
+		// Commit only when the message was successfully handled or safely parked
+		// in the DLQ. Otherwise leave the offset uncommitted so the message is
+		// reprocessed (at-least-once, no silent loss).
 		if handlerErr != nil {
-			c.sendToDLQ(ctx, km, handlerErr)
+			if dlqErr := c.sendToDLQ(ctx, km, handlerErr); dlqErr != nil {
+				if errors.Is(dlqErr, context.Canceled) || errors.Is(dlqErr, context.DeadlineExceeded) {
+					return nil
+				}
+				c.log.Warn(ctx, "not committing kafka message: handler failed and DLQ unavailable; message will be reprocessed",
+					map[string]interface{}{
+						"offset": km.Offset,
+						"error":  dlqErr.Error(),
+					})
+				continue
+			}
 		}
 
 		if commitErr := c.reader.CommitMessages(ctx, km); commitErr != nil {
@@ -138,15 +166,17 @@ func (c *consumer) Subscribe(ctx context.Context, handler Handler) error {
 
 // sendToDLQ routes a failed message to the dead-letter queue, enriching it
 // with metadata headers that explain the original position and failure cause.
-// When no DLQ is configured, the error is logged instead.
-func (c *consumer) sendToDLQ(ctx context.Context, km kafka.Message, cause error) {
+// It returns an error when the message could not be parked: ErrNoDLQ when no
+// DLQ is configured, or the underlying write error otherwise. A nil return
+// means the message is safely in the DLQ and the offset may be committed.
+func (c *consumer) sendToDLQ(ctx context.Context, km kafka.Message, cause error) error {
 	if c.dlqWriter == nil {
 		c.log.Error(ctx, cause, map[string]interface{}{
 			"topic":  km.Topic,
 			"offset": km.Offset,
 			"cause":  cause.Error(),
 		})
-		return
+		return ErrNoDLQ
 	}
 
 	dlqMsg := kafka.Message{
@@ -165,7 +195,9 @@ func (c *consumer) sendToDLQ(ctx context.Context, km kafka.Message, cause error)
 			"original_topic":  km.Topic,
 			"original_offset": km.Offset,
 		})
+		return err
 	}
+	return nil
 }
 
 // Close shuts down the DLQ writer (if configured) and the reader.

@@ -17,8 +17,9 @@ import (
 
 // mockReader returns preset messages in order, then blocks until ctx is done.
 type mockReader struct {
-	msgs []kgo.Message
-	pos  int
+	msgs    []kgo.Message
+	pos     int
+	commits atomic.Int32
 }
 
 func newMockReader(msgs []kgo.Message) *mockReader {
@@ -35,18 +36,25 @@ func (r *mockReader) FetchMessage(ctx context.Context) (kgo.Message, error) {
 	return kgo.Message{}, ctx.Err()
 }
 
-func (r *mockReader) CommitMessages(_ context.Context, _ ...kgo.Message) error { return nil }
-func (r *mockReader) Close() error                                             { return nil }
+func (r *mockReader) CommitMessages(_ context.Context, _ ...kgo.Message) error {
+	r.commits.Add(1)
+	return nil
+}
+func (r *mockReader) Close() error { return nil }
 
 // ── mock writer (DLQ) ────────────────────────────────────────────────────────
 
 type mockWriter struct {
-	count atomic.Int32
-	msgs  []kgo.Message
+	count    atomic.Int32
+	msgs     []kgo.Message
+	writeErr error // when set, WriteMessages fails with this error
 }
 
 func (w *mockWriter) WriteMessages(_ context.Context, msgs ...kgo.Message) error {
 	w.count.Add(1)
+	if w.writeErr != nil {
+		return w.writeErr
+	}
 	w.msgs = append(w.msgs, msgs...)
 	return nil
 }
@@ -184,6 +192,81 @@ func TestConsumer_RetryLogic(t *testing.T) {
 	if assert.Len(t, dlq.msgs, 1) {
 		assert.Equal(t, msg.Value, dlq.msgs[0].Value)
 	}
+
+	// Handler failed but the message was parked in the DLQ, so the offset must
+	// be committed.
+	assert.Equal(t, int32(1), r.commits.Load(), "offset should be committed after successful DLQ write")
+}
+
+// TestConsumer_HandlerFailsNoDLQ_DoesNotCommit verifies that when the handler
+// fails and no DLQ is configured, the offset is NOT committed so the message is
+// reprocessed (at-least-once, no silent loss).
+func TestConsumer_HandlerFailsNoDLQ_DoesNotCommit(t *testing.T) {
+	msg := kgo.Message{Topic: "test-topic", Value: []byte("payload"), Offset: 3}
+	r := newMockReader([]kgo.Message{msg})
+	cfg := testConfig()
+
+	c := newTestConsumer(r, nil, cfg) // no DLQ
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var handlerCalls atomic.Int32
+	handler := func(_ context.Context, _ Message) error {
+		handlerCalls.Add(1)
+		return errors.New("boom")
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- c.Subscribe(ctx, handler) }()
+
+	// Wait until the message has been fully processed (all retries exhausted).
+	assert.Eventually(t, func() bool {
+		return handlerCalls.Load() == int32(cfg.MaxRetries+1)
+	}, 2*time.Second, 5*time.Millisecond)
+
+	cancel()
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return")
+	}
+
+	assert.Equal(t, int32(0), r.commits.Load(), "offset must not be committed when handler fails without a DLQ")
+}
+
+// TestConsumer_HandlerFailsDLQWriteFails_DoesNotCommit verifies that when the
+// handler fails and the DLQ write also fails, the offset is NOT committed.
+func TestConsumer_HandlerFailsDLQWriteFails_DoesNotCommit(t *testing.T) {
+	msg := kgo.Message{Topic: "test-topic", Value: []byte("payload"), Offset: 9}
+	r := newMockReader([]kgo.Message{msg})
+	dlq := &mockWriter{writeErr: errors.New("dlq broker down")}
+	cfg := testConfig()
+
+	c := newTestConsumer(r, dlq, cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := func(_ context.Context, _ Message) error { return errors.New("boom") }
+
+	done := make(chan error, 1)
+	go func() { done <- c.Subscribe(ctx, handler) }()
+
+	assert.Eventually(t, func() bool {
+		return dlq.count.Load() >= 1
+	}, 2*time.Second, 5*time.Millisecond)
+
+	cancel()
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return")
+	}
+
+	assert.Equal(t, int32(0), r.commits.Load(), "offset must not be committed when the DLQ write fails")
 }
 
 // ── producer tests ────────────────────────────────────────────────────────────

@@ -65,6 +65,9 @@ func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, er
 	}
 
 	if err := c.Ping(ctx); err != nil {
+		// Disconnect so the driver's background monitoring goroutines and
+		// connection pool are not leaked when the initial handshake fails.
+		_ = mongoClient.Disconnect(ctx)
 		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
 	}
 
@@ -90,14 +93,14 @@ func (c *MongoDBClient) GetCollection(name string) *mongo.Collection {
 }
 
 func (c *MongoDBClient) Ping(ctx context.Context) error {
-	_, err := c.Execute(ctx, "Ping", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Ping", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.Ping(ctx, nil)
 	})
 	return err
 }
 
 func (c *MongoDBClient) Disconnect(ctx context.Context) error {
-	_, err := c.Execute(ctx, "Disconnect", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Disconnect", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.Disconnect(ctx)
 	})
 	return err

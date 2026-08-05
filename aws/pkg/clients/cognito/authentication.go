@@ -47,7 +47,7 @@ func (c *Client) RegisterUser(ctx context.Context, req RegisterUserRequest) (*Us
 	}
 
 	var result *cognitoidentityprovider.SignUpOutput
-	_, err := c.executeOperation(ctx, "RegisterUser", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "RegisterUser", func(ctx context.Context) (interface{}, error) {
 		var err error
 		result, err = c.cognitoClient.SignUp(ctx, input)
 		return result, err
@@ -104,7 +104,7 @@ func (c *Client) ConfirmSignUp(ctx context.Context, req ConfirmSignUpRequest) er
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ConfirmSignUp", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "ConfirmSignUp", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.ConfirmSignUp(ctx, input)
 	})
 
@@ -149,7 +149,7 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 	}
 
 	var result *cognitoidentityprovider.InitiateAuthOutput
-	_, err := c.executeOperation(ctx, "Authenticate", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "Authenticate", func(ctx context.Context) (interface{}, error) {
 		var err error
 		result, err = c.cognitoClient.InitiateAuth(ctx, input)
 		return result, err

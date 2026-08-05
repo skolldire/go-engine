@@ -46,7 +46,7 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	return cliente
 }
 
-func (c *Cliente) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+func (c *Cliente) execute(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
@@ -60,7 +60,7 @@ func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context
 	return context.WithCancel(ctx)
 }
 
-func (c *Cliente) executeOperation(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+func (c *Cliente) executeOperation(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{"operation": operationName, "service": "SNS"}
 
 	if c.resilience != nil {
@@ -70,7 +70,7 @@ func (c *Cliente) executeOperation(ctx context.Context, operationName string, op
 	return c.executeWithLogging(ctx, operationName, operation, logFields)
 }
 
-func (c *Cliente) executeWithResilience(ctx context.Context, operationName string, operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+func (c *Cliente) executeWithResilience(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting SNS operation with resilience: %s", operationName), logFields)
 	}
@@ -86,12 +86,12 @@ func (c *Cliente) executeWithResilience(ctx context.Context, operationName strin
 	return result, err
 }
 
-func (c *Cliente) executeWithLogging(ctx context.Context, operationName string, operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+func (c *Cliente) executeWithLogging(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting SNS operation: %s", operationName), logFields)
 	}
 
-	result, err := operation()
+	result, err := operation(ctx)
 
 	if err != nil && c.logging {
 		c.logger.Error(ctx, err, logFields)
@@ -115,7 +115,7 @@ func (c *Cliente) CreateTopic(ctx context.Context, nombre string, atributos map[
 		input.Attributes = atributos
 	}
 
-	result, err := c.execute(ctx, "CreateTopic", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreateTopic", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.CreateTopic(ctx, input)
 	})
 
@@ -138,7 +138,7 @@ func (c *Cliente) DeleteTopic(ctx context.Context, arn string) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteTopic", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteTopic", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.DeleteTopic(ctx, &sns.DeleteTopicInput{
 			TopicArn: aws.String(arn),
 		})
@@ -152,7 +152,7 @@ func (c *Cliente) DeleteTopic(ctx context.Context, arn string) error {
 }
 
 func (c *Cliente) GetTopics(ctx context.Context) ([]string, error) {
-	result, err := c.execute(ctx, "GetTopics", func() (interface{}, error) {
+	result, err := c.execute(ctx, "GetTopics", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.ListTopics(ctx, &sns.ListTopicsInput{})
 	})
 
@@ -184,7 +184,7 @@ func (c *Cliente) PublishMsj(ctx context.Context, temaArn string, mensaje string
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "PublishMsj", func() (interface{}, error) {
+	result, err := c.execute(ctx, "PublishMsj", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
@@ -216,7 +216,7 @@ func (c *Cliente) PublishJSON(ctx context.Context, temaArn string, mensaje inter
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "PublishJSON", func() (interface{}, error) {
+	result, err := c.execute(ctx, "PublishJSON", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
@@ -243,7 +243,7 @@ func (c *Cliente) CreateSubscription(ctx context.Context, temaArn, protocolo, en
 		ReturnSubscriptionArn: true,
 	}
 
-	result, err := c.execute(ctx, "CreateSubscription", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreateSubscription", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.Subscribe(ctx, input)
 	})
 
@@ -263,7 +263,7 @@ func (c *Cliente) DeleteSubscription(ctx context.Context, suscripcionArn string)
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteSubscription", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteSubscription", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.Unsubscribe(ctx, &sns.UnsubscribeInput{
 			SubscriptionArn: aws.String(suscripcionArn),
 		})
@@ -296,7 +296,7 @@ func (c *Cliente) SendSMS(ctx context.Context, phoneNumber, message string, attr
 		MessageAttributes: attributes,
 	}
 
-	result, err := c.execute(ctx, "SendSMS", func() (interface{}, error) {
+	result, err := c.execute(ctx, "SendSMS", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
@@ -346,7 +346,7 @@ func (c *Cliente) SetSMSAttributes(ctx context.Context, attributes map[string]st
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "SetSMSAttributes", func() (interface{}, error) {
+	_, err := c.execute(ctx, "SetSMSAttributes", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.SetSMSAttributes(ctx, &sns.SetSMSAttributesInput{
 			Attributes: attributes,
 		})
@@ -360,7 +360,7 @@ func (c *Cliente) SetSMSAttributes(ctx context.Context, attributes map[string]st
 }
 
 func (c *Cliente) GetSMSAttributes(ctx context.Context) (map[string]string, error) {
-	result, err := c.execute(ctx, "GetSMSAttributes", func() (interface{}, error) {
+	result, err := c.execute(ctx, "GetSMSAttributes", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.GetSMSAttributes(ctx, &sns.GetSMSAttributesInput{})
 	})
 
@@ -380,7 +380,7 @@ func (c *Cliente) CheckPhoneNumberOptedOut(ctx context.Context, phoneNumber stri
 		return false, ErrInvalidInput
 	}
 
-	result, err := c.execute(ctx, "CheckPhoneNumberOptedOut", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CheckPhoneNumberOptedOut", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.CheckIfPhoneNumberIsOptedOut(ctx, &sns.CheckIfPhoneNumberIsOptedOutInput{
 			PhoneNumber: aws.String(phoneNumber),
 		})
@@ -402,7 +402,7 @@ func (c *Cliente) ListOptedOutPhoneNumbers(ctx context.Context) ([]string, error
 	var nextToken *string
 
 	for {
-		result, err := c.execute(ctx, "ListOptedOutPhoneNumbers", func() (interface{}, error) {
+		result, err := c.execute(ctx, "ListOptedOutPhoneNumbers", func(ctx context.Context) (interface{}, error) {
 			return c.cliente.ListPhoneNumbersOptedOut(ctx, &sns.ListPhoneNumbersOptedOutInput{
 				NextToken: nextToken,
 			})
@@ -432,7 +432,7 @@ func (c *Cliente) OptInPhoneNumber(ctx context.Context, phoneNumber string) erro
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "OptInPhoneNumber", func() (interface{}, error) {
+	_, err := c.execute(ctx, "OptInPhoneNumber", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.OptInPhoneNumber(ctx, &sns.OptInPhoneNumberInput{
 			PhoneNumber: aws.String(phoneNumber),
 		})
@@ -459,7 +459,7 @@ func (c *Cliente) CreatePlatformApplication(ctx context.Context, name, platform 
 		input.Attributes = credentials
 	}
 
-	result, err := c.execute(ctx, "CreatePlatformApplication", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreatePlatformApplication", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.CreatePlatformApplication(ctx, input)
 	})
 
@@ -492,7 +492,7 @@ func (c *Cliente) CreatePlatformEndpoint(ctx context.Context, platformApplicatio
 		input.Attributes = attributes
 	}
 
-	result, err := c.execute(ctx, "CreatePlatformEndpoint", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreatePlatformEndpoint", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.CreatePlatformEndpoint(ctx, input)
 	})
 
@@ -518,7 +518,7 @@ func (c *Cliente) PublishToEndpoint(ctx context.Context, endpointArn string, mes
 		MessageAttributes: messageAttributes,
 	}
 
-	result, err := c.execute(ctx, "PublishToEndpoint", func() (interface{}, error) {
+	result, err := c.execute(ctx, "PublishToEndpoint", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
@@ -538,7 +538,7 @@ func (c *Cliente) SetEndpointAttributes(ctx context.Context, endpointArn string,
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "SetEndpointAttributes", func() (interface{}, error) {
+	_, err := c.execute(ctx, "SetEndpointAttributes", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.SetEndpointAttributes(ctx, &sns.SetEndpointAttributesInput{
 			EndpointArn: aws.String(endpointArn),
 			Attributes:  attributes,
@@ -557,7 +557,7 @@ func (c *Cliente) GetEndpointAttributes(ctx context.Context, endpointArn string)
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.execute(ctx, "GetEndpointAttributes", func() (interface{}, error) {
+	result, err := c.execute(ctx, "GetEndpointAttributes", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.GetEndpointAttributes(ctx, &sns.GetEndpointAttributesInput{
 			EndpointArn: aws.String(endpointArn),
 		})
@@ -579,7 +579,7 @@ func (c *Cliente) DeleteEndpoint(ctx context.Context, endpointArn string) error 
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteEndpoint", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteEndpoint", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.DeleteEndpoint(ctx, &sns.DeleteEndpointInput{
 			EndpointArn: aws.String(endpointArn),
 		})
@@ -597,7 +597,7 @@ func (c *Cliente) DeletePlatformApplication(ctx context.Context, platformApplica
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeletePlatformApplication", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeletePlatformApplication", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.DeletePlatformApplication(ctx, &sns.DeletePlatformApplicationInput{
 			PlatformApplicationArn: aws.String(platformApplicationArn),
 		})
@@ -615,7 +615,7 @@ func (c *Cliente) ListPlatformApplications(ctx context.Context) ([]PlatformAppli
 	var nextToken *string
 
 	for {
-		result, err := c.execute(ctx, "ListPlatformApplications", func() (interface{}, error) {
+		result, err := c.execute(ctx, "ListPlatformApplications", func(ctx context.Context) (interface{}, error) {
 			return c.cliente.ListPlatformApplications(ctx, &sns.ListPlatformApplicationsInput{
 				NextToken: nextToken,
 			})
@@ -654,7 +654,7 @@ func (c *Cliente) ListEndpointsByPlatformApplication(ctx context.Context, platfo
 	var nextToken *string
 
 	for {
-		result, err := c.execute(ctx, "ListEndpointsByPlatformApplication", func() (interface{}, error) {
+		result, err := c.execute(ctx, "ListEndpointsByPlatformApplication", func(ctx context.Context) (interface{}, error) {
 			return c.cliente.ListEndpointsByPlatformApplication(ctx, &sns.ListEndpointsByPlatformApplicationInput{
 				PlatformApplicationArn: aws.String(platformApplicationArn),
 				NextToken:              nextToken,

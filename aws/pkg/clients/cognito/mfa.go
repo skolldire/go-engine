@@ -46,7 +46,7 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 	}
 
 	var result *cognitoidentityprovider.RespondToAuthChallengeOutput
-	_, err := c.executeOperation(ctx, "RespondToMFAChallenge", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "RespondToMFAChallenge", func(ctx context.Context) (interface{}, error) {
 		var err error
 		result, err = c.cognitoClient.RespondToAuthChallenge(ctx, input)
 		return result, err
@@ -110,7 +110,7 @@ func (c *Client) AssociateSoftwareToken(ctx context.Context, accessToken string)
 	}
 
 	var result *cognitoidentityprovider.AssociateSoftwareTokenOutput
-	_, err = c.executeOperation(ctx, "AssociateSoftwareToken", func() (interface{}, error) {
+	_, err = c.executeOperation(ctx, "AssociateSoftwareToken", func(ctx context.Context) (interface{}, error) {
 		var err error
 		result, err = c.cognitoClient.AssociateSoftwareToken(ctx, input)
 		return result, err
@@ -198,7 +198,7 @@ func (c *Client) VerifySoftwareToken(ctx context.Context, accessToken, userCode,
 		input.Session = aws.String(session)
 	}
 
-	_, err := c.executeOperation(ctx, "VerifySoftwareToken", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "VerifySoftwareToken", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.VerifySoftwareToken(ctx, input)
 	})
 
@@ -262,7 +262,7 @@ func (c *Client) SetUserMFAPreference(ctx context.Context, accessToken string, s
 		},
 	}
 
-	_, err = c.executeOperation(ctx, "SetUserMFAPreference", func() (interface{}, error) {
+	_, err = c.executeOperation(ctx, "SetUserMFAPreference", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.SetUserMFAPreference(ctx, input)
 	})
 
@@ -305,7 +305,7 @@ func (c *Client) GetUserMFAStatus(ctx context.Context, accessToken string) (*MFA
 	}
 
 	var result *cognitoidentityprovider.GetUserOutput
-	_, err = c.executeOperation(ctx, "GetUserMFAStatus", func() (interface{}, error) {
+	_, err = c.executeOperation(ctx, "GetUserMFAStatus", func(ctx context.Context) (interface{}, error) {
 		var err error
 		result, err = c.cognitoClient.GetUser(ctx, input)
 		return result, err

@@ -45,7 +45,7 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 	return dc
 }
 
-func (dc *DynamoClient) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+func (dc *DynamoClient) execute(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	ctx, cancel := dc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
@@ -71,7 +71,7 @@ func (dc *DynamoClient) execute(ctx context.Context, operationName string, opera
 		dc.logger.Debug(ctx, fmt.Sprintf("starting DynamoDB operation: %s", operationName), logFields)
 	}
 
-	result, err := operation()
+	result, err := operation(ctx)
 
 	if err != nil && dc.logging {
 		dc.logger.Error(ctx, err, logFields)
@@ -90,7 +90,7 @@ func (dc *DynamoClient) ensureContextWithTimeout(ctx context.Context) (context.C
 }
 
 func (dc *DynamoClient) GetItem(ctx context.Context, input *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
-	result, err := dc.execute(ctx, "GetItem", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "GetItem", func(ctx context.Context) (interface{}, error) {
 		return dc.client.GetItem(ctx, input, optFns...)
 	})
 
@@ -130,7 +130,7 @@ func (dc *DynamoClient) GetItemTyped(ctx context.Context, tableName string, key 
 }
 
 func (dc *DynamoClient) PutItem(ctx context.Context, input *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
-	result, err := dc.execute(ctx, "PutItem", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "PutItem", func(ctx context.Context) (interface{}, error) {
 		return dc.client.PutItem(ctx, input, optFns...)
 	})
 
@@ -160,7 +160,7 @@ func (dc *DynamoClient) PutItemTyped(ctx context.Context, tableName string, item
 }
 
 func (dc *DynamoClient) DeleteItem(ctx context.Context, input *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
-	result, err := dc.execute(ctx, "DeleteItem", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "DeleteItem", func(ctx context.Context) (interface{}, error) {
 		return dc.client.DeleteItem(ctx, input, optFns...)
 	})
 
@@ -185,7 +185,7 @@ func (dc *DynamoClient) DeleteItemByKey(ctx context.Context, tableName string, k
 }
 
 func (dc *DynamoClient) UpdateItem(ctx context.Context, input *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
-	result, err := dc.execute(ctx, "UpdateItem", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "UpdateItem", func(ctx context.Context) (interface{}, error) {
 		return dc.client.UpdateItem(ctx, input, optFns...)
 	})
 
@@ -205,7 +205,7 @@ func (dc *DynamoClient) Query(ctx context.Context, input *dynamodb.QueryInput, o
 		input.Limit = aws.Int32(DefaultQueryLimit)
 	}
 
-	result, err := dc.execute(ctx, "Query", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "Query", func(ctx context.Context) (interface{}, error) {
 		return dc.client.Query(ctx, input, optFns...)
 	})
 
@@ -239,7 +239,7 @@ func (dc *DynamoClient) Scan(ctx context.Context, input *dynamodb.ScanInput, opt
 		input.Limit = aws.Int32(DefaultQueryLimit)
 	}
 
-	result, err := dc.execute(ctx, "Scan", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "Scan", func(ctx context.Context) (interface{}, error) {
 		return dc.client.Scan(ctx, input, optFns...)
 	})
 
@@ -278,7 +278,7 @@ func (dc *DynamoClient) BatchWriteItem(ctx context.Context, input *dynamodb.Batc
 		return nil, ErrBatchSizeExceed
 	}
 
-	result, err := dc.execute(ctx, "BatchWriteItem", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "BatchWriteItem", func(ctx context.Context) (interface{}, error) {
 		return dc.client.BatchWriteItem(ctx, input, optFns...)
 	})
 
@@ -303,7 +303,7 @@ func (dc *DynamoClient) BatchGetItem(ctx context.Context, input *dynamodb.BatchG
 		return nil, ErrBatchSizeExceed
 	}
 
-	result, err := dc.execute(ctx, "BatchGetItem", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "BatchGetItem", func(ctx context.Context) (interface{}, error) {
 		return dc.client.BatchGetItem(ctx, input, optFns...)
 	})
 
@@ -323,7 +323,7 @@ func (dc *DynamoClient) TransactWriteItems(ctx context.Context, input *dynamodb.
 		return nil, ErrBatchSizeExceed
 	}
 
-	result, err := dc.execute(ctx, "TransactWriteItems", func() (interface{}, error) {
+	result, err := dc.execute(ctx, "TransactWriteItems", func(ctx context.Context) (interface{}, error) {
 		return dc.client.TransactWriteItems(ctx, input, optFns...)
 	})
 

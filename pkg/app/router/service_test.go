@@ -93,6 +93,44 @@ func TestNewService_WithLogger(t *testing.T) {
 	assert.Equal(t, log, app.logger)
 }
 
+// TestApp_Run_ContextCancellation verifies Run returns after its context is
+// cancelled and that registered shutdown hooks are executed.
+func TestApp_Run_ContextCancellation(t *testing.T) {
+	log := &mockLogger{}
+	log.On("Info", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
+	// Port "0" binds an ephemeral port so the test never collides.
+	app := NewService(Config{Port: "0", ShutdownTimeout: 2 * time.Second}, WithLogger(log))
+
+	hookRan := make(chan struct{}, 1)
+	app.RegisterShutdownHook(func(context.Context) error {
+		hookRan <- struct{}{}
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- app.Run(ctx) }()
+
+	// Give the server a moment to start, then cancel the context.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		assert.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return after context cancellation")
+	}
+
+	select {
+	case <-hookRan:
+	default:
+		t.Fatal("shutdown hook was not executed")
+	}
+}
+
 func TestApp_Use(t *testing.T) {
 	// No podemos agregar middlewares después de que las rutas ya están configuradas
 	// En chi, los middlewares deben agregarse antes de las rutas

@@ -55,11 +55,11 @@ type mockService struct{ mock.Mock }
 func (m *mockService) IsLive() bool {
 	return m.Called().Bool(0)
 }
-func (m *mockService) IsReady() bool {
-	return m.Called().Bool(0)
+func (m *mockService) IsReady(ctx context.Context) bool {
+	return m.Called(ctx).Bool(0)
 }
-func (m *mockService) GetStatus() HealthStatus {
-	return m.Called().Get(0).(HealthStatus)
+func (m *mockService) GetStatus(ctx context.Context) HealthStatus {
+	return m.Called(ctx).Get(0).(HealthStatus)
 }
 
 // mockRedisPinger implements redisPinger.
@@ -150,7 +150,7 @@ func TestHealthService_IsLive(t *testing.T) {
 
 func TestHealthService_IsReady_NoCheckers(t *testing.T) {
 	svc := newSvc(&mockLogger{})
-	assert.True(t, svc.IsReady())
+	assert.True(t, svc.IsReady(context.Background()))
 }
 
 func TestHealthService_IsReady_AllUp(t *testing.T) {
@@ -158,7 +158,7 @@ func TestHealthService_IsReady_AllUp(t *testing.T) {
 		namedChecker{"db", upChecker()},
 		namedChecker{"cache", upChecker()},
 	)
-	assert.True(t, svc.IsReady())
+	assert.True(t, svc.IsReady(context.Background()))
 }
 
 func TestHealthService_IsReady_SomeDown(t *testing.T) {
@@ -166,21 +166,21 @@ func TestHealthService_IsReady_SomeDown(t *testing.T) {
 		namedChecker{"db", upChecker()},
 		namedChecker{"cache", downChecker("connection refused")},
 	)
-	assert.False(t, svc.IsReady())
+	assert.False(t, svc.IsReady(context.Background()))
 }
 
 func TestHealthService_IsReady_AllDown(t *testing.T) {
 	svc := newSvc(&mockLogger{},
 		namedChecker{"db", downChecker("timeout")},
 	)
-	assert.False(t, svc.IsReady())
+	assert.False(t, svc.IsReady(context.Background()))
 }
 
 // ── GetStatus ─────────────────────────────────────────────────────────────────
 
 func TestHealthService_GetStatus_NoCheckers(t *testing.T) {
 	svc := newSvc(&mockLogger{})
-	status := svc.GetStatus()
+	status := svc.GetStatus(context.Background())
 
 	assert.Equal(t, StatusUp, status.Status)
 	assert.Empty(t, status.Dependencies)
@@ -192,7 +192,7 @@ func TestHealthService_GetStatus_AllUp(t *testing.T) {
 		namedChecker{"postgres", upChecker()},
 		namedChecker{"redis", upChecker()},
 	)
-	status := svc.GetStatus()
+	status := svc.GetStatus(context.Background())
 
 	assert.Equal(t, StatusUp, status.Status)
 	assert.Len(t, status.Dependencies, 2)
@@ -207,7 +207,7 @@ func TestHealthService_GetStatus_SomeDown(t *testing.T) {
 		namedChecker{"postgres", upChecker()},
 		namedChecker{"redis", downChecker("connection refused")},
 	)
-	status := svc.GetStatus()
+	status := svc.GetStatus(context.Background())
 
 	assert.Equal(t, StatusDown, status.Status)
 	assert.Len(t, status.Dependencies, 2)
@@ -228,7 +228,7 @@ func TestHealthService_GetStatus_IncludesLatency(t *testing.T) {
 	}).Return(nil)
 
 	svc := newSvc(&mockLogger{}, namedChecker{"slow-dep", slow})
-	status := svc.GetStatus()
+	status := svc.GetStatus(context.Background())
 
 	assert.Equal(t, StatusUp, status.Status)
 	assert.GreaterOrEqual(t, status.Dependencies[0].LatencyMs, int64(10))
@@ -241,7 +241,7 @@ func TestHealthService_GetStatus_OrderPreserved(t *testing.T) {
 		checkers[i] = namedChecker{n, upChecker()}
 	}
 	svc := newSvc(&mockLogger{}, checkers...)
-	status := svc.GetStatus()
+	status := svc.GetStatus(context.Background())
 
 	for i, d := range status.Dependencies {
 		assert.Equal(t, names[i], d.Name)
@@ -264,11 +264,47 @@ func TestHealthService_GetStatus_ConcurrentCheckers(t *testing.T) {
 	)
 
 	start := time.Now()
-	svc.GetStatus()
+	svc.GetStatus(context.Background())
 	elapsed := time.Since(start)
 
 	assert.Less(t, elapsed, 150*time.Millisecond,
 		"checkers should run concurrently, not sequentially")
+}
+
+// blockingChecker ignores its context and blocks until released, simulating a
+// non-cooperative dependency check.
+type blockingChecker struct{ release chan struct{} }
+
+func (b *blockingChecker) Check(_ context.Context) error {
+	<-b.release
+	return nil
+}
+
+// TestHealthService_GetStatus_HardTimeout verifies the configured timeout is a
+// hard limit: a checker that ignores its context and never returns must not
+// block GetStatus, and is reported as down.
+func TestHealthService_GetStatus_HardTimeout(t *testing.T) {
+	blocker := &blockingChecker{release: make(chan struct{})}
+	defer close(blocker.release) // let the runaway goroutine finish after the test
+
+	svc := NewService(Config{Timeout: 50 * time.Millisecond}, &mockLogger{})
+	svc.Register("stuck", blocker)
+	svc.Register("ok", upChecker())
+
+	start := time.Now()
+	status := svc.GetStatus(context.Background())
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, 500*time.Millisecond, "GetStatus must return within the hard timeout")
+	assert.Equal(t, StatusDown, status.Status)
+
+	byName := map[string]DependencyStatus{}
+	for _, d := range status.Dependencies {
+		byName[d.Name] = d
+	}
+	assert.Equal(t, StatusDown, byName["stuck"].Status)
+	assert.Contains(t, byName["stuck"].Error, "timed out")
+	assert.Equal(t, StatusUp, byName["ok"].Status)
 }
 
 // ── HTTPHandler ───────────────────────────────────────────────────────────────
@@ -297,7 +333,7 @@ func TestHTTPHandler_Live_503(t *testing.T) {
 
 func TestHTTPHandler_Ready_200(t *testing.T) {
 	svc := &mockService{}
-	svc.On("IsReady").Return(true)
+	svc.On("IsReady", mock.Anything).Return(true)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
@@ -308,7 +344,7 @@ func TestHTTPHandler_Ready_200(t *testing.T) {
 
 func TestHTTPHandler_Ready_503(t *testing.T) {
 	svc := &mockService{}
-	svc.On("IsReady").Return(false)
+	svc.On("IsReady", mock.Anything).Return(false)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
@@ -326,7 +362,7 @@ func TestHTTPHandler_Deps_200_AllUp(t *testing.T) {
 		},
 	}
 	svc := &mockService{}
-	svc.On("GetStatus").Return(hs)
+	svc.On("GetStatus", mock.Anything).Return(hs)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/deps", nil)
@@ -347,7 +383,7 @@ func TestHTTPHandler_Deps_503_SomeDown(t *testing.T) {
 		},
 	}
 	svc := &mockService{}
-	svc.On("GetStatus").Return(hs)
+	svc.On("GetStatus", mock.Anything).Return(hs)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/deps", nil)
@@ -367,7 +403,7 @@ func TestHTTPHandler_Deps_JSON_Structure(t *testing.T) {
 		},
 	}
 	svc := &mockService{}
-	svc.On("GetStatus").Return(hs)
+	svc.On("GetStatus", mock.Anything).Return(hs)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/deps", nil)
@@ -486,7 +522,7 @@ func TestHealthHandler_200_AllHealthy(t *testing.T) {
 		},
 	}
 	svc := &mockService{}
-	svc.On("GetStatus").Return(hs)
+	svc.On("GetStatus", mock.Anything).Return(hs)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -512,7 +548,7 @@ func TestHealthHandler_503_SomeUnhealthy(t *testing.T) {
 		},
 	}
 	svc := &mockService{}
-	svc.On("GetStatus").Return(hs)
+	svc.On("GetStatus", mock.Anything).Return(hs)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -533,7 +569,7 @@ func TestHealthHandler_NoCheckers_200(t *testing.T) {
 		Dependencies: []DependencyStatus{},
 	}
 	svc := &mockService{}
-	svc.On("GetStatus").Return(hs)
+	svc.On("GetStatus", mock.Anything).Return(hs)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -554,7 +590,7 @@ func TestHealthHandler_CheckResult_MapsCorrectly(t *testing.T) {
 		},
 	}
 	svc := &mockService{}
-	svc.On("GetStatus").Return(hs)
+	svc.On("GetStatus", mock.Anything).Return(hs)
 
 	rec := httptest.NewRecorder()
 	NewHTTPHandler(svc).HealthHandler(rec, httptest.NewRequest(http.MethodGet, "/health", nil))

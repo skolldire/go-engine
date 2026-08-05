@@ -10,7 +10,7 @@ import (
 //
 // Example:
 //
-//	raw, err := bc.Execute(ctx, "fetch", func() (interface{}, error) {
+//	raw, err := bc.Execute(ctx, "fetch", func(ctx context.Context) (interface{}, error) {
 //	    return fetchUser(id)
 //	})
 //	if err != nil { return err }

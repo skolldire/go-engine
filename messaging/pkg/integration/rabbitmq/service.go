@@ -68,7 +68,7 @@ func (c *RabbitMQClient) Publish(ctx context.Context, msg Message) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "Publish", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Publish", func(ctx context.Context) (interface{}, error) {
 		return nil, c.channel.PublishWithContext(ctx,
 			msg.Exchange,
 			msg.RoutingKey,
@@ -178,7 +178,7 @@ func (c *RabbitMQClient) DeclareQueue(ctx context.Context, name string, durable,
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeclareQueue", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "DeclareQueue", func(ctx context.Context) (interface{}, error) {
 		return c.channel.QueueDeclare(name, durable, autoDelete, exclusive, noWait, args)
 	})
 
@@ -190,7 +190,7 @@ func (c *RabbitMQClient) DeclareExchange(ctx context.Context, name, kind string,
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeclareExchange", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "DeclareExchange", func(ctx context.Context) (interface{}, error) {
 		return nil, c.channel.ExchangeDeclare(name, kind, durable, autoDelete, internal, noWait, args)
 	})
 
@@ -202,7 +202,7 @@ func (c *RabbitMQClient) BindQueue(ctx context.Context, queue, routingKey, excha
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "BindQueue", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "BindQueue", func(ctx context.Context) (interface{}, error) {
 		return nil, c.channel.QueueBind(queue, routingKey, exchange, noWait, args)
 	})
 

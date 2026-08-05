@@ -2,7 +2,6 @@ package health
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
@@ -24,8 +23,11 @@ func NewService(cfg Config, log logger.Service) *HealthService {
 }
 
 // Register adds a named checker and returns the service for chaining.
+// It is safe to call concurrently with GetStatus.
 func (hs *HealthService) Register(name string, checker Checker) *HealthService {
+	hs.mu.Lock()
 	hs.checkers = append(hs.checkers, namedChecker{name: name, checker: checker})
+	hs.mu.Unlock()
 	if hs.cfg.EnableLogging {
 		hs.log.Debug(context.Background(), "health checker registered",
 			map[string]interface{}{"checker": name})
@@ -39,16 +41,32 @@ func (hs *HealthService) IsLive() bool {
 }
 
 // IsReady reports whether all dependencies are healthy.
-func (hs *HealthService) IsReady() bool {
-	return hs.GetStatus().Status == StatusUp
+func (hs *HealthService) IsReady(ctx context.Context) bool {
+	return hs.GetStatus(ctx).Status == StatusUp
+}
+
+// checkResult carries one checker's outcome back to GetStatus over a channel,
+// so checker goroutines never write shared state and cannot race the timeout.
+type checkResult struct {
+	idx int
+	ds  DependencyStatus
 }
 
 // GetStatus runs all checkers concurrently and returns the aggregated result.
-func (hs *HealthService) GetStatus() HealthStatus {
-	ctx, cancel := context.WithTimeout(context.Background(), hs.cfg.Timeout)
+// It is bounded by ctx and the configured timeout, whichever fires first: any
+// checker that has not returned by then is reported as down instead of blocking
+// the caller. This makes the health endpoint's timeout a hard limit even when a
+// checker ignores its context.
+func (hs *HealthService) GetStatus(ctx context.Context) HealthStatus {
+	ctx, cancel := context.WithTimeout(ctx, hs.cfg.Timeout)
 	defer cancel()
 
-	if len(hs.checkers) == 0 {
+	hs.mu.RLock()
+	checkers := make([]namedChecker, len(hs.checkers))
+	copy(checkers, hs.checkers)
+	hs.mu.RUnlock()
+
+	if len(checkers) == 0 {
 		return HealthStatus{
 			Status:       StatusUp,
 			Timestamp:    time.Now(),
@@ -56,13 +74,13 @@ func (hs *HealthService) GetStatus() HealthStatus {
 		}
 	}
 
-	deps := make([]DependencyStatus, len(hs.checkers))
-	var wg sync.WaitGroup
+	// Buffered so every checker goroutine can send its result and exit even
+	// after we returned on timeout; this bounds any leak to goroutines whose
+	// checker ignores ctx (which Go cannot forcibly stop).
+	resultCh := make(chan checkResult, len(checkers))
 
-	for i, entry := range hs.checkers {
-		wg.Add(1)
+	for i, entry := range checkers {
 		go func(idx int, name string, c Checker) {
-			defer wg.Done()
 			start := time.Now()
 			err := c.Check(ctx)
 			latency := time.Since(start).Milliseconds()
@@ -76,10 +94,36 @@ func (hs *HealthService) GetStatus() HealthStatus {
 				ds.Status = StatusDown
 				ds.Error = err.Error()
 			}
-			deps[idx] = ds
+			resultCh <- checkResult{idx: idx, ds: ds}
 		}(i, entry.name, entry.checker)
 	}
-	wg.Wait()
+
+	deps := make([]DependencyStatus, len(checkers))
+	filled := make([]bool, len(checkers))
+	received := 0
+
+collect:
+	for received < len(checkers) {
+		select {
+		case r := <-resultCh:
+			deps[r.idx] = r.ds
+			filled[r.idx] = true
+			received++
+		case <-ctx.Done():
+			break collect
+		}
+	}
+
+	// Any checker that did not report before the deadline is marked down.
+	for i, entry := range checkers {
+		if !filled[i] {
+			deps[i] = DependencyStatus{
+				Name:   entry.name,
+				Status: StatusDown,
+				Error:  "health check timed out",
+			}
+		}
+	}
 
 	overall := StatusUp
 	for _, d := range deps {

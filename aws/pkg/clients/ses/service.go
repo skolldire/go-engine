@@ -136,7 +136,7 @@ func (c *SESClient) SendEmail(ctx context.Context, message EmailMessage) (*SendE
 		ReplyToAddresses: replyTo,
 	}
 
-	result, err := c.Execute(ctx, "SendEmail", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "SendEmail", func(ctx context.Context) (interface{}, error) {
 		return c.sesClient.SendEmail(ctx, input)
 	})
 
@@ -161,7 +161,7 @@ func (c *SESClient) SendRawEmail(ctx context.Context, rawMessage []byte, destina
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "SendRawEmail", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "SendRawEmail", func(ctx context.Context) (interface{}, error) {
 		return c.sesClient.SendRawEmail(ctx, &ses.SendRawEmailInput{
 			RawMessage: &types.RawMessage{
 				Data: rawMessage,
@@ -246,7 +246,7 @@ func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subjec
 }
 
 func (c *SESClient) GetSendQuota(ctx context.Context) (*SendQuota, error) {
-	result, err := c.Execute(ctx, "GetSendQuota", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetSendQuota", func(ctx context.Context) (interface{}, error) {
 		return c.sesClient.GetSendQuota(ctx, &ses.GetSendQuotaInput{})
 	})
 
@@ -266,7 +266,7 @@ func (c *SESClient) GetSendQuota(ctx context.Context) (*SendQuota, error) {
 }
 
 func (c *SESClient) GetSendStatistics(ctx context.Context) ([]SendDataPoint, error) {
-	result, err := c.Execute(ctx, "GetSendStatistics", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetSendStatistics", func(ctx context.Context) (interface{}, error) {
 		return c.sesClient.GetSendStatistics(ctx, &ses.GetSendStatisticsInput{})
 	})
 
@@ -302,7 +302,7 @@ func (c *SESClient) VerifyEmailAddress(ctx context.Context, email string) error 
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "VerifyEmailAddress", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "VerifyEmailAddress", func(ctx context.Context) (interface{}, error) {
 		return c.sesClient.VerifyEmailAddress(ctx, &ses.VerifyEmailAddressInput{
 			EmailAddress: aws.String(email),
 		})
@@ -320,7 +320,7 @@ func (c *SESClient) DeleteVerifiedEmailAddress(ctx context.Context, email string
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeleteVerifiedEmailAddress", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "DeleteVerifiedEmailAddress", func(ctx context.Context) (interface{}, error) {
 		return c.sesClient.DeleteVerifiedEmailAddress(ctx, &ses.DeleteVerifiedEmailAddressInput{
 			EmailAddress: aws.String(email),
 		})
@@ -334,7 +334,7 @@ func (c *SESClient) DeleteVerifiedEmailAddress(ctx context.Context, email string
 }
 
 func (c *SESClient) ListVerifiedEmailAddresses(ctx context.Context) ([]string, error) {
-	result, err := c.Execute(ctx, "ListVerifiedEmailAddresses", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "ListVerifiedEmailAddresses", func(ctx context.Context) (interface{}, error) {
 		return c.sesClient.ListVerifiedEmailAddresses(ctx, &ses.ListVerifiedEmailAddressesInput{})
 	})
 

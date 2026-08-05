@@ -60,7 +60,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 }
 
 func (c *MemcachedClient) Ping(ctx context.Context) error {
-	_, err := c.Execute(ctx, "Ping", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Ping", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.Ping()
 	})
 	return err
@@ -69,7 +69,7 @@ func (c *MemcachedClient) Ping(ctx context.Context) error {
 func (c *MemcachedClient) Get(ctx context.Context, key string) ([]byte, error) {
 	fullKey := c.KeyName(key)
 
-	result, err := c.Execute(ctx, "Get", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "Get", func(ctx context.Context) (interface{}, error) {
 		item, err := c.client.Get(fullKey)
 		if err != nil {
 			if err == memcache.ErrCacheMiss {
@@ -98,7 +98,7 @@ func (c *MemcachedClient) Set(ctx context.Context, key string, value []byte, exp
 		expiration = DefaultExpiration
 	}
 
-	_, err := c.Execute(ctx, "Set", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Set", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.Set(&memcache.Item{
 			Key:        fullKey,
 			Value:      value,
@@ -112,7 +112,7 @@ func (c *MemcachedClient) Set(ctx context.Context, key string, value []byte, exp
 func (c *MemcachedClient) Delete(ctx context.Context, key string) error {
 	fullKey := c.KeyName(key)
 
-	_, err := c.Execute(ctx, "Delete", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Delete", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.Delete(fullKey)
 	})
 
@@ -126,7 +126,7 @@ func (c *MemcachedClient) Add(ctx context.Context, key string, value []byte, exp
 		expiration = DefaultExpiration
 	}
 
-	_, err := c.Execute(ctx, "Add", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Add", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.Add(&memcache.Item{
 			Key:        fullKey,
 			Value:      value,
@@ -144,7 +144,7 @@ func (c *MemcachedClient) Replace(ctx context.Context, key string, value []byte,
 		expiration = DefaultExpiration
 	}
 
-	_, err := c.Execute(ctx, "Replace", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Replace", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.Replace(&memcache.Item{
 			Key:        fullKey,
 			Value:      value,
@@ -158,7 +158,7 @@ func (c *MemcachedClient) Replace(ctx context.Context, key string, value []byte,
 func (c *MemcachedClient) Increment(ctx context.Context, key string, delta uint64) (uint64, error) {
 	fullKey := c.KeyName(key)
 
-	result, err := c.Execute(ctx, "Increment", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "Increment", func(ctx context.Context) (interface{}, error) {
 		return c.client.Increment(fullKey, delta)
 	})
 
@@ -176,7 +176,7 @@ func (c *MemcachedClient) Increment(ctx context.Context, key string, delta uint6
 func (c *MemcachedClient) Decrement(ctx context.Context, key string, delta uint64) (uint64, error) {
 	fullKey := c.KeyName(key)
 
-	result, err := c.Execute(ctx, "Decrement", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "Decrement", func(ctx context.Context) (interface{}, error) {
 		return c.client.Decrement(fullKey, delta)
 	})
 
@@ -201,7 +201,7 @@ func (c *MemcachedClient) GetMulti(ctx context.Context, keys []string) (map[stri
 		fullKeys[i] = c.KeyName(key)
 	}
 
-	result, err := c.Execute(ctx, "GetMulti", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetMulti", func(ctx context.Context) (interface{}, error) {
 		items, err := c.client.GetMulti(fullKeys)
 		if err != nil {
 			return nil, err
@@ -227,7 +227,7 @@ func (c *MemcachedClient) GetMulti(ctx context.Context, keys []string) (map[stri
 }
 
 func (c *MemcachedClient) FlushAll(ctx context.Context) error {
-	_, err := c.Execute(ctx, "FlushAll", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "FlushAll", func(ctx context.Context) (interface{}, error) {
 		return nil, c.client.FlushAll()
 	})
 

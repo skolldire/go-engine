@@ -28,7 +28,7 @@ func (c *Client) AddUserToGroup(ctx context.Context, username, group string) err
 		GroupName:  aws.String(group),
 	}
 
-	_, err := c.executeOperation(ctx, "AddUserToGroup", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "AddUserToGroup", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.AdminAddUserToGroup(ctx, input)
 	})
 
@@ -67,7 +67,7 @@ func (c *Client) RemoveUserFromGroup(ctx context.Context, username, group string
 		GroupName:  aws.String(group),
 	}
 
-	_, err := c.executeOperation(ctx, "RemoveUserFromGroup", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "RemoveUserFromGroup", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.AdminRemoveUserFromGroup(ctx, input)
 	})
 
@@ -107,7 +107,7 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 			NextToken:  nextToken,
 		}
 
-		result, err := c.executeOperation(ctx, "ListGroupsForUser", func() (interface{}, error) {
+		result, err := c.executeOperation(ctx, "ListGroupsForUser", func(ctx context.Context) (interface{}, error) {
 			return c.cognitoClient.AdminListGroupsForUser(ctx, input)
 		})
 

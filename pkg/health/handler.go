@@ -37,16 +37,16 @@ func (h *HTTPHandler) liveHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *HTTPHandler) readyHandler(w http.ResponseWriter, _ *http.Request) {
-	if !h.svc.IsReady() {
+func (h *HTTPHandler) readyHandler(w http.ResponseWriter, r *http.Request) {
+	if !h.svc.IsReady(r.Context()) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *HTTPHandler) depsHandler(w http.ResponseWriter, _ *http.Request) {
-	status := h.svc.GetStatus()
+func (h *HTTPHandler) depsHandler(w http.ResponseWriter, r *http.Request) {
+	status := h.svc.GetStatus(r.Context())
 	w.Header().Set("Content-Type", "application/json")
 	if status.Status == StatusDown {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -58,7 +58,7 @@ func (h *HTTPHandler) depsHandler(w http.ResponseWriter, _ *http.Request) {
 // status values and a top-level latency_ms field. Intended for ECS Fargate health checks.
 func (h *HTTPHandler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	hs := h.svc.GetStatus()
+	hs := h.svc.GetStatus(r.Context())
 	totalLatency := time.Since(start).Milliseconds()
 
 	checks := make([]CheckResult, len(hs.Dependencies))

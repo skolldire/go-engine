@@ -25,7 +25,7 @@ func (c *Client) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) 
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ForgotPassword", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "ForgotPassword", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.ForgotPassword(ctx, input)
 	})
 
@@ -63,7 +63,7 @@ func (c *Client) ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPas
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ConfirmForgotPassword", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "ConfirmForgotPassword", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.ConfirmForgotPassword(ctx, input)
 	})
 

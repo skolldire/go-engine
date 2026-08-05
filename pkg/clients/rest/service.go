@@ -37,7 +37,7 @@ func NewClient(cfg Config, log logger.Service) Service {
 }
 
 func (c *restClient) executeRequest(ctx context.Context, operationName string, reqFunc func() (*resty.Response, error)) (*resty.Response, error) {
-	result, err := c.Execute(ctx, operationName, func() (interface{}, error) {
+	result, err := c.Execute(ctx, operationName, func(ctx context.Context) (interface{}, error) {
 		return c.processRequest(ctx, reqFunc)
 	})
 

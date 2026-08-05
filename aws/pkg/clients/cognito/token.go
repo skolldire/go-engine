@@ -119,7 +119,7 @@ func (c *Client) GetUserByAccessToken(ctx context.Context, accessToken string) (
 	}
 
 	var result *cognitoidentityprovider.GetUserOutput
-	_, err := c.executeOperation(ctx, "GetUserByAccessToken", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "GetUserByAccessToken", func(ctx context.Context) (interface{}, error) {
 		var err error
 		result, err = c.cognitoClient.GetUser(ctx, input)
 		return result, err
@@ -198,7 +198,7 @@ func (c *Client) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*Au
 	}
 
 	var result *cognitoidentityprovider.InitiateAuthOutput
-	_, err := c.executeOperation(ctx, "RefreshToken", func() (interface{}, error) {
+	_, err := c.executeOperation(ctx, "RefreshToken", func(ctx context.Context) (interface{}, error) {
 		var err error
 		result, err = c.cognitoClient.InitiateAuth(ctx, input)
 		return result, err

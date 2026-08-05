@@ -17,7 +17,7 @@ func TestNewResilienceServiceWithNilConfigsDoesNotPanic(t *testing.T) {
 		service := NewResilienceService(Config{}, nil)
 		assert.NotNil(t, service)
 
-		result, err := service.Execute(context.Background(), func() (interface{}, error) {
+		result, err := service.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
 			return "ok", nil
 		})
 		assert.NoError(t, err)
@@ -51,7 +51,7 @@ func TestService_Execute_Success(t *testing.T) {
 
 	service := NewResilienceService(config, nil)
 
-	result, err := service.Execute(context.Background(), func() (interface{}, error) {
+	result, err := service.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
 		return "success", nil
 	})
 
@@ -72,7 +72,7 @@ func TestService_Execute_Error(t *testing.T) {
 	service := NewResilienceService(config, nil)
 	testErr := errors.New("test error")
 
-	result, err := service.Execute(context.Background(), func() (interface{}, error) {
+	result, err := service.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
 		return nil, testErr
 	})
 

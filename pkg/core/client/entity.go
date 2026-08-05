@@ -37,9 +37,11 @@ type BaseConfig struct {
 	Timeout time.Duration `mapstructure:"timeout" json:"timeout"`
 }
 
-// Operation is a unit of work passed to BaseClient.Execute.
-// It must be idempotent when resilience (retry) is enabled.
-type Operation func() (interface{}, error)
+// Operation is a unit of work passed to BaseClient.Execute. It receives the
+// timeout-bounded context that Execute manages and MUST use it for any I/O so
+// the configured timeout actually cancels the underlying call. It must be
+// idempotent when resilience (retry) is enabled.
+type Operation func(ctx context.Context) (interface{}, error)
 
 // BaseClient is an embeddable struct that provides logging, timeout management,
 // and optional resilience (retry + circuit breaker) to any client implementation.
@@ -52,8 +54,8 @@ type Operation func() (interface{}, error)
 //	}
 //
 //	func (c *MyClient) DoSomething(ctx context.Context) (string, error) {
-//	    result, err := c.Execute(ctx, "my-service.do-something", func() (interface{}, error) {
-//	        return callExternalAPI()
+//	    result, err := c.Execute(ctx, "my-service.do-something", func(ctx context.Context) (interface{}, error) {
+//	        return callExternalAPI(ctx)
 //	    })
 //	    if err != nil {
 //	        return "", err
@@ -111,6 +113,9 @@ func NewBaseClientWithName(config BaseConfig, log logger.Service, serviceName st
 //   - If ctx already has a deadline, Execute respects it unchanged.
 //   - If ctx has no deadline, Execute applies bc.timeout.
 //
+// The resulting bounded context is passed to the operation, so operations must
+// use it for their I/O for the timeout to actually cancel the underlying call.
+//
 // Resilience: when BaseConfig.WithResilience was true at construction, Execute
 // delegates to the resilience.Service (retry + circuit breaker). The operation
 // must be idempotent in that case.
@@ -162,7 +167,7 @@ func (bc *BaseClient) executeDirectly(ctx context.Context, operationName string,
 		bc.logger.Debug(ctx, "starting operation: "+operationName, logFields)
 	}
 
-	result, err := operation()
+	result, err := operation(ctx)
 
 	if err != nil && logging {
 		bc.logger.Error(ctx, err, logFields)
@@ -185,10 +190,9 @@ func (bc *BaseClient) ensureContextWithTimeout(ctx context.Context) (context.Con
 // a deadline, that deadline is respected as-is. The caller must invoke the
 // returned cancel function.
 //
-// Use this when an operation needs to pass the timeout-managed context into an
-// SDK call: Operation receives no context, so the closure would otherwise close
-// over an unbounded context. Bounding it before Execute keeps the operation's
-// context consistent with the one Execute manages.
+// Execute already passes the bounded context to the operation, so most code
+// does not need this. It remains available for callers that must bound a
+// context outside of an Execute call.
 func (bc *BaseClient) ContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	return bc.ensureContextWithTimeout(ctx)
 }

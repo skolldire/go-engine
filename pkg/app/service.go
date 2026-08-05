@@ -151,11 +151,55 @@ func (c *App) Init() *App {
 		c.Engine.FeatureFlags = dynamic.NewFeatureFlags(c.Engine.Conf.FeatureFlags, c.Engine.Log)
 	}
 
+	c.Engine.registerCloseables()
+
 	if len(initializer.errors) > 0 {
 		c.Engine.errors = append(c.Engine.errors, initializer.errors...)
 	}
 
 	return c
+}
+
+// registerCloseables records every resource created during Init so it is
+// released (LIFO) during shutdown via Engine.Close. It is safe to call once per
+// Init; each closer is registered at most once.
+func (e *Engine) registerCloseables() {
+	// Telemetry first so it closes last (after the clients that emit to it).
+	if e.Telemetry != nil {
+		e.registerCloser("telemetry", e.Telemetry.Shutdown)
+	}
+
+	if e.RedisClient != nil {
+		e.registerSimpleCloser("redis", e.RedisClient.Close)
+	}
+
+	if e.KafkaProducer != nil {
+		e.registerSimpleCloser("kafka", e.KafkaProducer.Close)
+	}
+
+	if e.Services == nil {
+		return
+	}
+	for name, cli := range e.Services.RedisClients {
+		if cli != nil {
+			e.registerSimpleCloser("redis:"+name, cli.Close)
+		}
+	}
+	for name, cli := range e.Services.MongoDBClients {
+		if cli != nil {
+			e.registerCloser("mongodb:"+name, cli.Disconnect)
+		}
+	}
+	for name, cli := range e.Services.RabbitMQClients {
+		if cli != nil {
+			e.registerSimpleCloser("rabbitmq:"+name, cli.Close)
+		}
+	}
+	for name, cli := range e.Services.GRPCClients {
+		if cli != nil {
+			e.registerSimpleCloser("grpc:"+name, cli.Close)
+		}
+	}
 }
 
 func (c *App) InitializeRouter() *App {

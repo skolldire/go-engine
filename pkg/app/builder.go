@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -114,6 +115,11 @@ func (b *AppBuilder) WithRouter() *AppBuilder {
 			b.engine.Router.RegisterShutdownHook(hook)
 		}
 		b.shutdownHooks = nil
+
+		// Release all resources created during initialization (Redis, Mongo,
+		// RabbitMQ, gRPC, Kafka, telemetry, …) in LIFO order when the server
+		// shuts down. Registered last so it runs after any user hooks.
+		b.engine.Router.RegisterShutdownHook(b.engine.Close)
 	}
 	b.mountHealthIfReady()
 	return b
@@ -257,7 +263,7 @@ func (b *AppBuilder) WithCustomClient(name string, client interface{}) *AppBuild
 
 func (b *AppBuilder) Build() (*Engine, error) {
 	if len(b.errors) > 0 {
-		return nil, fmt.Errorf("build errors: %v", b.errors)
+		return nil, b.failBuild()
 	}
 
 	if b.engine.Router == nil {
@@ -265,10 +271,28 @@ func (b *AppBuilder) Build() (*Engine, error) {
 	}
 
 	if len(b.errors) > 0 {
-		return nil, fmt.Errorf("build errors: %v", b.errors)
+		return nil, b.failBuild()
 	}
 
 	return b.engine, nil
+}
+
+// failBuild rolls back a partially constructed engine by releasing any
+// resources already created, then returns the aggregated build error. The
+// rollback error (if any) is joined so nothing is silently swallowed.
+func (b *AppBuilder) failBuild() error {
+	buildErr := fmt.Errorf("build errors: %v", b.errors)
+	if b.engine == nil {
+		return buildErr
+	}
+	ctx := b.engine.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if closeErr := b.engine.Close(ctx); closeErr != nil {
+		return errors.Join(buildErr, fmt.Errorf("rollback: %w", closeErr))
+	}
+	return buildErr
 }
 
 func (b *AppBuilder) GetErrors() []error {

@@ -20,7 +20,7 @@ const (
 // Service is the public interface for the HTTP router returned by NewService.
 // Consumers use it to register routes, middleware, and shutdown hooks.
 type Service interface {
-	Run() error
+	Run(ctx context.Context) error
 	Use(middlewares ...func(http.Handler) http.Handler)
 	Mount(pattern string, handler http.Handler)
 	AddRoute(method, pattern string, handler http.HandlerFunc)

@@ -68,6 +68,9 @@ func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 	defer cancel()
 
 	if err := rc.Ping(ctx); err != nil {
+		// Close the client so the connection pool and its goroutines are not
+		// leaked when the initial handshake fails.
+		_ = client.Close()
 		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
 	}
 
@@ -113,7 +116,7 @@ func (rc *RedisClient) ensureContextWithTimeout(ctx context.Context) (context.Co
 	return context.WithTimeout(ctx, timeout)
 }
 
-func (rc *RedisClient) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+func (rc *RedisClient) execute(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	ctx, cancel := rc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
@@ -139,7 +142,7 @@ func (rc *RedisClient) execute(ctx context.Context, operationName string, operat
 		rc.logger.Debug(ctx, fmt.Sprintf("starting Redis operation: %s", operationName), logFields)
 	}
 
-	result, err := operation()
+	result, err := operation(ctx)
 
 	if err != nil && rc.logging {
 		rc.logger.Error(ctx, err, logFields)
@@ -151,7 +154,7 @@ func (rc *RedisClient) execute(ctx context.Context, operationName string, operat
 }
 
 func (rc *RedisClient) Ping(ctx context.Context) error {
-	_, err := rc.execute(ctx, "Ping", func() (interface{}, error) {
+	_, err := rc.execute(ctx, "Ping", func(ctx context.Context) (interface{}, error) {
 		return rc.client.Ping(ctx).Result()
 	})
 	return err
@@ -160,7 +163,7 @@ func (rc *RedisClient) Ping(ctx context.Context) error {
 func (rc *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "Get", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "Get", func(ctx context.Context) (interface{}, error) {
 		return rc.client.Get(ctx, prefixedKey).Result()
 	})
 
@@ -183,7 +186,7 @@ func (rc *RedisClient) Set(ctx context.Context, key string, value interface{}, e
 	prefixedKey := rc.KeyName(key)
 	expiration = rc.ensureDefaultExpiration(expiration)
 
-	_, err := rc.execute(ctx, "Set", func() (interface{}, error) {
+	_, err := rc.execute(ctx, "Set", func(ctx context.Context) (interface{}, error) {
 		return rc.client.Set(ctx, prefixedKey, value, expiration).Result()
 	})
 
@@ -194,7 +197,7 @@ func (rc *RedisClient) SetNX(ctx context.Context, key string, value interface{},
 	prefixedKey := rc.KeyName(key)
 	expiration = rc.ensureDefaultExpiration(expiration)
 
-	result, err := rc.execute(ctx, "SetNX", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "SetNX", func(ctx context.Context) (interface{}, error) {
 		return rc.client.SetNX(ctx, prefixedKey, value, expiration).Result()
 	})
 
@@ -216,7 +219,7 @@ func (rc *RedisClient) Del(ctx context.Context, keys ...string) (int64, error) {
 		prefixedKeys[i] = rc.KeyName(key)
 	}
 
-	result, err := rc.execute(ctx, "Del", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "Del", func(ctx context.Context) (interface{}, error) {
 		return rc.client.Del(ctx, prefixedKeys...).Result()
 	})
 
@@ -238,7 +241,7 @@ func (rc *RedisClient) Exists(ctx context.Context, keys ...string) (int64, error
 		prefixedKeys[i] = rc.KeyName(key)
 	}
 
-	result, err := rc.execute(ctx, "Exists", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "Exists", func(ctx context.Context) (interface{}, error) {
 		return rc.client.Exists(ctx, prefixedKeys...).Result()
 	})
 
@@ -258,7 +261,7 @@ func (rc *RedisClient) Expire(ctx context.Context, key string, expiration time.D
 	prefixedKey := rc.KeyName(key)
 	expiration = rc.ensureDefaultExpiration(expiration)
 
-	result, err := rc.execute(ctx, "Expire", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "Expire", func(ctx context.Context) (interface{}, error) {
 		return rc.client.Expire(ctx, prefixedKey, expiration).Result()
 	})
 
@@ -277,7 +280,7 @@ func (rc *RedisClient) Expire(ctx context.Context, key string, expiration time.D
 func (rc *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "TTL", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "TTL", func(ctx context.Context) (interface{}, error) {
 		return rc.client.TTL(ctx, prefixedKey).Result()
 	})
 
@@ -296,7 +299,7 @@ func (rc *RedisClient) TTL(ctx context.Context, key string) (time.Duration, erro
 func (rc *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "Incr", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "Incr", func(ctx context.Context) (interface{}, error) {
 		return rc.client.Incr(ctx, prefixedKey).Result()
 	})
 
@@ -315,7 +318,7 @@ func (rc *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 func (rc *RedisClient) IncrBy(ctx context.Context, key string, value int64) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "IncrBy", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "IncrBy", func(ctx context.Context) (interface{}, error) {
 		return rc.client.IncrBy(ctx, prefixedKey, value).Result()
 	})
 
@@ -334,7 +337,7 @@ func (rc *RedisClient) IncrBy(ctx context.Context, key string, value int64) (int
 func (rc *RedisClient) HGet(ctx context.Context, key, field string) (string, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "HGet", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "HGet", func(ctx context.Context) (interface{}, error) {
 		return rc.client.HGet(ctx, prefixedKey, field).Result()
 	})
 
@@ -356,7 +359,7 @@ func (rc *RedisClient) HGet(ctx context.Context, key, field string) (string, err
 func (rc *RedisClient) HSet(ctx context.Context, key string, values ...interface{}) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "HSet", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "HSet", func(ctx context.Context) (interface{}, error) {
 		return rc.client.HSet(ctx, prefixedKey, values...).Result()
 	})
 
@@ -375,7 +378,7 @@ func (rc *RedisClient) HSet(ctx context.Context, key string, values ...interface
 func (rc *RedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "HGetAll", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "HGetAll", func(ctx context.Context) (interface{}, error) {
 		return rc.client.HGetAll(ctx, prefixedKey).Result()
 	})
 
@@ -394,7 +397,7 @@ func (rc *RedisClient) HGetAll(ctx context.Context, key string) (map[string]stri
 func (rc *RedisClient) LPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "LPush", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "LPush", func(ctx context.Context) (interface{}, error) {
 		return rc.client.LPush(ctx, prefixedKey, values...).Result()
 	})
 
@@ -413,7 +416,7 @@ func (rc *RedisClient) LPush(ctx context.Context, key string, values ...interfac
 func (rc *RedisClient) RPop(ctx context.Context, key string) (string, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "RPop", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "RPop", func(ctx context.Context) (interface{}, error) {
 		return rc.client.RPop(ctx, prefixedKey).Result()
 	})
 
@@ -435,7 +438,7 @@ func (rc *RedisClient) RPop(ctx context.Context, key string) (string, error) {
 func (rc *RedisClient) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "LRange", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "LRange", func(ctx context.Context) (interface{}, error) {
 		return rc.client.LRange(ctx, prefixedKey, start, stop).Result()
 	})
 
@@ -475,7 +478,7 @@ func (rc *RedisClient) ZAdd(ctx context.Context, key string, score float64, memb
 		Member: member,
 	}
 
-	result, err := rc.execute(ctx, "ZAdd", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "ZAdd", func(ctx context.Context) (interface{}, error) {
 		return rc.client.ZAdd(ctx, prefixedKey, z).Result()
 	})
 
@@ -494,7 +497,7 @@ func (rc *RedisClient) ZAdd(ctx context.Context, key string, score float64, memb
 func (rc *RedisClient) ZAddMulti(ctx context.Context, key string, members ...redis.Z) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "ZAddMulti", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "ZAddMulti", func(ctx context.Context) (interface{}, error) {
 		return rc.client.ZAdd(ctx, prefixedKey, members...).Result()
 	})
 
@@ -513,7 +516,7 @@ func (rc *RedisClient) ZAddMulti(ctx context.Context, key string, members ...red
 func (rc *RedisClient) ZScore(ctx context.Context, key string, member string) (float64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "ZScore", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "ZScore", func(ctx context.Context) (interface{}, error) {
 		return rc.client.ZScore(ctx, prefixedKey, member).Result()
 	})
 
@@ -535,7 +538,7 @@ func (rc *RedisClient) ZScore(ctx context.Context, key string, member string) (f
 func (rc *RedisClient) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "ZRem", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "ZRem", func(ctx context.Context) (interface{}, error) {
 		return rc.client.ZRem(ctx, prefixedKey, members...).Result()
 	})
 
@@ -554,7 +557,7 @@ func (rc *RedisClient) ZRem(ctx context.Context, key string, members ...interfac
 func (rc *RedisClient) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "ZRange", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "ZRange", func(ctx context.Context) (interface{}, error) {
 		return rc.client.ZRange(ctx, prefixedKey, start, stop).Result()
 	})
 
@@ -573,7 +576,7 @@ func (rc *RedisClient) ZRange(ctx context.Context, key string, start, stop int64
 func (rc *RedisClient) SAdd(ctx context.Context, key string, members ...interface{}) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "SAdd", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "SAdd", func(ctx context.Context) (interface{}, error) {
 		return rc.client.SAdd(ctx, prefixedKey, members...).Result()
 	})
 
@@ -593,7 +596,7 @@ func (rc *RedisClient) SAddWithExpire(ctx context.Context, key string, expiratio
 	prefixedKey := rc.KeyName(key)
 	expiration = rc.ensureDefaultExpiration(expiration)
 
-	count, err := rc.execute(ctx, "SAddWithExpire", func() (interface{}, error) {
+	count, err := rc.execute(ctx, "SAddWithExpire", func(ctx context.Context) (interface{}, error) {
 		count, err := rc.client.SAdd(ctx, prefixedKey, members...).Result()
 		if err != nil {
 			return 0, err
@@ -622,7 +625,7 @@ func (rc *RedisClient) SAddWithExpire(ctx context.Context, key string, expiratio
 func (rc *RedisClient) SMembers(ctx context.Context, key string) ([]string, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "SMembers", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "SMembers", func(ctx context.Context) (interface{}, error) {
 		return rc.client.SMembers(ctx, prefixedKey).Result()
 	})
 
@@ -641,7 +644,7 @@ func (rc *RedisClient) SMembers(ctx context.Context, key string) ([]string, erro
 func (rc *RedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "SIsMember", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "SIsMember", func(ctx context.Context) (interface{}, error) {
 		return rc.client.SIsMember(ctx, prefixedKey, member).Result()
 	})
 
@@ -660,7 +663,7 @@ func (rc *RedisClient) SIsMember(ctx context.Context, key string, member interfa
 func (rc *RedisClient) SRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "SRem", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "SRem", func(ctx context.Context) (interface{}, error) {
 		return rc.client.SRem(ctx, prefixedKey, members...).Result()
 	})
 
@@ -679,7 +682,7 @@ func (rc *RedisClient) SRem(ctx context.Context, key string, members ...interfac
 func (rc *RedisClient) SCard(ctx context.Context, key string) (int64, error) {
 	prefixedKey := rc.KeyName(key)
 
-	result, err := rc.execute(ctx, "SCard", func() (interface{}, error) {
+	result, err := rc.execute(ctx, "SCard", func(ctx context.Context) (interface{}, error) {
 		return rc.client.SCard(ctx, prefixedKey).Result()
 	})
 

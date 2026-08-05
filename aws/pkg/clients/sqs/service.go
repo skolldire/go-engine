@@ -52,7 +52,7 @@ func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context
 }
 
 func (c *Cliente) execute(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
+	operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
@@ -60,7 +60,7 @@ func (c *Cliente) execute(ctx context.Context, operationName string,
 }
 
 func (c *Cliente) executeOperation(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
+	operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	logFields := map[string]interface{}{"operation": operationName, "service": "SQS"}
 
 	if c.resilience != nil {
@@ -71,7 +71,7 @@ func (c *Cliente) executeOperation(ctx context.Context, operationName string,
 }
 
 func (c *Cliente) executeWithResilience(ctx context.Context, operationName string,
-	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting SQS operation with resilience: %s", operationName), logFields)
 	}
@@ -88,12 +88,12 @@ func (c *Cliente) executeWithResilience(ctx context.Context, operationName strin
 }
 
 func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
-	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting SQS operation: %s", operationName), logFields)
 	}
 
-	result, err := operation()
+	result, err := operation(ctx)
 
 	if err != nil && c.logging {
 		c.logger.Error(ctx, err, logFields)
@@ -116,7 +116,7 @@ func (c *Cliente) SendMsj(ctx context.Context, queueURL string, mensaje string,
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "SendMsj", func() (interface{}, error) {
+	result, err := c.execute(ctx, "SendMsj", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.SendMessage(ctx, input)
 	})
 
@@ -165,7 +165,7 @@ func (c *Cliente) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes i
 		MessageAttributeNames: []string{"All"},
 	}
 
-	result, err := c.execute(ctx, "RecibirMensajes", func() (interface{}, error) {
+	result, err := c.execute(ctx, "RecibirMensajes", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.ReceiveMessage(ctx, input)
 	})
 
@@ -193,7 +193,7 @@ func (c *Cliente) DeleteMsj(ctx context.Context, queueURL string, receiptHandle 
 		ReceiptHandle: aws.String(receiptHandle),
 	}
 
-	_, err := c.execute(ctx, "DeleteMsj", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteMsj", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.DeleteMessage(ctx, input)
 	})
 
@@ -217,7 +217,7 @@ func (c *Cliente) CreateQueue(ctx context.Context, nombre string, atributos map[
 		input.Attributes = atributos
 	}
 
-	result, err := c.execute(ctx, "CreateQueue", func() (interface{}, error) {
+	result, err := c.execute(ctx, "CreateQueue", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.CreateQueue(ctx, input)
 	})
 
@@ -240,7 +240,7 @@ func (c *Cliente) DeleteQueue(ctx context.Context, queueURL string) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteQueue", func() (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteQueue", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.DeleteQueue(ctx, &sqs.DeleteQueueInput{
 			QueueUrl: aws.String(queueURL),
 		})
@@ -259,7 +259,7 @@ func (c *Cliente) ListQueue(ctx context.Context, prefijo string) ([]string, erro
 		input.QueueNamePrefix = aws.String(prefijo)
 	}
 
-	result, err := c.execute(ctx, "ListQueue", func() (interface{}, error) {
+	result, err := c.execute(ctx, "ListQueue", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.ListQueues(ctx, input)
 	})
 
@@ -282,7 +282,7 @@ func (c *Cliente) GetURLQueue(ctx context.Context, nombre string) (string, error
 		return "", ErrInvalidInput
 	}
 
-	result, err := c.execute(ctx, "GetURLQueue", func() (interface{}, error) {
+	result, err := c.execute(ctx, "GetURLQueue", func(ctx context.Context) (interface{}, error) {
 		return c.cliente.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{
 			QueueName: aws.String(nombre),
 		})

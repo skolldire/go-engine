@@ -259,6 +259,28 @@ func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <
 	}
 }
 
+// taskOutcome carries the immutable result of a single task execution from the
+// task goroutine back to safeExecuteTask over a channel. It is never shared
+// mutably, so there is no data race between the task and the timeout paths.
+type taskOutcome struct {
+	res interface{}
+	err error
+}
+
+// safeExecuteTask runs task under ctx and returns a Result. It guarantees:
+//
+//   - Panic containment: the recover runs in the SAME goroutine that invokes
+//     task.Execute. A recover in a parent goroutine cannot catch a panic raised
+//     in a child goroutine, so recovering here is what keeps a panicking task
+//     from crashing the whole process.
+//   - No data race: the task goroutine only writes to a channel; the Result is
+//     assembled by this goroutine after it either receives the outcome or the
+//     context is done.
+//   - Bounded leak: the outcome channel is buffered (cap 1) so the task
+//     goroutine can always send and exit even after we returned on timeout.
+//     Go cannot forcibly stop a task that ignores ctx; such a task keeps
+//     running until it returns, but it never blocks on the send and never
+//     writes to shared state. Callers must make long-running tasks honour ctx.
 func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, workerID string) Result {
 	startTime := time.Now()
 
@@ -270,10 +292,11 @@ func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, w
 		Priority:  task.Priority(),
 	}
 
-	func() {
+	outcomeCh := make(chan taskOutcome, 1)
+
+	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				errMsg := fmt.Sprintf("panic during task execution: %v", r)
 				if cfg.logger != nil {
 					cfg.logger.Error(ctx, ErrTaskPanic, map[string]interface{}{
 						"taskID":   id,
@@ -282,30 +305,27 @@ func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, w
 						"priority": task.Priority(),
 					})
 				}
-				result.Err = fmt.Errorf("%w: %s", ErrTaskPanic, errMsg)
+				outcomeCh <- taskOutcome{
+					err: fmt.Errorf("%w: panic during task execution: %v", ErrTaskPanic, r),
+				}
 			}
 		}()
 
-		doneCh := make(chan struct{})
-
-		go func() {
-			defer close(doneCh)
-			res, _, err := task.Execute(ctx)
-			result.Res = res
-			result.Err = err
-		}()
-
-		select {
-		case <-doneCh:
-		case <-ctx.Done():
-			result.Err = ctx.Err()
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				result.Err = fmt.Errorf("%w: %v", ErrTaskTimeout, ctx.Err())
-			} else {
-				result.Err = fmt.Errorf("%w: %v", ErrPoolCancelled, ctx.Err())
-			}
-		}
+		res, _, err := task.Execute(ctx)
+		outcomeCh <- taskOutcome{res: res, err: err}
 	}()
+
+	select {
+	case outcome := <-outcomeCh:
+		result.Res = outcome.res
+		result.Err = outcome.err
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			result.Err = fmt.Errorf("%w: %v", ErrTaskTimeout, ctx.Err())
+		} else {
+			result.Err = fmt.Errorf("%w: %v", ErrPoolCancelled, ctx.Err())
+		}
+	}
 
 	result.EndTime = time.Now()
 	result.Time = int(result.EndTime.Sub(startTime).Milliseconds())

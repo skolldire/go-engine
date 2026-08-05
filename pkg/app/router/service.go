@@ -128,11 +128,22 @@ func (a *App) RegisterShutdownHook(fn func(context.Context) error) {
 	a.shutdownHooks = append(a.shutdownHooks, fn)
 }
 
-func (a *App) Run() error {
-	ctx := context.Background()
+// Run starts the HTTP server and blocks until one of the following happens:
+//   - ctx is cancelled (e.g. the builder context or a parent shutdown),
+//   - an OS interrupt/SIGTERM is received, or
+//   - the server fails to start.
+//
+// On any of the first two, it performs a graceful shutdown bounded by
+// ShutdownTimeout and runs the registered shutdown hooks. Signal handling is
+// released with signal.Stop before returning.
+func (a *App) Run(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(stop)
 
 	errorCh := make(chan error, 1)
 
@@ -146,6 +157,8 @@ func (a *App) Run() error {
 	}()
 
 	select {
+	case <-ctx.Done():
+		a.logger.Info(ctx, "context cancelled, initiating graceful shutdown", nil)
 	case <-stop:
 		a.logger.Info(ctx, "shutdown signal received, initiating graceful shutdown", nil)
 	case err := <-errorCh:
@@ -155,7 +168,9 @@ func (a *App) Run() error {
 		return err
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(ctx, a.shutdownTimeout)
+	// Derive the shutdown context from Background, not ctx: if ctx is already
+	// cancelled, the graceful-shutdown deadline must still apply.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
 	defer cancel()
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {

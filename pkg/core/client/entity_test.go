@@ -104,7 +104,7 @@ func TestBaseClient_Execute_Success(t *testing.T) {
 	client := NewBaseClient(config, log)
 
 	ctx := context.Background()
-	result, err := client.Execute(ctx, "test-operation", func() (interface{}, error) {
+	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
 		return "success", nil
 	})
 
@@ -124,7 +124,7 @@ func TestBaseClient_Execute_Error(t *testing.T) {
 
 	ctx := context.Background()
 	testErr := errors.New("test error")
-	result, err := client.Execute(ctx, "test-operation", func() (interface{}, error) {
+	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
 		return nil, testErr
 	})
 
@@ -152,7 +152,7 @@ func TestBaseClient_Execute_WithResilience(t *testing.T) {
 	client := NewBaseClient(config, log)
 
 	ctx := context.Background()
-	result, err := client.Execute(ctx, "test-operation", func() (interface{}, error) {
+	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
 		return "success", nil
 	})
 
@@ -176,7 +176,7 @@ func TestBaseClient_Execute_WithTimeout(t *testing.T) {
 	var err error
 
 	go func() {
-		result, err = client.Execute(ctx, "test-operation", func() (interface{}, error) {
+		result, err = client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
 			time.Sleep(100 * time.Millisecond)
 			return "success", nil
 		})
@@ -196,6 +196,26 @@ func TestBaseClient_Execute_WithTimeout(t *testing.T) {
 	}
 }
 
+// TestBaseClient_Execute_PassesBoundedContext proves the regression fix: the
+// context handed to the operation carries the client's timeout deadline, so a
+// cooperative operation is actually cancelled by it. Previously the operation
+// received no context and closures captured the caller's unbounded context.
+func TestBaseClient_Execute_PassesBoundedContext(t *testing.T) {
+	config := BaseConfig{Timeout: 20 * time.Millisecond}
+	client := NewBaseClient(config, &mockLogger{})
+
+	var hadDeadline bool
+	_, err := client.Execute(context.Background(), "op", func(ctx context.Context) (interface{}, error) {
+		_, hadDeadline = ctx.Deadline()
+		// Cooperative operation: block on the operation's own context.
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+
+	assert.True(t, hadDeadline, "operation must receive a context bounded by the client timeout")
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
 func TestBaseClient_Execute_WithContextDeadline(t *testing.T) {
 	config := BaseConfig{
 		EnableLogging:  false,
@@ -213,7 +233,7 @@ func TestBaseClient_Execute_WithContextDeadline(t *testing.T) {
 	var err error
 
 	go func() {
-		_, err = client.Execute(ctx, "test-operation", func() (interface{}, error) {
+		_, err = client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
 			time.Sleep(100 * time.Millisecond)
 			return "success", nil
 		})

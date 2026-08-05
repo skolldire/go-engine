@@ -52,7 +52,7 @@ func NewIRTScorerClient(cfg IRTScorerConfig, log logger.Service) *IRTScorerClien
 // It delegates execution to BaseClient.Execute so that timeout and logging are
 // applied transparently.
 func (c *IRTScorerClient) Score(ctx context.Context, responses []int) (*IRTScoreResponse, error) {
-	raw, err := c.Execute(ctx, "irt-scorer.score", func() (interface{}, error) {
+	raw, err := c.Execute(ctx, "irt-scorer.score", func(ctx context.Context) (interface{}, error) {
 		// In production this would call c.baseURL with responses.
 		// Stubbed here to keep the example self-contained.
 		return &IRTScoreResponse{Theta: 0.42, SE: 0.15}, nil

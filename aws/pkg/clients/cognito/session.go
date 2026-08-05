@@ -27,7 +27,7 @@ func (c *Client) SignOut(ctx context.Context, accessToken string) error {
 		AccessToken: aws.String(accessToken),
 	}
 
-	_, err = c.executeOperation(ctx, "SignOut", func() (interface{}, error) {
+	_, err = c.executeOperation(ctx, "SignOut", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.GlobalSignOut(ctx, input)
 	})
 
@@ -61,7 +61,7 @@ func (c *Client) GlobalSignOut(ctx context.Context, accessToken string) error {
 		AccessToken: aws.String(accessToken),
 	}
 
-	_, err = c.executeOperation(ctx, "GlobalSignOut", func() (interface{}, error) {
+	_, err = c.executeOperation(ctx, "GlobalSignOut", func(ctx context.Context) (interface{}, error) {
 		return c.cognitoClient.GlobalSignOut(ctx, input)
 	})
 

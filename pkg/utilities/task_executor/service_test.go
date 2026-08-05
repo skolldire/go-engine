@@ -8,6 +8,7 @@ import (
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/goleak"
 )
 
 type mockLogger struct{}
@@ -161,4 +162,114 @@ func TestNewTask(t *testing.T) {
 	assert.NotNil(t, task)
 	assert.Equal(t, "input", task.Args)
 	assert.Equal(t, PriorityNormal, task.priority)
+}
+
+// TestWorkerPool_PanicIsContained verifies that a task that panics does not
+// crash the process: the panic is recovered in the task goroutine and surfaced
+// as an ErrTaskPanic result.
+func TestWorkerPool_PanicIsContained(t *testing.T) {
+	tasks := map[string]Tasker{
+		"boom": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				panic("kaboom")
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+		"ok": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				return "fine", nil
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	results := WorkerPool(context.Background(), tasks, 2, WithLogger(&mockLogger{}))
+
+	assert.Len(t, results, 2)
+	assert.ErrorIs(t, results["boom"].Err, ErrTaskPanic)
+	assert.NoError(t, results["ok"].Err)
+	assert.Equal(t, "fine", results["ok"].Res)
+}
+
+// TestWorkerPool_TaskTimeout verifies a task that exceeds the task timeout
+// yields an ErrTaskTimeout result instead of blocking the pool.
+func TestWorkerPool_TaskTimeout(t *testing.T) {
+	tasks := map[string]Tasker{
+		"slow": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				// Cooperative task: respects ctx cancellation.
+				<-ctx.Done()
+				return "", ctx.Err()
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	results := WorkerPool(context.Background(), tasks, 1,
+		WithTaskTimeout(50*time.Millisecond),
+		WithLogger(&mockLogger{}),
+	)
+
+	assert.Len(t, results, 1)
+	assert.ErrorIs(t, results["slow"].Err, ErrTaskTimeout)
+}
+
+// TestWorkerPool_NonCooperativeTaskTimeoutDoesNotLeak verifies that when a task
+// ignores ctx and outlives the timeout, the pool still returns promptly and the
+// runaway goroutine does not block on the outcome channel (bounded leak).
+func TestWorkerPool_NonCooperativeTaskTimeoutDoesNotLeak(t *testing.T) {
+	done := make(chan struct{})
+	tasks := map[string]Tasker{
+		"stubborn": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				// Ignores ctx; finishes shortly after the timeout.
+				time.Sleep(150 * time.Millisecond)
+				close(done)
+				return "late", nil
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	start := time.Now()
+	results := WorkerPool(context.Background(), tasks, 1,
+		WithTaskTimeout(30*time.Millisecond),
+		WithLogger(&mockLogger{}),
+	)
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, 120*time.Millisecond, "pool must return on timeout, not wait for the task")
+	assert.ErrorIs(t, results["stubborn"].Err, ErrTaskTimeout)
+
+	// The runaway goroutine must still be able to complete and send on the
+	// buffered channel without blocking; wait for it so goleak stays clean.
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runaway task goroutine did not finish")
+	}
+}
+
+func TestWorkerPool_NoGoroutineLeak(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	tasks := map[string]Tasker{
+		"a": &Task[string, string]{
+			Func:     func(ctx context.Context, input string) (string, error) { return "a", nil },
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+		"b": &Task[string, string]{
+			Func:     func(ctx context.Context, input string) (string, error) { return "b", nil },
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	results := WorkerPool(context.Background(), tasks, 2, WithLogger(&mockLogger{}))
+	assert.Len(t, results, 2)
 }

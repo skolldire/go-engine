@@ -29,13 +29,13 @@ func NewResilienceService(config Config, log logger.Service) *Service {
 }
 
 func (rs *Service) Execute(ctx context.Context,
-	operation func() (interface{}, error)) (interface{}, error) {
+	operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	result, err := rs.circuitBreaker.Execute(ctx, func() (interface{}, error) {
 		var opResult interface{}
 
 		retryErr := rs.retryer.Do(ctx, func() error {
 			var err error
-			opResult, err = operation()
+			opResult, err = operation(ctx)
 			return err
 		})
 

@@ -78,7 +78,7 @@ func waitForConnection(ctx context.Context, conn *grpc.ClientConn) error {
 	}
 }
 
-func (c *Cliente) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
+func (c *Cliente) execute(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error)) (interface{}, error) {
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
@@ -112,7 +112,7 @@ func (c *Cliente) execute(ctx context.Context, operationName string, operation f
 		c.logger.Debug(ctx, fmt.Sprintf("starting gRPC operation: %s", operationName), logFields)
 	}
 
-	result, err := operation()
+	result, err := operation(ctx)
 
 	if err != nil && c.logging {
 		c.logger.Error(ctx, err, logFields)
@@ -207,7 +207,7 @@ func (c *Cliente) InvokeRPC(ctx context.Context, operationName string,
 		}
 	}
 
-	return c.execute(ctx, operationName, func() (interface{}, error) {
+	return c.execute(ctx, operationName, func(ctx context.Context) (interface{}, error) {
 		return invokeFunc(ctx)
 	})
 }
