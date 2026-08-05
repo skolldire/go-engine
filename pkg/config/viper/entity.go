@@ -1,8 +1,6 @@
 package viper
 
 import (
-	"sync"
-
 	"github.com/skolldire/go-engine/aws/pkg/clients/cognito"
 	"github.com/skolldire/go-engine/aws/pkg/clients/s3"
 	"github.com/skolldire/go-engine/aws/pkg/clients/ses"
@@ -75,8 +73,3 @@ type service struct {
 type GracefulShutdownConfig struct {
 	Timeout int `mapstructure:"timeout_seconds"`
 }
-
-var (
-	instance Service
-	once     sync.Once
-)

@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/otel"
@@ -44,10 +45,15 @@ func NewProvider(ctx context.Context, cfg OTELConfig) (Provider, error) {
 		return nil, fmt.Errorf("create otel resource: %w", err)
 	}
 
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(cfg.ExporterEndpoint),
-		otlptracegrpc.WithInsecure(),
-	)
+	traceOpts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(cfg.ExporterEndpoint)}
+	if cfg.Insecure {
+		traceOpts = append(traceOpts, otlptracegrpc.WithInsecure())
+	}
+	if len(cfg.Headers) > 0 {
+		traceOpts = append(traceOpts, otlptracegrpc.WithHeaders(cfg.Headers))
+	}
+
+	traceExporter, err := otlptracegrpc.New(ctx, traceOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create trace exporter: %w", err)
 	}
@@ -58,11 +64,19 @@ func NewProvider(ctx context.Context, cfg OTELConfig) (Provider, error) {
 		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SamplingRate)),
 	)
 
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(cfg.ExporterEndpoint),
-		otlpmetricgrpc.WithInsecure(),
-	)
+	metricOpts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(cfg.ExporterEndpoint)}
+	if cfg.Insecure {
+		metricOpts = append(metricOpts, otlpmetricgrpc.WithInsecure())
+	}
+	if len(cfg.Headers) > 0 {
+		metricOpts = append(metricOpts, otlpmetricgrpc.WithHeaders(cfg.Headers))
+	}
+
+	metricExporter, err := otlpmetricgrpc.New(ctx, metricOpts...)
 	if err != nil {
+		// Tear down the already-created trace provider so its exporter/goroutines
+		// are not leaked when the metric exporter fails.
+		_ = traceProvider.Shutdown(ctx)
 		return nil, fmt.Errorf("create metric exporter: %w", err)
 	}
 
@@ -93,11 +107,14 @@ func (p *realProvider) Meter(name string) otelmetric.Meter {
 }
 
 func (p *realProvider) Shutdown(ctx context.Context) error {
+	// Shut down both providers even if the first fails, aggregating errors so a
+	// trace-shutdown failure does not abandon the metric provider.
+	var errs []error
 	if err := p.traceProvider.Shutdown(ctx); err != nil {
-		return fmt.Errorf("shutdown trace provider: %w", err)
+		errs = append(errs, fmt.Errorf("shutdown trace provider: %w", err))
 	}
 	if err := p.metricProvider.Shutdown(ctx); err != nil {
-		return fmt.Errorf("shutdown metric provider: %w", err)
+		errs = append(errs, fmt.Errorf("shutdown metric provider: %w", err))
 	}
-	return nil
+	return errors.Join(errs...)
 }

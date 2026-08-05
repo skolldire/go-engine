@@ -49,6 +49,10 @@ type Config struct {
 	EnableCORS      bool          `mapstructure:"enable_cors" json:"enable_cors"`
 	CorsConfig      Cors          `mapstructure:"cors_config" json:"cors_config"`
 	TrustedProxies  []string      `mapstructure:"trusted_proxies" json:"trusted_proxies"`
+	// EnablePprof exposes the net/http/pprof endpoints under /debug/pprof.
+	// It is opt-in and additionally suppressed under the production profile so
+	// profiling data is never exposed in prod even if enabled by mistake.
+	EnablePprof bool `mapstructure:"enable_pprof" json:"enable_pprof"`
 }
 
 // Cors holds the CORS policy applied when Config.EnableCORS is true.

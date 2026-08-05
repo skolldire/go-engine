@@ -17,6 +17,12 @@ type OTELConfig struct {
 	ExporterEndpoint string  `mapstructure:"exporter_endpoint" json:"exporter_endpoint"`
 	SamplingRate     float64 `mapstructure:"sampling_rate" json:"sampling_rate"`
 	Enabled          bool    `mapstructure:"enabled" json:"enabled"`
+	// Insecure sends OTLP over plaintext gRPC. It defaults to false, so the
+	// exporter uses TLS unless explicitly opted out (e.g. a local collector).
+	Insecure bool `mapstructure:"insecure" json:"insecure"`
+	// Headers are added to every OTLP export request, e.g. an API key/token for
+	// a hosted collector.
+	Headers map[string]string `mapstructure:"headers" json:"headers"`
 }
 
 // Provider exposes the TracerProvider and MeterProvider for the application.

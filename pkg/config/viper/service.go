@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/mitchellh/mapstructure"
 	"github.com/skolldire/go-engine/pkg/config/dynamic"
 	"github.com/skolldire/go-engine/pkg/utilities/app_profile"
@@ -16,43 +15,52 @@ import (
 	"github.com/spf13/viper"
 )
 
+// NewService returns a fresh configuration service. It is intentionally not a
+// process-wide singleton: a singleton froze the path/scope/logger of the first
+// caller and prevented multiple engines and isolated tests.
 func NewService(log logger.LogWriter) Service {
-	once.Do(func() {
-		instance = &service{
-			propertyFiles: getPropertyFiles(log),
-			path:          getConfigPath(log),
-			log:           log,
-		}
-	})
-	return instance
+	return &service{
+		propertyFiles: getPropertyFiles(log),
+		path:          getConfigPath(log),
+		log:           log,
+	}
 }
 
-func (s *service) Apply() (Config, error) {
+// buildConfig loads, merges, maps and validates the configuration. It is the
+// single code path shared by Apply and ApplyDynamic (both the initial load and
+// every reload) so validation is never skipped. It returns the mapped Config
+// and the underlying viper (for reading load-time flags such as the watcher).
+func (s *service) buildConfig() (Config, *viper.Viper, error) {
 	if err := s.validateRequiredFiles(); err != nil {
-		s.log.Error("error validating configuration files: ", err)
-		return Config{}, err
+		return Config{}, nil, err
 	}
 
 	mergedConfig, err := s.loadAndMergeConfigs()
 	if err != nil {
-		s.log.Error("error loading configuration: ", err)
-		return Config{}, fmt.Errorf("error loading configuration - %w", err)
+		return Config{}, nil, fmt.Errorf("error loading configuration - %w", err)
 	}
 
 	config, err := s.mapConfigToStruct(mergedConfig)
 	if err != nil {
-		s.log.Error("error mapping configuration: ", err)
-		return Config{}, fmt.Errorf("error mapping configuration - %w", err)
+		return Config{}, nil, fmt.Errorf("error mapping configuration - %w", err)
 	}
 
-	// Validate configuration structure
 	if validationErrors := ValidateConfig(config); len(validationErrors) > 0 {
 		var errorMessages []string
 		for _, err := range validationErrors {
 			errorMessages = append(errorMessages, err.Error())
-			s.log.Error("configuration validation error: ", err)
 		}
-		return Config{}, fmt.Errorf("configuration validation failed: %s", strings.Join(errorMessages, "; "))
+		return Config{}, nil, fmt.Errorf("configuration validation failed: %s", strings.Join(errorMessages, "; "))
+	}
+
+	return config, mergedConfig, nil
+}
+
+func (s *service) Apply() (Config, error) {
+	config, _, err := s.buildConfig()
+	if err != nil {
+		s.log.Error("error building configuration: ", err)
+		return Config{}, err
 	}
 
 	s.log.Info("configuration loaded and validated successfully")
@@ -103,10 +111,6 @@ func (s *service) loadAndMergeConfigs() (*viper.Viper, error) {
 		}
 	}
 
-	if v.GetBool("enable_config_watch") {
-		watchConfig(v, s.log)
-	}
-
 	s.log.Debug("configuration files merged successfully")
 	return v, nil
 }
@@ -148,28 +152,22 @@ func (s *service) mapConfigToStruct(v *viper.Viper) (Config, error) {
 }
 
 func (s *service) ApplyDynamic(log logger.Service) (*dynamic.DynamicConfig, error) {
-	mergedConfig, err := s.loadAndMergeConfigs()
+	config, mergedConfig, err := s.buildConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error loading initial configuration: %w", err)
 	}
 
-	config, err := s.mapConfigToStruct(mergedConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error mapping configuration: %w", err)
-	}
-
 	dynamicConfig := dynamic.NewDynamicConfig(&config, log)
 
+	// The reload path reuses buildConfig, so every reloaded snapshot is validated
+	// before it is published — a snapshot that fails validation is rejected and
+	// the previous configuration is kept.
 	dynamicConfig.SetReloadFunc(func() (interface{}, error) {
-		mergedConfig, err := s.loadAndMergeConfigs()
+		newConfig, _, err := s.buildConfig()
 		if err != nil {
 			return nil, err
 		}
-		config, err := s.mapConfigToStruct(mergedConfig)
-		if err != nil {
-			return nil, err
-		}
-		return &config, nil
+		return &newConfig, nil
 	})
 
 	if mergedConfig.GetBool("enable_config_watch") {
@@ -256,13 +254,6 @@ func envVarDecodeHook() mapstructure.DecodeHookFunc {
 
 		return resolveEnvValue(str), nil
 	}
-}
-
-func watchConfig(v *viper.Viper, logger logger.LogWriter) {
-	v.WatchConfig()
-	v.OnConfigChange(func(e fsnotify.Event) {
-		logger.Warnf("configuration file changed: %s", e.Name)
-	})
 }
 
 func getPropertyFiles(logger logger.LogWriter) []string {

@@ -3,12 +3,14 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -37,10 +39,15 @@ type Config struct {
 	WithResilience bool              `mapstructure:"with_resilience" json:"with_resilience"`
 	Resilience     resilience.Config `mapstructure:"resilience" json:"resilience"`
 	TimeOut        time.Duration     `mapstructure:"timeout" json:"timeout"`
+	// TLS configures transport security. When nil or disabled the client uses an
+	// insecure (plaintext) connection.
+	TLS *TLSConfig `mapstructure:"tls" json:"tls"`
 }
 
 type Cliente struct {
+	mu         sync.RWMutex // guards conn during reconnection
 	conn       *grpc.ClientConn
+	creds      credentials.TransportCredentials
 	logger     logger.Service
 	logging    bool
 	resilience *resilience.Service

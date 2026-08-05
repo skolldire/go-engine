@@ -84,6 +84,65 @@ func echoHandler() http.HandlerFunc {
 	}
 }
 
+// ── hardening tests ───────────────────────────────────────────────────────────
+
+func TestJWTMiddleware_FailsClosedWhenIssuerMissing(t *testing.T) {
+	key := generateTestKey(t)
+	srv := jwksServer(t, key)
+	defer srv.Close()
+
+	// Audience set but Issuer missing without opt-out → misconfigured → fail closed.
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	req.Header.Set("Authorization", "Bearer "+signToken(t, key, validClaims()))
+	mw.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code, "insecure config must fail closed")
+}
+
+func TestJWTMiddleware_RejectsNon2xxJWKS(t *testing.T) {
+	key := generateTestKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "nope", http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	req.Header.Set("Authorization", "Bearer "+signToken(t, key, validClaims()))
+	mw.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestJWTMiddleware_RejectsNonRS256(t *testing.T) {
+	key := generateTestKey(t)
+	srv := jwksServer(t, key)
+	defer srv.Close()
+
+	// Token signed with HS256 must be rejected even though a kid is present.
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, validClaims())
+	tok.Header["kid"] = testKID
+	signed, err := tok.SignedString([]byte("shared-secret"))
+	require.NoError(t, err)
+
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer, Audience: testAudience}
+	mw := JWTAuth(cfg)(echoHandler())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+	mw.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
 // ── JWTMiddleware tests ───────────────────────────────────────────────────────
 
 func TestJWTMiddleware_ValidToken(t *testing.T) {
@@ -136,7 +195,7 @@ func TestJWTMiddleware_MissingHeader(t *testing.T) {
 	srv := jwksServer(t, key)
 	defer srv.Close()
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, AllowEmptyIssuer: true, AllowEmptyAudience: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -166,7 +225,7 @@ func TestJWTMiddleware_MalformedHeader(t *testing.T) {
 	srv := jwksServer(t, key)
 	defer srv.Close()
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, AllowEmptyIssuer: true, AllowEmptyAudience: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	for _, bad := range []string{"Basic abc", "Bearer", "token-without-prefix"} {
@@ -209,7 +268,7 @@ func TestJWTMiddleware_WrongSigningKey(t *testing.T) {
 	tok.Header["kid"] = testKID
 	token, _ := tok.SignedString(wrongKey)
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, AllowEmptyIssuer: true, AllowEmptyAudience: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -228,7 +287,7 @@ func TestJWTMiddleware_IssuerMismatch(t *testing.T) {
 	claims := validClaims()
 	claims["iss"] = "https://wrong-issuer.example.com"
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Issuer: testIssuer, AllowEmptyAudience: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -248,7 +307,7 @@ func TestJWTMiddleware_AudienceMismatch(t *testing.T) {
 	claims := validClaims()
 	claims["aud"] = "wrong-client-id"
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience, AllowEmptyIssuer: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -269,7 +328,7 @@ func TestJWTMiddleware_AudienceViaClientID(t *testing.T) {
 	delete(claims, "aud")
 	claims["client_id"] = testAudience
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience, AllowEmptyIssuer: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -282,8 +341,10 @@ func TestJWTMiddleware_AudienceViaClientID(t *testing.T) {
 
 func TestJWTMiddleware_SkipPaths(t *testing.T) {
 	cfg := JWTAuthConfig{
-		JWKSURL:   "http://unreachable-jwks.invalid",
-		SkipPaths: []string{"/health", "/ping"},
+		JWKSURL:            "http://unreachable-jwks.invalid",
+		SkipPaths:          []string{"/health", "/ping"},
+		AllowEmptyIssuer:   true,
+		AllowEmptyAudience: true,
 	}
 	mw := JWTAuth(cfg)(echoHandler())
 
@@ -296,8 +357,10 @@ func TestJWTMiddleware_SkipPaths(t *testing.T) {
 
 func TestJWTMiddleware_SkipPath_NonSkippedRequiresAuth(t *testing.T) {
 	cfg := JWTAuthConfig{
-		JWKSURL:   "http://unreachable-jwks.invalid",
-		SkipPaths: []string{"/health"},
+		JWKSURL:            "http://unreachable-jwks.invalid",
+		SkipPaths:          []string{"/health"},
+		AllowEmptyIssuer:   true,
+		AllowEmptyAudience: true,
 	}
 	mw := JWTAuth(cfg)(echoHandler())
 
@@ -315,7 +378,7 @@ func TestJWTMiddleware_NoIssuerValidation(t *testing.T) {
 	claims := validClaims()
 	claims["iss"] = "https://anything.example.com"
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL} // no Issuer set
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, AllowEmptyIssuer: true, AllowEmptyAudience: true} // no Issuer set
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -477,7 +540,7 @@ func TestJWTMiddleware_AudienceAsSlice(t *testing.T) {
 	claims := validClaims()
 	claims["aud"] = []interface{}{testAudience, "other-client"}
 
-	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience, AllowEmptyIssuer: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -491,7 +554,7 @@ func TestJWTMiddleware_AudienceAsSlice(t *testing.T) {
 // ── fetchJWKS error paths ─────────────────────────────────────────────────────
 
 func TestJWTMiddleware_JWKSServerUnreachable(t *testing.T) {
-	cfg := JWTAuthConfig{JWKSURL: "http://127.0.0.1:1"}
+	cfg := JWTAuthConfig{JWKSURL: "http://127.0.0.1:1", AllowEmptyIssuer: true, AllowEmptyAudience: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	rec := httptest.NewRecorder()
@@ -509,7 +572,7 @@ func TestJWTMiddleware_JWKSReturnsInvalidJSON(t *testing.T) {
 	defer srv.Close()
 
 	key := generateTestKey(t)
-	cfg := JWTAuthConfig{JWKSURL: srv.URL}
+	cfg := JWTAuthConfig{JWKSURL: srv.URL, AllowEmptyIssuer: true, AllowEmptyAudience: true}
 	mw := JWTAuth(cfg)(echoHandler())
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims(validClaims()))
@@ -547,8 +610,10 @@ func TestJWTMiddleware_StaleKeyUsedWhenJWKSDown(t *testing.T) {
 	defer srv.Close()
 
 	cfg := JWTAuthConfig{
-		JWKSURL:   srv.URL,
-		JWKSCache: 1 * time.Millisecond, // expire immediately
+		JWKSURL:            srv.URL,
+		JWKSCache:          1 * time.Millisecond, // expire immediately
+		AllowEmptyIssuer:   true,
+		AllowEmptyAudience: true,
 	}
 	mw := JWTAuth(cfg)(echoHandler())
 

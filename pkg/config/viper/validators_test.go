@@ -11,24 +11,43 @@ import (
 )
 
 func TestValidateAWSConfig(t *testing.T) {
+	awsAdapter := Config{
+		Aws:        AwsConfig{},
+		SQSClients: []map[string]sqs.Config{{"q": {}}},
+	}
+
 	tests := []struct {
 		name    string
-		config  AwsConfig
+		config  Config
 		wantErr bool
 	}{
 		{
 			name:    "valid region",
-			config:  AwsConfig{Region: "us-east-1"},
+			config:  Config{Aws: AwsConfig{Region: "us-east-1"}},
 			wantErr: false,
 		},
 		{
-			name:    "empty region",
-			config:  AwsConfig{Region: ""},
+			name:    "less common but valid region format",
+			config:  Config{Aws: AwsConfig{Region: "eu-north-1"}},
+			wantErr: false,
+		},
+		{
+			name:    "empty region without AWS adapter is allowed",
+			config:  Config{Aws: AwsConfig{Region: ""}},
+			wantErr: false,
+		},
+		{
+			name: "empty region with AWS adapter is an error",
+			config: func() Config {
+				c := awsAdapter
+				c.Aws = AwsConfig{Region: ""}
+				return c
+			}(),
 			wantErr: true,
 		},
 		{
-			name:    "invalid region",
-			config:  AwsConfig{Region: "invalid-region"},
+			name:    "invalid region format",
+			config:  Config{Aws: AwsConfig{Region: "invalid-region"}},
 			wantErr: true,
 		},
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -27,14 +28,23 @@ type JWTAuthConfig struct {
 	// Falls back to stale keys on network failure.
 	JWKSCache time.Duration
 
-	// Issuer is the expected "iss" claim value.
-	// Leave empty to skip issuer validation.
+	// Issuer is the expected "iss" claim value. It is required by default: if it
+	// is empty and AllowEmptyIssuer is false, the middleware fails closed and
+	// rejects every request. Set AllowEmptyIssuer to intentionally skip issuer
+	// validation.
 	Issuer string
 
 	// Audience is the expected "aud" or "client_id" claim value.
 	// For Cognito access tokens the field is "client_id" — both are checked.
-	// Leave empty to skip audience validation.
+	// It is required by default: if empty and AllowEmptyAudience is false, the
+	// middleware fails closed. Set AllowEmptyAudience to skip audience validation.
 	Audience string
+
+	// AllowEmptyIssuer explicitly disables issuer validation when Issuer is empty.
+	AllowEmptyIssuer bool
+
+	// AllowEmptyAudience explicitly disables audience validation when Audience is empty.
+	AllowEmptyAudience bool
 
 	// GroupsClaim is the JWT claim name that holds the user's groups.
 	// Defaults to "cognito:groups".
@@ -43,6 +53,10 @@ type JWTAuthConfig struct {
 	// SkipPaths lists request paths that bypass JWT validation entirely.
 	// Matching is by prefix: "/health" also skips "/health/live", "/health/ready".
 	SkipPaths []string
+
+	// HTTPClient fetches the JWKS. Defaults to a client with a 10s timeout.
+	// Inject a custom client to control transport, TLS or timeouts (and in tests).
+	HTTPClient *http.Client
 }
 
 // JWTAuth returns a chi-compatible HTTP middleware that validates Bearer tokens
@@ -60,15 +74,31 @@ func JWTAuth(cfg JWTAuthConfig) func(http.Handler) http.Handler {
 	if cfg.GroupsClaim == "" {
 		cfg.GroupsClaim = "cognito:groups"
 	}
+	if cfg.HTTPClient == nil {
+		cfg.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	}
+
+	// Fail closed on insecure configuration: issuer and audience are required
+	// unless explicitly opted out. A middleware that always rejects is safer
+	// than one that silently accepts tokens for any issuer/audience.
+	misconfig := configError(cfg)
+
 	cache := &jwksCache{
-		endpoint: cfg.JWKSURL,
-		ttl:      cfg.JWKSCache,
-		keys:     make(map[string]*rsa.PublicKey),
+		endpoint:   cfg.JWKSURL,
+		ttl:        cfg.JWKSCache,
+		keys:       make(map[string]*rsa.PublicKey),
+		httpClient: cfg.HTTPClient,
+		now:        time.Now,
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if shouldSkip(r.URL.Path, cfg.SkipPaths) {
 				next.ServeHTTP(w, r)
+				return
+			}
+
+			if misconfig != "" {
+				writeAuthError(w, http.StatusInternalServerError, misconfig)
 				return
 			}
 
@@ -88,6 +118,22 @@ func JWTAuth(cfg JWTAuthConfig) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// configError returns a non-empty reason when the middleware is configured
+// insecurely (missing issuer/audience without an explicit opt-out), so it can
+// fail closed. An empty string means the configuration is acceptable.
+func configError(cfg JWTAuthConfig) string {
+	if cfg.JWKSURL == "" {
+		return "auth_misconfigured_jwks_url"
+	}
+	if cfg.Issuer == "" && !cfg.AllowEmptyIssuer {
+		return "auth_misconfigured_issuer"
+	}
+	if cfg.Audience == "" && !cfg.AllowEmptyAudience {
+		return "auth_misconfigured_audience"
+	}
+	return ""
 }
 
 // errorCode maps a validation error to a stable reason string surfaced in
@@ -125,7 +171,7 @@ func extractBearer(r *http.Request) string {
 
 func parseAndValidate(ctx context.Context, tokenStr string, cfg JWTAuthConfig, cache *jwksCache) (*Claims, error) {
 	parsed, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+		if token.Method.Alg() != "RS256" {
 			return nil, fmt.Errorf("unexpected signing method: %v (expected RS256)", token.Header["alg"])
 		}
 		kid, ok := token.Header["kid"].(string)
@@ -133,7 +179,7 @@ func parseAndValidate(ctx context.Context, tokenStr string, cfg JWTAuthConfig, c
 			return nil, fmt.Errorf("missing kid in token header")
 		}
 		return cache.getKey(ctx, kid)
-	})
+	}, jwt.WithValidMethods([]string{"RS256"}))
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +192,9 @@ func parseAndValidate(ctx context.Context, tokenStr string, cfg JWTAuthConfig, c
 		return nil, fmt.Errorf("unexpected claims format")
 	}
 
+	// Issuer/audience are validated whenever configured. Callers that leave them
+	// empty must opt out explicitly (enforced at construction via configError),
+	// so an empty expected value here means validation was intentionally skipped.
 	if cfg.Issuer != "" {
 		iss, _ := mapClaims["iss"].(string)
 		if iss != cfg.Issuer {
@@ -208,22 +257,49 @@ func buildClaims(m jwt.MapClaims, groupsClaim string) *Claims {
 // ── JWKS cache ────────────────────────────────────────────────────────────────
 
 type jwksCache struct {
-	mu        sync.RWMutex
-	endpoint  string
-	ttl       time.Duration
-	keys      map[string]*rsa.PublicKey
-	fetchedAt time.Time
+	mu         sync.RWMutex
+	endpoint   string
+	ttl        time.Duration
+	keys       map[string]*rsa.PublicKey
+	fetchedAt  time.Time
+	httpClient *http.Client
+	now        func() time.Time
 }
 
 const jwksRefreshThreshold = 10 * time.Minute
 
+// maxStaleWindow bounds how long stale keys may be served after a failed
+// refresh: up to this long since the last successful fetch. It is an absolute
+// cap (independent of the TTL) so a short TTL still gets useful resilience
+// during an outage, while arbitrarily old keys are never trusted.
+const maxStaleWindow = 6 * time.Hour
+
+// refreshThreshold is how long before expiry a proactive refresh is attempted.
+// It never exceeds half the TTL, so a small TTL does not make the cache
+// consider itself perpetually stale (which would refetch on every request).
+func (c *jwksCache) refreshThreshold() time.Duration {
+	if jwksRefreshThreshold > c.ttl/2 {
+		return c.ttl / 2
+	}
+	return jwksRefreshThreshold
+}
+
+func (c *jwksCache) clock() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
+}
+
 func (c *jwksCache) getKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+	threshold := c.ttl - c.refreshThreshold()
+
 	c.mu.RLock()
 	key, exists := c.keys[kid]
-	stale := time.Since(c.fetchedAt) >= (c.ttl - jwksRefreshThreshold)
+	age := c.clock().Sub(c.fetchedAt)
 	c.mu.RUnlock()
 
-	if exists && !stale {
+	if exists && age < threshold {
 		return key, nil
 	}
 
@@ -231,19 +307,21 @@ func (c *jwksCache) getKey(ctx context.Context, kid string) (*rsa.PublicKey, err
 	defer c.mu.Unlock()
 
 	// double-check: another goroutine may have refreshed already
-	if key, ok := c.keys[kid]; ok && time.Since(c.fetchedAt) < (c.ttl-jwksRefreshThreshold) {
-		return key, nil
+	if k, ok := c.keys[kid]; ok && c.clock().Sub(c.fetchedAt) < threshold {
+		return k, nil
 	}
 
-	newKeys, err := fetchJWKS(ctx, c.endpoint)
+	newKeys, err := fetchJWKS(ctx, c.httpClient, c.endpoint)
 	if err != nil {
-		if key != nil {
-			return key, nil // stale fallback on network failure
+		// Stale fallback on network failure, bounded to maxStaleWindow so
+		// arbitrarily old keys are never trusted.
+		if key != nil && c.clock().Sub(c.fetchedAt) < maxStaleWindow {
+			return key, nil
 		}
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
 	c.keys = newKeys
-	c.fetchedAt = time.Now()
+	c.fetchedAt = c.clock()
 
 	k, ok := c.keys[kid]
 	if !ok {
@@ -262,30 +340,48 @@ type jwkKey struct {
 	Kid string `json:"kid"`
 	Kty string `json:"kty"`
 	Use string `json:"use"`
+	Alg string `json:"alg"`
 	N   string `json:"n"`
 	E   string `json:"e"`
 }
 
-func fetchJWKS(ctx context.Context, endpoint string) (map[string]*rsa.PublicKey, error) {
+// maxJWKSBody caps the JWKS response size to defend against a hostile or
+// misbehaving endpoint returning an unbounded body.
+const maxJWKSBody = 1 << 20 // 1 MiB
+
+func fetchJWKS(ctx context.Context, client *http.Client, endpoint string) (map[string]*rsa.PublicKey, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+	}
+
 	var jwks jwksResponse
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxJWKSBody)).Decode(&jwks); err != nil {
 		return nil, fmt.Errorf("decode JWKS response: %w", err)
 	}
 
 	keys := make(map[string]*rsa.PublicKey, len(jwks.Keys))
 	for _, k := range jwks.Keys {
 		if k.Kty != "RSA" || k.Kid == "" || k.N == "" || k.E == "" {
+			continue
+		}
+		// Only accept signing keys and, when advertised, the RS256 algorithm.
+		if k.Use != "" && k.Use != "sig" {
+			continue
+		}
+		if k.Alg != "" && k.Alg != "RS256" {
 			continue
 		}
 		pub, err := rsaKeyFromJWK(k.N, k.E)
@@ -322,9 +418,12 @@ func rsaKeyFromJWK(nB64, eB64 string) (*rsa.PublicKey, error) {
 // (e.g. "missing_token", "invalid_token", "expired_token", "forbidden").
 func writeAuthError(w http.ResponseWriter, status int, reason string) {
 	var apiErr *error_handler.CommonApiError
-	if status == http.StatusForbidden {
+	switch status {
+	case http.StatusForbidden:
 		apiErr = error_handler.NewForbiddenError(authErrorMsg(reason), nil)
-	} else {
+	case http.StatusInternalServerError:
+		apiErr = error_handler.NewInternalError(authErrorMsg(reason), nil)
+	default:
 		apiErr = error_handler.NewUnauthorizedError(authErrorMsg(reason), nil)
 	}
 	apiErr = apiErr.WithDetail("reason", reason)
@@ -346,6 +445,8 @@ func authErrorMsg(reason string) string {
 		return "authentication token has expired"
 	case "forbidden":
 		return "access forbidden: insufficient permissions"
+	case "auth_misconfigured_jwks_url", "auth_misconfigured_issuer", "auth_misconfigured_audience":
+		return "authentication is misconfigured on the server"
 	default:
 		return "authentication failed"
 	}

@@ -66,7 +66,13 @@ func NewService(c Config, opts ...RouterOption) *App {
 
 func (a *App) configureMiddlewares() {
 	a.router.Use(middleware.RequestID)
-	a.router.Use(middleware.RealIP) //nolint:staticcheck // tracked: replace with trusted-proxy-aware alternative
+	// Trust X-Forwarded-For / X-Real-IP only when the request arrives through a
+	// configured trusted proxy; otherwise keep the direct peer address. When no
+	// trusted proxies are configured the headers are ignored entirely, which is
+	// the safe default against client IP spoofing.
+	if len(a.config.TrustedProxies) > 0 {
+		a.router.Use(trustedRealIP(newTrustedProxySet(a.config.TrustedProxies)))
+	}
 	a.router.Use(middleware.Logger)
 	a.router.Use(middleware.Recoverer)
 	a.router.Use(middleware.Timeout(60 * time.Second))
@@ -81,17 +87,12 @@ func (a *App) configureMiddlewares() {
 			MaxAge:           a.config.CorsConfig.AllowMaxAge,
 		}))
 	}
-
-	if len(a.config.TrustedProxies) > 0 {
-		for _, proxy := range a.config.TrustedProxies {
-			a.router.Use(middleware.SetHeader("X-Forwarded-For", proxy))
-		}
-	}
 }
 
 func (a *App) configureBasicRoutes() {
 	a.router.Get("/ping", pingHandler)
-	if !app_profile.IsProdProfile() {
+	// pprof is opt-in and never registered under the production profile.
+	if a.config.EnablePprof && !app_profile.IsProdProfile() {
 		registerPprofRoutes(a.router)
 	}
 }

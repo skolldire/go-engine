@@ -9,16 +9,24 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
 func NewCliente(cfg Config, log logger.Service) (Service, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.TimeOut)
+	timeout := cfg.TimeOut
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	creds, err := buildTransportCredentials(cfg.TLS)
+	if err != nil {
+		return nil, log.WrapError(err, ErrConnection.Error())
+	}
+
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(creds),
 	}
 
 	dialOpts := append(opts, grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
@@ -37,6 +45,7 @@ func NewCliente(cfg Config, log logger.Service) (Service, error) {
 
 	c := &Cliente{
 		conn:    conn,
+		creds:   creds,
 		logger:  log,
 		logging: cfg.EnableLogging,
 		target:  cfg.Target,
@@ -82,7 +91,7 @@ func (c *Cliente) execute(ctx context.Context, operationName string, operation f
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	state := c.conn.GetState()
+	state := c.getConn().GetState()
 	if state != connectivity.Ready && state != connectivity.Idle {
 		if c.logging {
 			c.logger.Warn(ctx, fmt.Sprintf("gRPC connection state not optimal: %v", state),
@@ -139,17 +148,27 @@ func (c *Cliente) WithHeaders(ctx context.Context, headers map[string]string) co
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
-func (c *Cliente) GetConnection() *grpc.ClientConn {
+// getConn returns the current connection under a read lock so callers do not
+// observe a half-swapped conn during ReconnectIfNeeded.
+func (c *Cliente) getConn() *grpc.ClientConn {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.conn
 }
 
+func (c *Cliente) GetConnection() *grpc.ClientConn {
+	return c.getConn()
+}
+
 func (c *Cliente) CheckConnection() connectivity.State {
-	return c.conn.GetState()
+	return c.getConn().GetState()
 }
 
 func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
-	state := c.conn.GetState()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
+	state := c.conn.GetState()
 	if state == connectivity.Ready || state == connectivity.Idle {
 		return nil
 	}
@@ -159,10 +178,10 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 			map[string]interface{}{"state": state, "target": c.target})
 	}
 
-	_ = c.conn.Close()
-
+	// Dial the new connection before closing the old one, and reuse the same
+	// transport credentials configured at construction (not hardcoded insecure).
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(c.creds),
 	}
 
 	conn, err := grpc.NewClient(c.target, opts...)
@@ -175,6 +194,7 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 		return err
 	}
 
+	_ = c.conn.Close()
 	c.conn = conn
 
 	if c.logging {
@@ -190,7 +210,7 @@ func (c *Cliente) Close() error {
 		c.logger.Debug(context.Background(), "closing gRPC connection",
 			map[string]interface{}{"target": c.target})
 	}
-	return c.conn.Close()
+	return c.getConn().Close()
 }
 
 func (c *Cliente) WithLogging(enable bool) {
@@ -199,7 +219,7 @@ func (c *Cliente) WithLogging(enable bool) {
 
 func (c *Cliente) InvokeRPC(ctx context.Context, operationName string,
 	invokeFunc func(ctx context.Context) (interface{}, error)) (interface{}, error) {
-	state := c.conn.GetState()
+	state := c.getConn().GetState()
 	if state != connectivity.Ready && state != connectivity.Idle {
 		if err := c.ReconnectIfNeeded(ctx); err != nil && c.logging {
 			c.logger.Warn(ctx, "reconnection failed, attempting operation with current connection",

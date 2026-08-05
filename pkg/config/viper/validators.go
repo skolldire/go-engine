@@ -2,6 +2,7 @@ package viper
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/skolldire/go-engine/aws/pkg/clients/sns"
@@ -28,7 +29,7 @@ func ValidateConfig(cfg Config) []error {
 	var errors []error
 
 	// Validate AWS configuration
-	if errs := validateAWSConfig(cfg.Aws); len(errs) > 0 {
+	if errs := validateAWSConfig(cfg); len(errs) > 0 {
 		errors = append(errors, errs...)
 	}
 
@@ -65,23 +66,40 @@ func ValidateConfig(cfg Config) []error {
 	return errors
 }
 
-// validateAWSConfig validates AWS configuration
-func validateAWSConfig(cfg AwsConfig) []error {
+// validateAWSConfig validates AWS configuration. The region is only required
+// when at least one AWS adapter is actually configured, so applications that do
+// not use AWS are not forced to declare a region. When a region is provided it
+// is validated regardless.
+func validateAWSConfig(cfg Config) []error {
 	var errors []error
 
-	if cfg.Region == "" {
+	region := cfg.Aws.Region
+
+	if region == "" {
+		if usesAWS(cfg) {
+			errors = append(errors, &ValidationError{
+				Field:   "aws.region",
+				Message: "AWS region is required when an AWS adapter (SQS, SNS, SES, S3, SSM, DynamoDB, Cognito) is configured",
+			})
+		}
+		return errors
+	}
+
+	if !isValidAWSRegion(region) {
 		errors = append(errors, &ValidationError{
 			Field:   "aws.region",
-			Message: "AWS region is required",
-		})
-	} else if !isValidAWSRegion(cfg.Region) {
-		errors = append(errors, &ValidationError{
-			Field:   "aws.region",
-			Message: fmt.Sprintf("invalid AWS region: %s", cfg.Region),
+			Message: fmt.Sprintf("invalid AWS region format: %s", region),
 		})
 	}
 
 	return errors
+}
+
+// usesAWS reports whether the configuration declares any AWS-backed adapter.
+func usesAWS(cfg Config) bool {
+	return cfg.SQS != nil || cfg.SNS != nil || cfg.Dynamo != nil || cfg.Cognito != nil ||
+		len(cfg.SQSClients) > 0 || len(cfg.SNSClients) > 0 || len(cfg.DynamoClients) > 0 ||
+		len(cfg.SSMClients) > 0 || len(cfg.SESClients) > 0 || len(cfg.S3Clients) > 0
 }
 
 // validateRESTClients validates REST client configurations
@@ -295,20 +313,14 @@ func validateRouterConfig(cfg router.Config) []error {
 
 // Helper functions
 
-func isValidAWSRegion(region string) bool {
-	validRegions := []string{
-		"us-east-1", "us-east-2", "us-west-1", "us-west-2",
-		"eu-west-1", "eu-west-2", "eu-west-3", "eu-central-1",
-		"ap-southeast-1", "ap-southeast-2", "ap-northeast-1", "ap-northeast-2",
-		"ap-south-1", "sa-east-1", "ca-central-1",
-	}
+// awsRegionPattern matches the shape of AWS region identifiers, e.g.
+// "us-east-1", "eu-north-1", "ap-southeast-2", "us-gov-west-1". A format check
+// is used instead of a hardcoded allow-list so new and partition-specific
+// regions are not rejected.
+var awsRegionPattern = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-\d+$`)
 
-	for _, r := range validRegions {
-		if r == region {
-			return true
-		}
-	}
-	return false
+func isValidAWSRegion(region string) bool {
+	return awsRegionPattern.MatchString(region)
 }
 
 func isValidURL(url string) bool {
