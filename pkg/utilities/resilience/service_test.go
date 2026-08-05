@@ -10,6 +10,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestNewResilienceServiceWithNilConfigsDoesNotPanic guards against the panic
+// reported when WithResilience is enabled with a partial (nil pointer) config.
+func TestNewResilienceServiceWithNilConfigsDoesNotPanic(t *testing.T) {
+	assert.NotPanics(t, func() {
+		service := NewResilienceService(Config{}, nil)
+		assert.NotNil(t, service)
+
+		result, err := service.Execute(context.Background(), func() (interface{}, error) {
+			return "ok", nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "ok", result)
+	})
+}
+
 func TestNewResilienceService(t *testing.T) {
 	config := Config{
 		RetryConfig: &retry_backoff.Config{

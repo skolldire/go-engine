@@ -19,15 +19,16 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          # Pin to the toolchain declared in go.mod for reproducible builds.
+          go-version-file: go.mod
           check-latest: true
 
       - name: Build
         run: go build ./...
 
-      - name: Run Tests with Coverage
+      - name: Run Tests with Race Detector and Coverage
         run: |
-          go test -coverprofile=coverage.out ./...
+          go test -race -covermode=atomic -coverprofile=coverage.out ./...
           go tool cover -func=coverage.out
 
       - name: Check Coverage File
@@ -42,3 +43,19 @@ jobs:
         with:
           name: coverage-report
           path: coverage.out
+
+  vulncheck:
+    name: Vulnerability Scan (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

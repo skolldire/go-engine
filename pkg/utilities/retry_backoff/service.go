@@ -9,40 +9,43 @@ import (
 )
 
 func NewRetryer(d Dependencies) *Retryer {
-	validateConfig(d.RetryConfig)
-	settings := &Config{
-		InitialWaitTime: d.RetryConfig.InitialWaitTime * time.Millisecond,
-		MaxWaitTime:     d.RetryConfig.MaxWaitTime * time.Second,
-		MaxRetries:      d.RetryConfig.MaxRetries,
-		BackoffFactor:   d.RetryConfig.BackoffFactor,
-		JitterFactor:    d.RetryConfig.JitterFactor,
-	}
+	settings := normalizeConfig(d.RetryConfig)
 	return &Retryer{
 		config: settings,
 		logger: d.Logger,
 	}
 }
 
-func validateConfig(cfg *Config) {
-	if cfg.InitialWaitTime <= 0 {
-		cfg.InitialWaitTime = DefaultInitialWaitTime
+// normalizeConfig returns a Config with defaults applied for any missing or
+// invalid field. It never mutates the caller-supplied config and tolerates a
+// nil input, in which case a fully defaulted config is returned.
+func normalizeConfig(cfg *Config) *Config {
+	out := &Config{}
+	if cfg != nil {
+		*out = *cfg
 	}
 
-	if cfg.MaxWaitTime <= 0 {
-		cfg.MaxWaitTime = DefaultMaxWaitTime
+	if out.InitialWaitTime <= 0 {
+		out.InitialWaitTime = DefaultInitialWaitTime
 	}
 
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = DefaultMaxRetries
+	if out.MaxWaitTime <= 0 {
+		out.MaxWaitTime = DefaultMaxWaitTime
 	}
 
-	if cfg.BackoffFactor <= 0 {
-		cfg.BackoffFactor = DefaultBackoffFactor
+	if out.MaxRetries <= 0 {
+		out.MaxRetries = DefaultMaxRetries
 	}
 
-	if cfg.JitterFactor < 0 {
-		cfg.JitterFactor = DefaultJitterFactor
+	if out.BackoffFactor <= 0 {
+		out.BackoffFactor = DefaultBackoffFactor
 	}
+
+	if out.JitterFactor < 0 {
+		out.JitterFactor = DefaultJitterFactor
+	}
+
+	return out
 }
 
 func (r *Retryer) Do(ctx context.Context, operation func() error) error {

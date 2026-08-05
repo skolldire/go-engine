@@ -151,8 +151,21 @@ func TestValidateCBConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validateCBConfig(tt.config)
-			tt.checkFn(t, tt.config)
+			tt.checkFn(t, normalizeCBConfig(tt.config))
 		})
 	}
+}
+
+func TestNormalizeCBConfigNilIsSafe(t *testing.T) {
+	cfg := normalizeCBConfig(nil)
+	assert.Equal(t, DefaultCBName, cfg.Name)
+	assert.Equal(t, DefaultCBInterval, cfg.Interval)
+	assert.Equal(t, DefaultCBTimeout, cfg.Timeout)
+}
+
+func TestNormalizeCBConfigDoesNotMutateInput(t *testing.T) {
+	in := &Config{}
+	_ = normalizeCBConfig(in)
+	assert.Equal(t, "", in.Name, "input config must not be mutated")
+	assert.Equal(t, time.Duration(0), in.Interval, "input config must not be mutated")
 }

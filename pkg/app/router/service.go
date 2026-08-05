@@ -56,9 +56,9 @@ func NewService(c Config, opts ...RouterOption) *App {
 	app.server = &http.Server{
 		Addr:         ":" + setPort(c.Port),
 		Handler:      app.router,
-		ReadTimeout:  c.ReadTimeout * time.Second,
-		WriteTimeout: c.WriteTimeout * time.Second,
-		IdleTimeout:  c.IdleTimeout * time.Second,
+		ReadTimeout:  c.ReadTimeout,
+		WriteTimeout: c.WriteTimeout,
+		IdleTimeout:  c.IdleTimeout,
 	}
 
 	return app

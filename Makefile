@@ -46,7 +46,12 @@ coverage-check:
 	@FAILED=0; \
 	for pkg in $(CRITICAL_PKGS); do \
 		outfile=$$(echo $$pkg | tr '/.' '__' | tr -d '*').out; \
-		go test $$pkg -coverprofile=$$outfile -covermode=atomic -count=1 2>/dev/null || true; \
+		if ! go test $$pkg -coverprofile=$$outfile -covermode=atomic -count=1; then \
+			printf "FAIL  %-50s (tests failed)\n" "$$pkg"; \
+			FAILED=1; \
+			rm -f $$outfile; \
+			continue; \
+		fi; \
 		if [ -f "$$outfile" ]; then \
 			pct=$$(go tool cover -func=$$outfile 2>/dev/null | tail -1 | awk '{gsub(/%/,""); print int($$3)}'); \
 			if [ "$${pct:-0}" -lt "$(COVERAGE_THRESHOLD)" ]; then \

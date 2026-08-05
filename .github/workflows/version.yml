@@ -1,9 +1,21 @@
 name: Auto Versioning
 
 on:
-  push:
-    branches: [main, master]
-    # Only runs when merging to main/master
+  # Automatic minor bump on every merge is disabled: it produced duplicate tags
+  # on the same commit (v0.13/v0.14, v0.16/v0.17, v0.19/v0.20) and could not tell
+  # breaking changes from fixes. Releases are now cut deliberately by running this
+  # workflow manually. See docs/plan-mejoras-go-engine.md (Fase 0).
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of the version to increment"
+        required: true
+        default: "minor"
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
 
 concurrency:
   group: versioning-${{ github.ref }}
@@ -59,11 +71,16 @@ jobs:
             PATCH=0
           fi
           
-          # Increment minor version and reset patch to 0
-          # This leaves patch available for test/experimental versions
-          MINOR=$((MINOR + 1))
-          PATCH=0
-          
+          # Increment the segment selected when dispatching the workflow.
+          case "${{ github.event.inputs.bump }}" in
+            major)
+              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            patch)
+              PATCH=$((PATCH + 1)) ;;
+            *)
+              MINOR=$((MINOR + 1)); PATCH=0 ;;
+          esac
+
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"

@@ -2,6 +2,9 @@ package redis
 
 import (
 	"context"
+	"net"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -12,7 +15,47 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/retry_backoff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
+
+// testRedisAddr / testRedisHost / testRedisPort point at a TCP port that is
+// reserved and immediately closed, so nothing listens there for the duration
+// of the test run. This keeps the suite hermetic: every operation fails fast
+// with a connection error regardless of whether the developer happens to have
+// a real Redis listening on localhost:6379.
+var (
+	testRedisAddr string
+	testRedisHost string
+	testRedisPort int
+)
+
+func TestMain(m *testing.M) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic("could not reserve a dead port for redis tests: " + err.Error())
+	}
+	testRedisAddr = l.Addr().String()
+	host, portStr, _ := net.SplitHostPort(testRedisAddr)
+	testRedisHost = host
+	testRedisPort, _ = strconv.Atoi(portStr)
+	// Close so nothing listens on the reserved port during the tests.
+	_ = l.Close()
+
+	os.Exit(m.Run())
+}
+
+// newDeadRedisClient returns a go-redis client pointed at the reserved dead
+// port, with retries disabled and short timeouts so every command fails fast
+// with a connection error instead of retrying for seconds.
+func newDeadRedisClient() *redis.Client {
+	return redis.NewClient(&redis.Options{
+		Addr:         testRedisAddr,
+		MaxRetries:   -1,
+		DialTimeout:  100 * time.Millisecond,
+		ReadTimeout:  100 * time.Millisecond,
+		WriteTimeout: 100 * time.Millisecond,
+	})
+}
 
 type mockLogger struct {
 	mock.Mock
@@ -39,12 +82,12 @@ func (m *mockLogger) SetLogLevel(level string) error                            
 
 func TestNewClient_DefaultValues(t *testing.T) {
 	cfg := Config{
-		Host:          "localhost",
-		Port:          6379,
+		Host:          testRedisHost,
+		Port:          testRedisPort,
 		DB:            0,
 		Password:      "",
 		Timeout:       0,
-		DialTimeout:   0,
+		DialTimeout:   200 * time.Millisecond,
 		ReadTimeout:   0,
 		WriteTimeout:  0,
 		PoolSize:      0,
@@ -53,41 +96,45 @@ func TestNewClient_DefaultValues(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	// This will fail without a real Redis connection
+	// The reserved port has no listener, so the Ping in NewClient must fail.
+	// require stops the test here to avoid dereferencing a nil error below.
 	_, err := NewClient(cfg, log)
-	assert.Error(t, err)
-	// But we can verify the config is processed correctly
+	require.Error(t, err)
+	// And we can verify the config is processed correctly
 	assert.Contains(t, err.Error(), "connection")
 }
 
 func TestNewClient_WithPassword(t *testing.T) {
 	cfg := Config{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "password123",
+		Host:        testRedisHost,
+		Port:        testRedisPort,
+		DialTimeout: 200 * time.Millisecond,
+		Password:    "password123",
 	}
 	log := &mockLogger{}
 
 	_, err := NewClient(cfg, log)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestNewClient_WithPrefix(t *testing.T) {
 	cfg := Config{
-		Host:   "localhost",
-		Port:   6379,
-		Prefix: "app:",
+		Host:        testRedisHost,
+		Port:        testRedisPort,
+		DialTimeout: 200 * time.Millisecond,
+		Prefix:      "app:",
 	}
 	log := &mockLogger{}
 
 	_, err := NewClient(cfg, log)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestNewClient_WithResilience(t *testing.T) {
 	cfg := Config{
-		Host:           "invalid-host",
-		Port:           6379,
+		Host:           testRedisHost,
+		Port:           testRedisPort,
+		DialTimeout:    200 * time.Millisecond,
 		WithResilience: true,
 		Resilience: resilience.Config{
 			RetryConfig: &retry_backoff.Config{
@@ -105,10 +152,9 @@ func TestNewClient_WithResilience(t *testing.T) {
 	// Configure mock to handle Error calls at the end of retries
 	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
-	// This will fail without a real Redis connection
+	// The reserved port has no listener, so the connection must fail.
 	_, err := NewClient(cfg, log)
-	// El error puede ser de conexión o de validación, ambos son válidos
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestRedisClient_KeyName(t *testing.T) {
@@ -148,10 +194,7 @@ func TestRedisClient_EnsureContextWithTimeout(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
 		logger: log,
-		client: redis.NewClient(&redis.Options{
-			Addr:        "localhost:6379",
-			ReadTimeout: 3 * time.Second,
-		}),
+		client: newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -165,10 +208,7 @@ func TestRedisClient_EnsureContextWithTimeout_WithDeadline(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
 		logger: log,
-		client: redis.NewClient(&redis.Options{
-			Addr:        "localhost:6379",
-			ReadTimeout: 3 * time.Second,
-		}),
+		client: newDeadRedisClient(),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -185,7 +225,7 @@ func TestRedisClient_Get_KeyNotFound(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -199,7 +239,7 @@ func TestRedisClient_Set(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -212,7 +252,7 @@ func TestRedisClient_SetNX(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -225,7 +265,7 @@ func TestRedisClient_Del(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -238,7 +278,7 @@ func TestRedisClient_Exists(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -251,7 +291,7 @@ func TestRedisClient_Expire(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -264,7 +304,7 @@ func TestRedisClient_TTL(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -277,7 +317,7 @@ func TestRedisClient_Incr(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -290,7 +330,7 @@ func TestRedisClient_IncrBy(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -303,7 +343,7 @@ func TestRedisClient_HGet(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -316,7 +356,7 @@ func TestRedisClient_HSet(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -329,7 +369,7 @@ func TestRedisClient_HGetAll(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -342,7 +382,7 @@ func TestRedisClient_LPush(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -355,7 +395,7 @@ func TestRedisClient_RPop(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -368,7 +408,7 @@ func TestRedisClient_LRange(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -381,7 +421,7 @@ func TestRedisClient_ZAdd(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -394,7 +434,7 @@ func TestRedisClient_ZAddMulti(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -411,7 +451,7 @@ func TestRedisClient_ZScore(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -424,7 +464,7 @@ func TestRedisClient_ZRem(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -437,7 +477,7 @@ func TestRedisClient_ZRange(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -450,7 +490,7 @@ func TestRedisClient_SAdd(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -463,7 +503,7 @@ func TestRedisClient_SAddWithExpire(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -476,7 +516,7 @@ func TestRedisClient_SMembers(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -489,7 +529,7 @@ func TestRedisClient_SIsMember(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -502,7 +542,7 @@ func TestRedisClient_SRem(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -515,7 +555,7 @@ func TestRedisClient_SCard(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -527,7 +567,7 @@ func TestRedisClient_Close(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
 		logger: log,
-		client: redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client: newDeadRedisClient(),
 	}
 
 	err := client.Close()
@@ -538,7 +578,7 @@ func TestRedisClient_Pipeline(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
 		logger: log,
-		client: redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client: newDeadRedisClient(),
 	}
 
 	pipeline := client.Pipeline()
@@ -549,7 +589,7 @@ func TestRedisClient_TxPipeline(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
 		logger: log,
-		client: redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client: newDeadRedisClient(),
 	}
 
 	pipeline := client.TxPipeline()
@@ -558,7 +598,7 @@ func TestRedisClient_TxPipeline(t *testing.T) {
 
 func TestRedisClient_Client(t *testing.T) {
 	log := &mockLogger{}
-	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	redisClient := newDeadRedisClient()
 	client := &RedisClient{
 		logger: log,
 		client: redisClient,
@@ -572,7 +612,7 @@ func TestRedisClient_Get_WithKeyNotFoundError(t *testing.T) {
 	client := &RedisClient{
 		logger:    log,
 		keyPrefix: "",
-		client:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
+		client:    newDeadRedisClient(),
 	}
 
 	ctx := context.Background()

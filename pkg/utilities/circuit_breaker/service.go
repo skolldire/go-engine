@@ -2,26 +2,25 @@ package circuit_breaker
 
 import (
 	"context"
-	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/sony/gobreaker"
 )
 
 func NewCircuitBreaker(d Dependencies) *CircuitBreaker {
-	validateCBConfig(d.Config)
+	cfg := normalizeCBConfig(d.Config)
 	settings := gobreaker.Settings{
-		Name:          d.Config.Name,
-		MaxRequests:   d.Config.MaxRequests,
-		Interval:      d.Config.Interval * time.Second,
-		Timeout:       d.Config.Timeout * time.Second,
-		ReadyToTrip:   createReadyToTripFunc(d.Config, d.Log),
-		OnStateChange: createOnStateChangeFunc(d.Config, d.Log),
+		Name:          cfg.Name,
+		MaxRequests:   cfg.MaxRequests,
+		Interval:      cfg.Interval,
+		Timeout:       cfg.Timeout,
+		ReadyToTrip:   createReadyToTripFunc(cfg, d.Log),
+		OnStateChange: createOnStateChangeFunc(cfg, d.Log),
 	}
 
 	return &CircuitBreaker{
 		cb:     gobreaker.NewCircuitBreaker(settings),
-		config: d.Config,
+		config: cfg,
 		log:    d.Log,
 	}
 }
@@ -101,28 +100,38 @@ func stateToString(state gobreaker.State) string {
 	}
 }
 
-func validateCBConfig(cfg *Config) {
-	if cfg.Name == "" {
-		cfg.Name = DefaultCBName
+// normalizeCBConfig returns a Config with defaults applied for any missing or
+// invalid field. It never mutates the caller-supplied config and tolerates a
+// nil input, in which case a fully defaulted config is returned.
+func normalizeCBConfig(cfg *Config) *Config {
+	out := &Config{}
+	if cfg != nil {
+		*out = *cfg
 	}
 
-	if cfg.MaxRequests == 0 {
-		cfg.MaxRequests = DefaultCBMaxRequests
+	if out.Name == "" {
+		out.Name = DefaultCBName
 	}
 
-	if cfg.Interval <= 0 {
-		cfg.Interval = DefaultCBInterval
+	if out.MaxRequests == 0 {
+		out.MaxRequests = DefaultCBMaxRequests
 	}
 
-	if cfg.Timeout <= 0 {
-		cfg.Timeout = DefaultCBTimeout
+	if out.Interval <= 0 {
+		out.Interval = DefaultCBInterval
 	}
 
-	if cfg.RequestThreshold == 0 {
-		cfg.RequestThreshold = DefaultCBRequestThreshold
+	if out.Timeout <= 0 {
+		out.Timeout = DefaultCBTimeout
 	}
 
-	if cfg.FailureRateThreshold <= 0 || cfg.FailureRateThreshold > 1.0 {
-		cfg.FailureRateThreshold = DefaultCBFailureRateThreshold
+	if out.RequestThreshold == 0 {
+		out.RequestThreshold = DefaultCBRequestThreshold
 	}
+
+	if out.FailureRateThreshold <= 0 || out.FailureRateThreshold > 1.0 {
+		out.FailureRateThreshold = DefaultCBFailureRateThreshold
+	}
+
+	return out
 }
