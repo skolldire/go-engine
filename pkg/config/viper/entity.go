@@ -51,13 +51,13 @@ type Config struct {
 	RabbitMQClients  []map[string]rabbitmq.Config   `mapstructure:"rabbitmq_clients"`
 	Kafka            *kafka.Config                  `mapstructure:"kafka"           json:"kafka,omitempty"`
 	Cognito          *cognito.Config                `mapstructure:"cognito"`
-	Repositories     map[string]interface{}         `mapstructure:"repositories"`
-	Cases            map[string]interface{}         `mapstructure:"cases"`
-	Endpoints        map[string]interface{}         `mapstructure:"endpoints"`
-	Processors       map[string]interface{}         `mapstructure:"processors"`
-	Middleware       map[string]interface{}         `mapstructure:"middleware"`
+	Repositories     map[string]any                 `mapstructure:"repositories"`
+	Cases            map[string]any                 `mapstructure:"cases"`
+	Endpoints        map[string]any                 `mapstructure:"endpoints"`
+	Processors       map[string]any                 `mapstructure:"processors"`
+	Middleware       map[string]any                 `mapstructure:"middleware"`
 	GracefulShutdown *GracefulShutdownConfig        `mapstructure:"graceful_shutdown"`
-	FeatureFlags     map[string]interface{}         `mapstructure:"feature_flags"`
+	FeatureFlags     map[string]any                 `mapstructure:"feature_flags"`
 }
 
 type AwsConfig struct {

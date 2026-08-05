@@ -75,7 +75,7 @@ func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, er
 		// Redact credentials from URI before logging
 		redactedURI := redactMongoURI(cfg.URI)
 		log.Debug(ctx, "MongoDB connection established successfully",
-			map[string]interface{}{
+			map[string]any{
 				"database": cfg.Database,
 				"uri":      redactedURI,
 			})
@@ -93,14 +93,14 @@ func (c *MongoDBClient) GetCollection(name string) *mongo.Collection {
 }
 
 func (c *MongoDBClient) Ping(ctx context.Context) error {
-	_, err := c.Execute(ctx, "Ping", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "Ping", func(ctx context.Context) (any, error) {
 		return nil, c.client.Ping(ctx, nil)
 	})
 	return err
 }
 
 func (c *MongoDBClient) Disconnect(ctx context.Context) error {
-	_, err := c.Execute(ctx, "Disconnect", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "Disconnect", func(ctx context.Context) (any, error) {
 		return nil, c.client.Disconnect(ctx)
 	})
 	return err

@@ -29,7 +29,7 @@ type Claims struct {
 
 	// Raw holds all claims from the JWT payload for access to custom attributes
 	// (e.g. "custom:school_id", "custom:role").
-	Raw map[string]interface{}
+	Raw map[string]any
 }
 
 // ClaimsFromContext returns the validated Claims stored in ctx by JWTAuth.

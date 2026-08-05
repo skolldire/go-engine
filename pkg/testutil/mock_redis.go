@@ -14,8 +14,8 @@ import (
 type RedisStore interface {
 	Ping(ctx context.Context) error
 	Get(ctx context.Context, key string) (string, error)
-	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error)
+	Set(ctx context.Context, key string, value any, expiration time.Duration) error
+	SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error)
 	Del(ctx context.Context, keys ...string) (int64, error)
 	Exists(ctx context.Context, keys ...string) (int64, error)
 	Expire(ctx context.Context, key string, expiration time.Duration) (bool, error)
@@ -23,15 +23,15 @@ type RedisStore interface {
 	Incr(ctx context.Context, key string) (int64, error)
 	IncrBy(ctx context.Context, key string, value int64) (int64, error)
 	HGet(ctx context.Context, key, field string) (string, error)
-	HSet(ctx context.Context, key string, values ...interface{}) (int64, error)
+	HSet(ctx context.Context, key string, values ...any) (int64, error)
 	HGetAll(ctx context.Context, key string) (map[string]string, error)
-	LPush(ctx context.Context, key string, values ...interface{}) (int64, error)
+	LPush(ctx context.Context, key string, values ...any) (int64, error)
 	RPop(ctx context.Context, key string) (string, error)
 	LRange(ctx context.Context, key string, start, stop int64) ([]string, error)
-	SAdd(ctx context.Context, key string, members ...interface{}) (int64, error)
+	SAdd(ctx context.Context, key string, members ...any) (int64, error)
 	SMembers(ctx context.Context, key string) ([]string, error)
-	SIsMember(ctx context.Context, key string, member interface{}) (bool, error)
-	SRem(ctx context.Context, key string, members ...interface{}) (int64, error)
+	SIsMember(ctx context.Context, key string, member any) (bool, error)
+	SRem(ctx context.Context, key string, members ...any) (int64, error)
 	Close() error
 }
 
@@ -58,17 +58,17 @@ func (m *MockRedisClient) Get(ctx context.Context, key string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+func (m *MockRedisClient) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
 	return m.Called(ctx, key, value, expiration).Error(0)
 }
 
-func (m *MockRedisClient) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+func (m *MockRedisClient) SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error) {
 	args := m.Called(ctx, key, value, expiration)
 	return args.Bool(0), args.Error(1)
 }
 
 func (m *MockRedisClient) Del(ctx context.Context, keys ...string) (int64, error) {
-	varArgs := []interface{}{ctx}
+	varArgs := []any{ctx}
 	for _, k := range keys {
 		varArgs = append(varArgs, k)
 	}
@@ -77,7 +77,7 @@ func (m *MockRedisClient) Del(ctx context.Context, keys ...string) (int64, error
 }
 
 func (m *MockRedisClient) Exists(ctx context.Context, keys ...string) (int64, error) {
-	varArgs := []interface{}{ctx}
+	varArgs := []any{ctx}
 	for _, k := range keys {
 		varArgs = append(varArgs, k)
 	}
@@ -110,8 +110,8 @@ func (m *MockRedisClient) HGet(ctx context.Context, key, field string) (string, 
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockRedisClient) HSet(ctx context.Context, key string, values ...interface{}) (int64, error) {
-	varArgs := []interface{}{ctx, key}
+func (m *MockRedisClient) HSet(ctx context.Context, key string, values ...any) (int64, error) {
+	varArgs := []any{ctx, key}
 	varArgs = append(varArgs, values...)
 	args := m.Called(varArgs...)
 	return args.Get(0).(int64), args.Error(1)
@@ -122,8 +122,8 @@ func (m *MockRedisClient) HGetAll(ctx context.Context, key string) (map[string]s
 	return args.Get(0).(map[string]string), args.Error(1)
 }
 
-func (m *MockRedisClient) LPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
-	varArgs := []interface{}{ctx, key}
+func (m *MockRedisClient) LPush(ctx context.Context, key string, values ...any) (int64, error) {
+	varArgs := []any{ctx, key}
 	varArgs = append(varArgs, values...)
 	args := m.Called(varArgs...)
 	return args.Get(0).(int64), args.Error(1)
@@ -139,8 +139,8 @@ func (m *MockRedisClient) LRange(ctx context.Context, key string, start, stop in
 	return args.Get(0).([]string), args.Error(1)
 }
 
-func (m *MockRedisClient) SAdd(ctx context.Context, key string, members ...interface{}) (int64, error) {
-	varArgs := []interface{}{ctx, key}
+func (m *MockRedisClient) SAdd(ctx context.Context, key string, members ...any) (int64, error) {
+	varArgs := []any{ctx, key}
 	varArgs = append(varArgs, members...)
 	args := m.Called(varArgs...)
 	return args.Get(0).(int64), args.Error(1)
@@ -151,13 +151,13 @@ func (m *MockRedisClient) SMembers(ctx context.Context, key string) ([]string, e
 	return args.Get(0).([]string), args.Error(1)
 }
 
-func (m *MockRedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
+func (m *MockRedisClient) SIsMember(ctx context.Context, key string, member any) (bool, error) {
 	args := m.Called(ctx, key, member)
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockRedisClient) SRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
-	varArgs := []interface{}{ctx, key}
+func (m *MockRedisClient) SRem(ctx context.Context, key string, members ...any) (int64, error) {
+	varArgs := []any{ctx, key}
 	varArgs = append(varArgs, members...)
 	args := m.Called(varArgs...)
 	return args.Get(0).(int64), args.Error(1)

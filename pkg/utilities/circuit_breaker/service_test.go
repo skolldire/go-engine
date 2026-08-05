@@ -35,7 +35,7 @@ func TestCircuitBreaker_Execute_Success(t *testing.T) {
 		Log:    nil,
 	})
 
-	result, err := cb.Execute(context.Background(), func() (interface{}, error) {
+	result, err := cb.Execute(context.Background(), func() (any, error) {
 		return "success", nil
 	})
 
@@ -50,7 +50,7 @@ func TestCircuitBreaker_Execute_Error(t *testing.T) {
 	})
 
 	testErr := errors.New("test error")
-	result, err := cb.Execute(context.Background(), func() (interface{}, error) {
+	result, err := cb.Execute(context.Background(), func() (any, error) {
 		return nil, testErr
 	})
 
@@ -67,7 +67,7 @@ func TestCircuitBreaker_Execute_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	result, err := cb.Execute(ctx, func() (interface{}, error) {
+	result, err := cb.Execute(ctx, func() (any, error) {
 		return "success", nil
 	})
 

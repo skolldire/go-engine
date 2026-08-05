@@ -61,7 +61,7 @@ func (s *server) Start(ctx context.Context) error {
 
 	if s.logging {
 		s.logger.Info(ctx, "starting gRPC server",
-			map[string]interface{}{"puerto": s.puerto})
+			map[string]any{"puerto": s.puerto})
 	}
 
 	go func() {

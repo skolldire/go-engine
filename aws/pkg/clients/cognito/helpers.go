@@ -99,7 +99,7 @@ func validateMFAChallengeRequest(req MFAChallengeRequest) error {
 }
 
 // getStringClaim extrae un claim string de los claims del token
-func getStringClaim(claims map[string]interface{}, key string) string {
+func getStringClaim(claims map[string]any, key string) string {
 	if val, ok := claims[key]; ok {
 		if str, ok := val.(string); ok {
 			return str
@@ -109,7 +109,7 @@ func getStringClaim(claims map[string]interface{}, key string) string {
 }
 
 // getBoolClaim extrae un claim bool de los claims del token
-func getBoolClaim(claims map[string]interface{}, key string) bool {
+func getBoolClaim(claims map[string]any, key string) bool {
 	if val, ok := claims[key]; ok {
 		if b, ok := val.(bool); ok {
 			return b
@@ -123,9 +123,9 @@ func getBoolClaim(claims map[string]interface{}, key string) bool {
 }
 
 // getStringSliceClaim extrae un claim []string de los claims del token
-func getStringSliceClaim(claims map[string]interface{}, key string) []string {
+func getStringSliceClaim(claims map[string]any, key string) []string {
 	if val, ok := claims[key]; ok {
-		if slice, ok := val.([]interface{}); ok {
+		if slice, ok := val.([]any); ok {
 			result := make([]string, 0, len(slice))
 			for _, item := range slice {
 				if str, ok := item.(string); ok {
@@ -139,7 +139,7 @@ func getStringSliceClaim(claims map[string]interface{}, key string) []string {
 }
 
 // getFloat64Claim extrae un claim float64 de los claims del token
-func getFloat64Claim(claims map[string]interface{}, key string) float64 {
+func getFloat64Claim(claims map[string]any, key string) float64 {
 	if val, ok := claims[key]; ok {
 		if f, ok := val.(float64); ok {
 			return f

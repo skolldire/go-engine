@@ -92,7 +92,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 	}
 
 	if client.logging {
-		logFields := map[string]interface{}{
+		logFields := map[string]any{
 			"user_pool_id": cfg.UserPoolID,
 			"client_id":    cfg.ClientID,
 			"region":       cfg.Region,
@@ -121,8 +121,8 @@ func (c *Client) ensureContextWithTimeout(ctx context.Context) (context.Context,
 }
 
 func (c *Client) executeOperation(ctx context.Context, operationName string,
-	operation func(context.Context) (interface{}, error)) (interface{}, error) {
-	logFields := map[string]interface{}{
+	operation func(context.Context) (any, error)) (any, error) {
+	logFields := map[string]any{
 		"operation": operationName,
 		"service":   "Cognito",
 	}
@@ -135,7 +135,7 @@ func (c *Client) executeOperation(ctx context.Context, operationName string,
 }
 
 func (c *Client) executeWithResilience(ctx context.Context, operationName string,
-	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (any, error), logFields map[string]any) (any, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting Cognito operation with resilience: %s", operationName), logFields)
 	}
@@ -152,7 +152,7 @@ func (c *Client) executeWithResilience(ctx context.Context, operationName string
 }
 
 func (c *Client) executeWithLogging(ctx context.Context, operationName string,
-	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (any, error), logFields map[string]any) (any, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting Cognito operation: %s", operationName), logFields)
 	}

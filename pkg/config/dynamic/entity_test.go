@@ -42,8 +42,8 @@ func TestDynamicConfig_Get(t *testing.T) {
 
 func TestDynamicConfig_SetReloadFunc(t *testing.T) {
 	// Use empty map instead of nil to avoid atomic.Value panic
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
-	dc.SetReloadFunc(func() (interface{}, error) {
+	dc := NewDynamicConfig(map[string]any{}, nil)
+	dc.SetReloadFunc(func() (any, error) {
 		return map[string]string{"new": "config"}, nil
 	})
 	assert.NotNil(t, dc)
@@ -55,7 +55,7 @@ func TestDynamicConfig_Reload_Success(t *testing.T) {
 	dc := NewDynamicConfig(initialConfig, mockLog)
 
 	newConfig := map[string]string{"new": "config"}
-	dc.SetReloadFunc(func() (interface{}, error) {
+	dc.SetReloadFunc(func() (any, error) {
 		return newConfig, nil
 	})
 
@@ -69,10 +69,10 @@ func TestDynamicConfig_Reload_Success(t *testing.T) {
 
 func TestDynamicConfig_Reload_Error(t *testing.T) {
 	mockLog := new(mockLogger)
-	dc := NewDynamicConfig(map[string]interface{}{}, mockLog)
+	dc := NewDynamicConfig(map[string]any{}, mockLog)
 
 	testErr := errors.New("reload error")
-	dc.SetReloadFunc(func() (interface{}, error) {
+	dc.SetReloadFunc(func() (any, error) {
 		return nil, testErr
 	})
 
@@ -84,21 +84,21 @@ func TestDynamicConfig_Reload_Error(t *testing.T) {
 }
 
 func TestDynamicConfig_Reload_NilFunc(t *testing.T) {
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
+	dc := NewDynamicConfig(map[string]any{}, nil)
 	err := dc.Reload()
 	assert.NoError(t, err) // Should return nil if no reload func
 }
 
 func TestDynamicConfig_AddWatcher(t *testing.T) {
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
+	dc := NewDynamicConfig(map[string]any{}, nil)
 	watcher := new(mockWatcher)
 	dc.AddWatcher(watcher)
 	assert.NotNil(t, dc)
 }
 
 func TestDynamicConfig_AddReloadHook(t *testing.T) {
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
-	hook := func(oldConfig, newConfig interface{}) error {
+	dc := NewDynamicConfig(map[string]any{}, nil)
+	hook := func(oldConfig, newConfig any) error {
 		return nil
 	}
 	dc.AddReloadHook(hook)
@@ -107,7 +107,7 @@ func TestDynamicConfig_AddReloadHook(t *testing.T) {
 
 func TestDynamicConfig_StartWatching(t *testing.T) {
 	mockLog := new(mockLogger)
-	dc := NewDynamicConfig(map[string]interface{}{}, mockLog)
+	dc := NewDynamicConfig(map[string]any{}, mockLog)
 	watcher := new(mockWatcher)
 	dc.AddWatcher(watcher)
 
@@ -126,7 +126,7 @@ func TestDynamicConfig_StartWatching(t *testing.T) {
 }
 
 func TestDynamicConfig_Stop(t *testing.T) {
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
+	dc := NewDynamicConfig(map[string]any{}, nil)
 	watcher := new(mockWatcher)
 	watcher.On("Stop").Return(nil)
 	dc.AddWatcher(watcher)
@@ -137,20 +137,20 @@ func TestDynamicConfig_Stop(t *testing.T) {
 }
 
 func TestDynamicConfig_GetLastReload(t *testing.T) {
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
+	dc := NewDynamicConfig(map[string]any{}, nil)
 	lastReload := dc.GetLastReload()
 	assert.False(t, lastReload.IsZero())
 }
 
 func TestDynamicConfig_ValidateConfig_Nil(t *testing.T) {
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
+	dc := NewDynamicConfig(map[string]any{}, nil)
 	err := dc.validateConfig(nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot be nil")
 }
 
 func TestDynamicConfig_ValidateConfig_Valid(t *testing.T) {
-	dc := NewDynamicConfig(map[string]interface{}{}, nil)
+	dc := NewDynamicConfig(map[string]any{}, nil)
 	err := dc.validateConfig(map[string]string{"key": "value"})
 	assert.NoError(t, err)
 }

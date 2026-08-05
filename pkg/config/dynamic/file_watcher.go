@@ -73,13 +73,13 @@ func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 			if !ok {
 				return nil
 			}
-			fw.logger.Error(ctx, err, map[string]interface{}{
+			fw.logger.Error(ctx, err, map[string]any{
 				"event": "watcher_error",
 			})
 		case <-debounceTimer.C:
 			// Timer expired, process pending event
 			if pendingName != "" && fw.isConfigFile(pendingName) {
-				fw.logger.Debug(ctx, "configuration file modified", map[string]interface{}{
+				fw.logger.Debug(ctx, "configuration file modified", map[string]any{
 					"file": pendingName,
 					"op":   pendingOp.String(),
 				})
@@ -96,7 +96,7 @@ func (fw *FileWatcher) Watch(ctx context.Context, onChange func() error) error {
 				}
 
 				if err := onChange(); err != nil {
-					fw.logger.Error(ctx, err, map[string]interface{}{
+					fw.logger.Error(ctx, err, map[string]any{
 						"event": "config_reload_error",
 						"file":  pendingName,
 					})

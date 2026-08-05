@@ -22,7 +22,7 @@ func TestTracingMiddleware_Success(t *testing.T) {
 	resp := &cloud.Response{
 		StatusCode: 200,
 		Body:       []byte(`{"messageId":"123"}`),
-		Metadata:   map[string]interface{}{"aws_request_id": "req-123"},
+		Metadata:   map[string]any{"aws_request_id": "req-123"},
 	}
 
 	mockCli.On("Do", ctx, req).Return(resp, nil)

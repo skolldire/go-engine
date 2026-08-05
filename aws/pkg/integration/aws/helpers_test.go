@@ -27,7 +27,7 @@ func TestSQSSendMessage(t *testing.T) {
 		name    string
 		client  Client
 		queue   string
-		payload interface{}
+		payload any
 		wantErr bool
 	}{
 		{

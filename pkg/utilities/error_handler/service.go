@@ -121,7 +121,7 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service
 
 		if errType.Err == nil {
 			if log != nil {
-				log.Warn(ctx, "CommonApiError has nil Err field", map[string]interface{}{
+				log.Warn(ctx, "CommonApiError has nil Err field", map[string]any{
 					"error_code": errType.Code,
 					"error_msg":  errType.Msg,
 					"http_code":  errType.HttpCode,
@@ -129,7 +129,7 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service
 			}
 		} else {
 			if log != nil {
-				logFields := map[string]interface{}{
+				logFields := map[string]any{
 					"error_code": errType.Code,
 					"error_msg":  errType.Msg,
 					"http_code":  errType.HttpCode,
@@ -149,7 +149,7 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service
 
 	// Unhandled error - log it if logger is available
 	if log != nil {
-		log.Error(context.Background(), err, map[string]interface{}{
+		log.Error(context.Background(), err, map[string]any{
 			"error_type": "unhandled_error",
 		})
 	}
@@ -178,7 +178,7 @@ func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, request
 
 		if errType.Err == nil {
 			if log != nil {
-				log.Warn(ctx, "CommonApiError has nil Err field", map[string]interface{}{
+				log.Warn(ctx, "CommonApiError has nil Err field", map[string]any{
 					"error_code": errType.Code,
 					"error_msg":  errType.Msg,
 					"http_code":  errType.HttpCode,
@@ -187,7 +187,7 @@ func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, request
 			}
 		} else {
 			if log != nil {
-				log.Error(ctx, errType.Err, map[string]interface{}{
+				log.Error(ctx, errType.Err, map[string]any{
 					"error_code": errType.Code,
 					"error_msg":  errType.Msg,
 					"http_code":  errType.HttpCode,
@@ -204,7 +204,7 @@ func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, request
 
 	// Unhandled error - log it if logger is available
 	if log != nil {
-		log.Error(context.Background(), err, map[string]interface{}{
+		log.Error(context.Background(), err, map[string]any{
 			"error_type": "unhandled_error",
 			"request_id": requestID,
 		})

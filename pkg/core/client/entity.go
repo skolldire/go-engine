@@ -41,7 +41,7 @@ type BaseConfig struct {
 // timeout-bounded context that Execute manages and MUST use it for any I/O so
 // the configured timeout actually cancels the underlying call. It must be
 // idempotent when resilience (retry) is enabled.
-type Operation func(ctx context.Context) (interface{}, error)
+type Operation func(ctx context.Context) (any, error)
 
 // BaseClient is an embeddable struct that provides logging, timeout management,
 // and optional resilience (retry + circuit breaker) to any client implementation.
@@ -54,7 +54,7 @@ type Operation func(ctx context.Context) (interface{}, error)
 //	}
 //
 //	func (c *MyClient) DoSomething(ctx context.Context) (string, error) {
-//	    result, err := c.Execute(ctx, "my-service.do-something", func(ctx context.Context) (interface{}, error) {
+//	    result, err := c.Execute(ctx, "my-service.do-something", func(ctx context.Context) (any, error) {
 //	        return callExternalAPI(ctx)
 //	    })
 //	    if err != nil {
@@ -120,13 +120,13 @@ func NewBaseClientWithName(config BaseConfig, log logger.Service, serviceName st
 // delegates to the resilience.Service (retry + circuit breaker). The operation
 // must be idempotent in that case.
 //
-// Return value: the raw interface{} returned by op. Use SafeTypeAssert[T] to
+// Return value: the raw any returned by op. Use SafeTypeAssert[T] to
 // convert it to a concrete type without a panic.
-func (bc *BaseClient) Execute(ctx context.Context, operationName string, operation Operation) (interface{}, error) {
+func (bc *BaseClient) Execute(ctx context.Context, operationName string, operation Operation) (any, error) {
 	ctx, cancel := bc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	logFields := map[string]interface{}{
+	logFields := map[string]any{
 		"operation": operationName,
 		"service":   bc.getServiceName(),
 	}
@@ -138,7 +138,7 @@ func (bc *BaseClient) Execute(ctx context.Context, operationName string, operati
 	return bc.executeDirectly(ctx, operationName, operation, logFields)
 }
 
-func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName string, operation Operation, logFields map[string]interface{}) (interface{}, error) {
+func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName string, operation Operation, logFields map[string]any) (any, error) {
 	bc.mu.RLock()
 	logging := bc.logging
 	bc.mu.RUnlock()
@@ -158,7 +158,7 @@ func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName s
 	return result, err
 }
 
-func (bc *BaseClient) executeDirectly(ctx context.Context, operationName string, operation Operation, logFields map[string]interface{}) (interface{}, error) {
+func (bc *BaseClient) executeDirectly(ctx context.Context, operationName string, operation Operation, logFields map[string]any) (any, error) {
 	bc.mu.RLock()
 	logging := bc.logging
 	bc.mu.RUnlock()

@@ -147,7 +147,7 @@ func (c *consumer) Subscribe(ctx context.Context, handler Handler) error {
 					return nil
 				}
 				c.log.Warn(ctx, "not committing kafka message: handler failed and DLQ unavailable; message will be reprocessed",
-					map[string]interface{}{
+					map[string]any{
 						"offset": km.Offset,
 						"error":  dlqErr.Error(),
 					})
@@ -156,7 +156,7 @@ func (c *consumer) Subscribe(ctx context.Context, handler Handler) error {
 		}
 
 		if commitErr := c.reader.CommitMessages(ctx, km); commitErr != nil {
-			c.log.Warn(ctx, "failed to commit kafka message", map[string]interface{}{
+			c.log.Warn(ctx, "failed to commit kafka message", map[string]any{
 				"offset": km.Offset,
 				"error":  commitErr.Error(),
 			})
@@ -171,7 +171,7 @@ func (c *consumer) Subscribe(ctx context.Context, handler Handler) error {
 // means the message is safely in the DLQ and the offset may be committed.
 func (c *consumer) sendToDLQ(ctx context.Context, km kafka.Message, cause error) error {
 	if c.dlqWriter == nil {
-		c.log.Error(ctx, cause, map[string]interface{}{
+		c.log.Error(ctx, cause, map[string]any{
 			"topic":  km.Topic,
 			"offset": km.Offset,
 			"cause":  cause.Error(),
@@ -191,7 +191,7 @@ func (c *consumer) sendToDLQ(ctx context.Context, km kafka.Message, cause error)
 	}
 
 	if err := c.dlqWriter.WriteMessages(ctx, dlqMsg); err != nil {
-		c.log.Error(ctx, fmt.Errorf("dlq write failed: %w", err), map[string]interface{}{
+		c.log.Error(ctx, fmt.Errorf("dlq write failed: %w", err), map[string]any{
 			"original_topic":  km.Topic,
 			"original_offset": km.Offset,
 		})

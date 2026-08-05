@@ -39,8 +39,8 @@ func jwksServer(t *testing.T, key *rsa.PrivateKey) *httptest.Server {
 	eBytes := big.NewInt(int64(pub.E)).Bytes()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
-			"keys": []map[string]interface{}{{
+		json.NewEncoder(w).Encode(map[string]any{
+			"keys": []map[string]any{{
 				"kid": testKID,
 				"kty": "RSA",
 				"use": "sig",
@@ -65,7 +65,7 @@ func validClaims() jwt.MapClaims {
 		"sub":              "user-123",
 		"email":            "john@example.com",
 		"cognito:username": "john",
-		"cognito:groups":   []interface{}{"students", "admins"},
+		"cognito:groups":   []any{"students", "admins"},
 		"iss":              testIssuer,
 		"aud":              testAudience,
 		"exp":              time.Now().Add(time.Hour).Unix(),
@@ -538,7 +538,7 @@ func TestJWTMiddleware_AudienceAsSlice(t *testing.T) {
 	defer srv.Close()
 
 	claims := validClaims()
-	claims["aud"] = []interface{}{testAudience, "other-client"}
+	claims["aud"] = []any{testAudience, "other-client"}
 
 	cfg := JWTAuthConfig{JWKSURL: srv.URL, Audience: testAudience, AllowEmptyIssuer: true}
 	mw := JWTAuth(cfg)(echoHandler())
@@ -599,8 +599,8 @@ func TestJWTMiddleware_StaleKeyUsedWhenJWKSDown(t *testing.T) {
 			return
 		}
 		pub := &key.PublicKey
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
-			"keys": []map[string]interface{}{{
+		json.NewEncoder(w).Encode(map[string]any{
+			"keys": []map[string]any{{
 				"kid": testKID, "kty": "RSA", "use": "sig",
 				"n": base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
 				"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pub.E)).Bytes()),

@@ -101,7 +101,7 @@ func (a *sqsAdapter) sendMessage(ctx context.Context, req *cloud.Request) (*clou
 		Headers: map[string]string{
 			"sqs.message_id": aws.ToString(result.MessageId),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"sqs.message_id":           aws.ToString(result.MessageId),
 			"sqs.sequence_number":      aws.ToString(result.SequenceNumber),
 			"sqs.md5_of_message_body":  aws.ToString(result.MD5OfMessageBody),
@@ -145,9 +145,9 @@ func (a *sqsAdapter) receiveMessages(ctx context.Context, req *cloud.Request) (*
 	}
 
 	// Convert messages to JSON array
-	messages := make([]map[string]interface{}, len(result.Messages))
+	messages := make([]map[string]any, len(result.Messages))
 	for i, msg := range result.Messages {
-		messages[i] = map[string]interface{}{
+		messages[i] = map[string]any{
 			"message_id":     aws.ToString(msg.MessageId),
 			"receipt_handle": aws.ToString(msg.ReceiptHandle),
 			"body":           aws.ToString(msg.Body),
@@ -231,7 +231,7 @@ func (a *sqsAdapter) createQueue(ctx context.Context, req *cloud.Request) (*clou
 		Headers: map[string]string{
 			"sqs.queue_url": aws.ToString(result.QueueUrl),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"sqs.queue_url": aws.ToString(result.QueueUrl),
 		},
 	}, nil
@@ -308,7 +308,7 @@ func (a *sqsAdapter) getQueueURL(ctx context.Context, req *cloud.Request) (*clou
 		Headers: map[string]string{
 			"sqs.queue_url": aws.ToString(result.QueueUrl),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"sqs.queue_url": aws.ToString(result.QueueUrl),
 		},
 	}, nil

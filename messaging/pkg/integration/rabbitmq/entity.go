@@ -32,7 +32,7 @@ type Message struct {
 	Exchange   string
 	RoutingKey string
 	Body       []byte
-	Headers    map[string]interface{}
+	Headers    map[string]any
 	Mandatory  bool
 	Immediate  bool
 }

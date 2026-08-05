@@ -78,12 +78,12 @@ type AuthTokens struct {
 // Cognito genera y firma los tokens JWT automáticamente
 // Este cliente solo valida y extrae los claims
 type TokenClaims struct {
-	Sub           string                 `json:"sub"` // User ID (Cognito User Sub)
-	Email         string                 `json:"email"`
-	EmailVerified bool                   `json:"email_verified"`
-	Username      string                 `json:"cognito:username"`
-	Groups        []string               `json:"cognito:groups"` // Grupos de Cognito
-	CustomClaims  map[string]interface{} `json:"-"`              // Claims personalizados
+	Sub           string         `json:"sub"` // User ID (Cognito User Sub)
+	Email         string         `json:"email"`
+	EmailVerified bool           `json:"email_verified"`
+	Username      string         `json:"cognito:username"`
+	Groups        []string       `json:"cognito:groups"` // Grupos de Cognito
+	CustomClaims  map[string]any `json:"-"`              // Claims personalizados
 
 	// Standard JWT Claims (generados por Cognito)
 	Iss      string `json:"iss"`       // Issuer (Cognito User Pool URL)

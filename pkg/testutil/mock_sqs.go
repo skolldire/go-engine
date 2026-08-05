@@ -22,23 +22,23 @@ type MockSQSClient struct {
 // NewMockSQSClient creates an empty MockSQSClient.
 func NewMockSQSClient() *MockSQSClient { return &MockSQSClient{} }
 
-func (m *MockSQSClient) SendMsj(ctx context.Context, queueURL, mensaje string, atributos map[string]sqstypes.MessageAttributeValue) (string, error) {
+func (m *MockSQSClient) SendMessage(ctx context.Context, queueURL, mensaje string, atributos map[string]sqstypes.MessageAttributeValue) (string, error) {
 	args := m.Called(ctx, queueURL, mensaje, atributos)
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockSQSClient) SendJSON(ctx context.Context, queueURL string, mensaje interface{}, atributos map[string]sqstypes.MessageAttributeValue) (string, error) {
+func (m *MockSQSClient) SendJSON(ctx context.Context, queueURL string, mensaje any, atributos map[string]sqstypes.MessageAttributeValue) (string, error) {
 	args := m.Called(ctx, queueURL, mensaje, atributos)
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockSQSClient) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes, tiempoEspera int32) ([]sqstypes.Message, error) {
+func (m *MockSQSClient) ReceiveMessages(ctx context.Context, queueURL string, maxMensajes, tiempoEspera int32) ([]sqstypes.Message, error) {
 	args := m.Called(ctx, queueURL, maxMensajes, tiempoEspera)
 	msgs, _ := args.Get(0).([]sqstypes.Message)
 	return msgs, args.Error(1)
 }
 
-func (m *MockSQSClient) DeleteMsj(ctx context.Context, queueURL, receiptHandle string) error {
+func (m *MockSQSClient) DeleteMessage(ctx context.Context, queueURL, receiptHandle string) error {
 	return m.Called(ctx, queueURL, receiptHandle).Error(0)
 }
 

@@ -46,7 +46,7 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 
 	if c.IsLoggingEnabled() {
 		log.Debug(context.Background(), "S3 client initialized",
-			map[string]interface{}{
+			map[string]any{
 				"region": cfg.Region,
 				"bucket": cfg.Bucket,
 			})
@@ -71,7 +71,7 @@ func (c *S3Client) PutObject(ctx context.Context, key string, body io.Reader, co
 		input.Metadata = metadata
 	}
 
-	_, err := c.Execute(ctx, "PutObject", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "PutObject", func(ctx context.Context) (any, error) {
 		return c.transferManager.UploadObject(ctx, input)
 	})
 
@@ -87,7 +87,7 @@ func (c *S3Client) GetObject(ctx context.Context, key string) (io.ReadCloser, er
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "GetObject", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "GetObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -114,7 +114,7 @@ func (c *S3Client) DeleteObject(ctx context.Context, key string) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeleteObject", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "DeleteObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -133,7 +133,7 @@ func (c *S3Client) HeadObject(ctx context.Context, key string) (*ObjectMetadata,
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "HeadObject", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "HeadObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -183,7 +183,7 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 			requestMaxKeys = remaining
 		}
 
-		result, err := c.Execute(ctx, "ListObjects", func(ctx context.Context) (interface{}, error) {
+		result, err := c.Execute(ctx, "ListObjects", func(ctx context.Context) (any, error) {
 			input := &s3.ListObjectsV2Input{
 				Bucket:  aws.String(c.bucket),
 				Prefix:  aws.String(prefix),
@@ -234,7 +234,7 @@ func (c *S3Client) CopyObject(ctx context.Context, sourceKey, destKey string) er
 	}
 
 	source := fmt.Sprintf("%s/%s", c.bucket, url.PathEscape(sourceKey))
-	_, err := c.Execute(ctx, "CopyObject", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "CopyObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.CopyObject(ctx, &s3.CopyObjectInput{
 			Bucket:     aws.String(c.bucket),
 			CopySource: aws.String(source),
@@ -263,7 +263,7 @@ func (c *S3Client) GetPresignedURL(ctx context.Context, key string, expiration t
 	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
-	result, err := c.Execute(ctx, "GetPresignedURL", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "GetPresignedURL", func(ctx context.Context) (any, error) {
 		request, err := c.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -301,7 +301,7 @@ func (c *S3Client) GetPresignedPutURL(ctx context.Context, key, contentType stri
 	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
-	result, err := c.Execute(ctx, "GetPresignedPutURL", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "GetPresignedPutURL", func(ctx context.Context) (any, error) {
 		input := &s3.PutObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),

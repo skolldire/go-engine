@@ -37,7 +37,7 @@ func NewClient(cfg Config, log logger.Service) Service {
 }
 
 func (c *restClient) executeRequest(ctx context.Context, operationName string, reqFunc func() (*resty.Response, error)) (*resty.Response, error) {
-	result, err := c.Execute(ctx, operationName, func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, operationName, func(ctx context.Context) (any, error) {
 		return c.processRequest(ctx, reqFunc)
 	})
 
@@ -58,7 +58,7 @@ func (c *restClient) processRequest(ctx context.Context, reqFunc func() (*resty.
 	if err != nil {
 		if c.IsLoggingEnabled() {
 			c.GetLogger().Warn(ctx, "request_failed",
-				map[string]interface{}{"event": "request_failed", "error": err.Error()})
+				map[string]any{"event": "request_failed", "error": err.Error()})
 		}
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (c *restClient) processRequest(ctx context.Context, reqFunc func() (*resty.
 	if err := validateResponse(resp); err != nil {
 		if c.IsLoggingEnabled() {
 			c.GetLogger().Warn(ctx, "Error HTTP",
-				map[string]interface{}{"event": "http_error",
+				map[string]any{"event": "http_error",
 					"status": resp.StatusCode(),
 					"error":  err.Error()})
 		}
@@ -85,7 +85,7 @@ func (c *restClient) Get(ctx context.Context, endpoint string, headers map[strin
 	})
 }
 
-func (c *restClient) Post(ctx context.Context, endpoint string, body interface{}, headers map[string]string) (*resty.Response, error) {
+func (c *restClient) Post(ctx context.Context, endpoint string, body any, headers map[string]string) (*resty.Response, error) {
 	return c.executeRequest(ctx, "POST "+endpoint, func() (*resty.Response, error) {
 		return c.httpClient.R().
 			SetBody(body).
@@ -95,7 +95,7 @@ func (c *restClient) Post(ctx context.Context, endpoint string, body interface{}
 	})
 }
 
-func (c *restClient) Put(ctx context.Context, endpoint string, body interface{}, headers map[string]string) (*resty.Response, error) {
+func (c *restClient) Put(ctx context.Context, endpoint string, body any, headers map[string]string) (*resty.Response, error) {
 	return c.executeRequest(ctx, "PUT "+endpoint, func() (*resty.Response, error) {
 		return c.httpClient.R().
 			SetBody(body).
@@ -105,7 +105,7 @@ func (c *restClient) Put(ctx context.Context, endpoint string, body interface{},
 	})
 }
 
-func (c *restClient) Patch(ctx context.Context, endpoint string, body interface{}, headers map[string]string) (*resty.Response, error) {
+func (c *restClient) Patch(ctx context.Context, endpoint string, body any, headers map[string]string) (*resty.Response, error) {
 	return c.executeRequest(ctx, "PATCH "+endpoint, func() (*resty.Response, error) {
 		return c.httpClient.R().
 			SetBody(body).

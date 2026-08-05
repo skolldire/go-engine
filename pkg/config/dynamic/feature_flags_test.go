@@ -10,7 +10,7 @@ import (
 // mockLogger is now defined in mocks_test.go
 
 func TestNewFeatureFlags(t *testing.T) {
-	flags := map[string]interface{}{"flag1": true}
+	flags := map[string]any{"flag1": true}
 	ff := NewFeatureFlags(flags, nil)
 	assert.NotNil(t, ff)
 }
@@ -24,7 +24,7 @@ func TestNewFeatureFlags_Nil(t *testing.T) {
 }
 
 func TestFeatureFlags_Get(t *testing.T) {
-	flags := map[string]interface{}{
+	flags := map[string]any{
 		"flag1": true,
 		"flag2": "value",
 	}
@@ -40,7 +40,7 @@ func TestFeatureFlags_Get(t *testing.T) {
 }
 
 func TestFeatureFlags_GetBool(t *testing.T) {
-	flags := map[string]interface{}{
+	flags := map[string]any{
 		"bool_true":   true,
 		"bool_false":  false,
 		"string_true": "true",
@@ -63,7 +63,7 @@ func TestFeatureFlags_GetBool(t *testing.T) {
 }
 
 func TestFeatureFlags_GetString(t *testing.T) {
-	flags := map[string]interface{}{
+	flags := map[string]any{
 		"string": "value",
 		"int":    42,
 		"bool":   true,
@@ -77,7 +77,7 @@ func TestFeatureFlags_GetString(t *testing.T) {
 }
 
 func TestFeatureFlags_GetInt(t *testing.T) {
-	flags := map[string]interface{}{
+	flags := map[string]any{
 		"int":    42,
 		"float":  3.14,
 		"string": "123",
@@ -95,7 +95,7 @@ func TestFeatureFlags_GetInt(t *testing.T) {
 func TestFeatureFlags_Set(t *testing.T) {
 	mockLog := new(mockLogger)
 	mockLog.On("Debug", mock.Anything, "feature flag updated", mock.Anything).Return()
-	ff := NewFeatureFlags(map[string]interface{}{"key1": "value1"}, mockLog)
+	ff := NewFeatureFlags(map[string]any{"key1": "value1"}, mockLog)
 	ff.Set("key2", "value2")
 
 	value, exists := ff.Get("key2")
@@ -107,8 +107,8 @@ func TestFeatureFlags_Set(t *testing.T) {
 func TestFeatureFlags_SetAll(t *testing.T) {
 	mockLog := new(mockLogger)
 	mockLog.On("Info", mock.Anything, "feature flags updated", mock.Anything).Return()
-	ff := NewFeatureFlags(map[string]interface{}{"old": "value"}, mockLog)
-	newFlags := map[string]interface{}{"new": "value"}
+	ff := NewFeatureFlags(map[string]any{"old": "value"}, mockLog)
+	newFlags := map[string]any{"new": "value"}
 	ff.SetAll(newFlags)
 
 	all := ff.GetAll()
@@ -119,7 +119,7 @@ func TestFeatureFlags_SetAll(t *testing.T) {
 func TestFeatureFlags_SetAll_Nil(t *testing.T) {
 	mockLog := new(mockLogger)
 	mockLog.On("Info", mock.Anything, "feature flags updated", mock.Anything).Return()
-	ff := NewFeatureFlags(map[string]interface{}{"old": "value"}, mockLog)
+	ff := NewFeatureFlags(map[string]any{"old": "value"}, mockLog)
 	ff.SetAll(nil)
 
 	all := ff.GetAll()
@@ -129,7 +129,7 @@ func TestFeatureFlags_SetAll_Nil(t *testing.T) {
 }
 
 func TestFeatureFlags_GetAll(t *testing.T) {
-	flags := map[string]interface{}{
+	flags := map[string]any{
 		"flag1": true,
 		"flag2": "value",
 	}
@@ -139,7 +139,7 @@ func TestFeatureFlags_GetAll(t *testing.T) {
 }
 
 func TestFeatureFlags_IsEnabled(t *testing.T) {
-	flags := map[string]interface{}{
+	flags := map[string]any{
 		"enabled":  true,
 		"disabled": false,
 	}

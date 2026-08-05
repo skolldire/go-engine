@@ -17,11 +17,11 @@ type Service struct {
 
 // BatchGetItem provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) BatchGetItem(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -54,11 +54,11 @@ func (_m *Service) BatchGetItem(ctx context.Context, params *dynamodb.BatchGetIt
 
 // BatchWriteItem provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) BatchWriteItem(ctx context.Context, params *dynamodb.BatchWriteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -91,11 +91,11 @@ func (_m *Service) BatchWriteItem(ctx context.Context, params *dynamodb.BatchWri
 
 // DeleteItem provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -128,11 +128,11 @@ func (_m *Service) DeleteItem(ctx context.Context, params *dynamodb.DeleteItemIn
 
 // GetItem provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -165,11 +165,11 @@ func (_m *Service) GetItem(ctx context.Context, params *dynamodb.GetItemInput, o
 
 // PutItem provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -202,11 +202,11 @@ func (_m *Service) PutItem(ctx context.Context, params *dynamodb.PutItemInput, o
 
 // Query provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -239,11 +239,11 @@ func (_m *Service) Query(ctx context.Context, params *dynamodb.QueryInput, optFn
 
 // Scan provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -276,11 +276,11 @@ func (_m *Service) Scan(ctx context.Context, params *dynamodb.ScanInput, optFns 
 
 // TransactWriteItems provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) TransactWriteItems(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
@@ -313,11 +313,11 @@ func (_m *Service) TransactWriteItems(ctx context.Context, params *dynamodb.Tran
 
 // UpdateItem provides a mock function with given fields: ctx, params, optFns
 func (_m *Service) UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
-	_va := make([]interface{}, len(optFns))
+	_va := make([]any, len(optFns))
 	for _i := range optFns {
 		_va[_i] = optFns[_i]
 	}
-	var _ca []interface{}
+	var _ca []any
 	_ca = append(_ca, ctx, params)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)

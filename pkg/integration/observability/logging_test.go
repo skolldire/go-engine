@@ -29,7 +29,7 @@ func TestLoggingMiddleware_Success(t *testing.T) {
 	}
 
 	mockCli.On("Do", ctx, req).Return(resp, nil)
-	mockLog.On("Info", ctx, mock.AnythingOfType("string"), mock.MatchedBy(func(fields map[string]interface{}) bool {
+	mockLog.On("Info", ctx, mock.AnythingOfType("string"), mock.MatchedBy(func(fields map[string]any) bool {
 		return fields["operation"] == "sqs.send_message" &&
 			fields["success"] == true &&
 			fields["status_code"] == 200
@@ -61,7 +61,7 @@ func TestLoggingMiddleware_Error(t *testing.T) {
 	cloudErr.Retriable = false
 
 	mockCli.On("Do", ctx, req).Return(nil, cloudErr)
-	mockLog.On("Error", ctx, cloudErr, mock.MatchedBy(func(fields map[string]interface{}) bool {
+	mockLog.On("Error", ctx, cloudErr, mock.MatchedBy(func(fields map[string]any) bool {
 		return fields["operation"] == "sqs.send_message" &&
 			fields["success"] == false &&
 			fields["error_code"] == "sqs.send_message.error"
@@ -92,7 +92,7 @@ func TestLoggingMiddleware_GenericError(t *testing.T) {
 	genericErr := errors.New("generic error")
 
 	mockCli.On("Do", ctx, req).Return(nil, genericErr)
-	mockLog.On("Error", ctx, genericErr, mock.MatchedBy(func(fields map[string]interface{}) bool {
+	mockLog.On("Error", ctx, genericErr, mock.MatchedBy(func(fields map[string]any) bool {
 		return fields["operation"] == "sqs.send_message" &&
 			fields["success"] == false &&
 			fields["status_code"] == 500
@@ -126,7 +126,7 @@ func TestLoggingMiddleware_WithMethod(t *testing.T) {
 	}
 
 	mockCli.On("Do", ctx, req).Return(resp, nil)
-	mockLog.On("Info", ctx, mock.AnythingOfType("string"), mock.MatchedBy(func(fields map[string]interface{}) bool {
+	mockLog.On("Info", ctx, mock.AnythingOfType("string"), mock.MatchedBy(func(fields map[string]any) bool {
 		return fields["method"] == "POST"
 	})).Return()
 
@@ -155,7 +155,7 @@ func TestLoggingMiddleware_WithActiveSpan(t *testing.T) {
 
 	mockCli.On("Do", ctx, req).Return(resp, nil)
 	mockLog.On("Info", mock.Anything, mock.AnythingOfType("string"),
-		mock.MatchedBy(func(fields map[string]interface{}) bool {
+		mock.MatchedBy(func(fields map[string]any) bool {
 			traceID, ok1 := fields["trace.id"].(string)
 			spanID, ok2 := fields["span.id"].(string)
 			return ok1 && ok2 && traceID != "" && spanID != ""
@@ -178,7 +178,7 @@ func TestLoggingMiddleware_NoActiveSpan_NoTraceFields(t *testing.T) {
 
 	mockCli.On("Do", ctx, req).Return(resp, nil)
 	mockLog.On("Info", ctx, mock.AnythingOfType("string"),
-		mock.MatchedBy(func(fields map[string]interface{}) bool {
+		mock.MatchedBy(func(fields map[string]any) bool {
 			_, hasTrace := fields["trace.id"]
 			_, hasSpan := fields["span.id"]
 			return !hasTrace && !hasSpan

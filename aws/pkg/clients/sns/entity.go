@@ -61,8 +61,8 @@ type Service interface {
 	CreateTopic(ctx context.Context, name string, atributos map[string]string) (string, error)
 	DeleteTopic(ctx context.Context, arn string) error
 	GetTopics(ctx context.Context) ([]string, error)
-	PublishMsj(ctx context.Context, temaArn string, msj string, atributos map[string]types.MessageAttributeValue) (string, error)
-	PublishJSON(ctx context.Context, temaArn string, msj interface{}, atributos map[string]types.MessageAttributeValue) (string, error)
+	PublishMessage(ctx context.Context, temaArn string, msj string, atributos map[string]types.MessageAttributeValue) (string, error)
+	PublishJSON(ctx context.Context, temaArn string, msj any, atributos map[string]types.MessageAttributeValue) (string, error)
 	CreateSubscription(ctx context.Context, temaArn, protocolo, endpoint string) (string, error)
 	DeleteSubscription(ctx context.Context, subscriptionArn string) error
 	EnableLogging(activar bool)

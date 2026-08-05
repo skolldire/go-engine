@@ -43,7 +43,7 @@ type ServiceRegistry struct {
 	SSMClients map[string]ssm.Service
 
 	// Custom clients - generic storage for any custom client implementations
-	CustomClients map[string]interface{}
+	CustomClients map[string]any
 
 	// Health service
 	Health *health.HealthService
@@ -67,24 +67,24 @@ func NewServiceRegistry() *ServiceRegistry {
 		S3Clients:        make(map[string]s3.Service),
 		SESClients:       make(map[string]ses.Service),
 		SSMClients:       make(map[string]ssm.Service),
-		CustomClients:    make(map[string]interface{}),
+		CustomClients:    make(map[string]any),
 	}
 }
 
 // ConfigRegistry holds configuration maps
 type ConfigRegistry struct {
-	Repositories map[string]interface{}
-	UseCases     map[string]interface{}
-	Handlers     map[string]interface{}
-	Batches      map[string]interface{}
+	Repositories map[string]any
+	UseCases     map[string]any
+	Handlers     map[string]any
+	Batches      map[string]any
 }
 
 // NewConfigRegistry creates a new empty config registry
 func NewConfigRegistry() *ConfigRegistry {
 	return &ConfigRegistry{
-		Repositories: make(map[string]interface{}),
-		UseCases:     make(map[string]interface{}),
-		Handlers:     make(map[string]interface{}),
-		Batches:      make(map[string]interface{}),
+		Repositories: make(map[string]any),
+		UseCases:     make(map[string]any),
+		Handlers:     make(map[string]any),
+		Batches:      make(map[string]any),
 	}
 }

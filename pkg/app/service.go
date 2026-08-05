@@ -79,7 +79,7 @@ func (c *App) Init() *App {
 
 	// Initialize service registry using sync.Once to ensure thread-safety
 	// and prevent overwriting if GetServices() was called first
-	var existingCustomClients map[string]interface{}
+	var existingCustomClients map[string]any
 	if c.Engine.Services != nil && c.Engine.Services.CustomClients != nil {
 		existingCustomClients = c.Engine.Services.CustomClients
 	}
@@ -246,7 +246,7 @@ func (i *clients) createClientGRPC(configs []map[string]grpcClient.Config) map[s
 	grpcClients := make(map[string]grpcClient.Service)
 	for _, v := range configs {
 		for k, cfg := range v {
-			client, err := grpcClient.NewCliente(cfg, i.log)
+			client, err := grpcClient.NewClient(cfg, i.log)
 			if err != nil {
 				i.setError(err)
 				continue

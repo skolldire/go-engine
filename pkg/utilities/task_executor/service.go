@@ -19,7 +19,7 @@ func (t Task[I, O]) Priority() int {
 	return t.priority
 }
 
-func (t Task[I, O]) Execute(ctx context.Context) (interface{}, int, error) {
+func (t Task[I, O]) Execute(ctx context.Context) (any, int, error) {
 	if ctx.Err() != nil {
 		return nil, 0, ctx.Err()
 	}
@@ -84,7 +84,7 @@ func distributeTasksByPriority(ctx context.Context, tasks map[string]Tasker, tas
 
 	for _, item := range taskItems {
 		if cfg.logger != nil {
-			cfg.logger.Debug(ctx, "Encolando tarea", map[string]interface{}{
+			cfg.logger.Debug(ctx, "Encolando tarea", map[string]any{
 				"taskID":   item.id,
 				"priority": item.task.Priority(),
 			})
@@ -93,7 +93,7 @@ func distributeTasksByPriority(ctx context.Context, tasks map[string]Tasker, tas
 		select {
 		case taskChan <- item:
 			if cfg.logger != nil {
-				cfg.logger.Debug(ctx, "Tarea enviada a worker", map[string]interface{}{
+				cfg.logger.Debug(ctx, "Tarea enviada a worker", map[string]any{
 					"taskID":   item.id,
 					"priority": item.task.Priority(),
 				})
@@ -169,7 +169,7 @@ func collectResults(ctx context.Context, resultChan <-chan Result, tasks map[str
 func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
 		cfg.logger.Warn(ctx, "timeout exceeded for result collection",
-			map[string]interface{}{
+			map[string]any{
 				"totalTasks":       len(tasks),
 				"collectedResults": len(results),
 			})
@@ -179,7 +179,7 @@ func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker
 func logCancellationWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
 		cfg.logger.Warn(ctx, "result collection cancelled",
-			map[string]interface{}{
+			map[string]any{
 				"totalTasks":       len(tasks),
 				"collectedResults": len(results),
 			})
@@ -244,7 +244,7 @@ func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <
 			case <-ctx.Done():
 				if cfg.logger != nil {
 					cfg.logger.Debug(ctx, "discarding result due to cancellation",
-						map[string]interface{}{
+						map[string]any{
 							"taskID":   taskItem.id,
 							"workerID": workerID,
 						})
@@ -263,7 +263,7 @@ func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <
 // task goroutine back to safeExecuteTask over a channel. It is never shared
 // mutably, so there is no data race between the task and the timeout paths.
 type taskOutcome struct {
-	res interface{}
+	res any
 	err error
 }
 
@@ -298,7 +298,7 @@ func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, w
 		defer func() {
 			if r := recover(); r != nil {
 				if cfg.logger != nil {
-					cfg.logger.Error(ctx, ErrTaskPanic, map[string]interface{}{
+					cfg.logger.Error(ctx, ErrTaskPanic, map[string]any{
 						"taskID":   id,
 						"workerID": workerID,
 						"panic":    r,

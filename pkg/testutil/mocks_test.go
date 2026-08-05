@@ -136,13 +136,13 @@ func TestMockSQSClient_SendJSON(t *testing.T) {
 	assert.Equal(t, "msg-123", id)
 }
 
-func TestMockSQSClient_DeleteMsj(t *testing.T) {
+func TestMockSQSClient_DeleteMessage(t *testing.T) {
 	m := testutil.NewMockSQSClient()
-	m.On("DeleteMsj", mock.Anything, "https://sqs.../queue", "receipt-abc").
+	m.On("DeleteMessage", mock.Anything, "https://sqs.../queue", "receipt-abc").
 		Return(nil)
 	defer m.AssertExpectations(t)
 
-	err := m.DeleteMsj(context.Background(), "https://sqs.../queue", "receipt-abc")
+	err := m.DeleteMessage(context.Background(), "https://sqs.../queue", "receipt-abc")
 	assert.NoError(t, err)
 }
 
@@ -221,4 +221,4 @@ type fakeT struct {
 	fail func()
 }
 
-func (f *fakeT) Errorf(_ string, _ ...interface{}) { f.fail() }
+func (f *fakeT) Errorf(_ string, _ ...any) { f.fail() }

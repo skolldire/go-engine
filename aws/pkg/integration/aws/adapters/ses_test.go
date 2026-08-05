@@ -44,8 +44,8 @@ func TestSESAdapter_SendEmail_MissingFrom(t *testing.T) {
 	cfg := aws.Config{Region: "us-east-1"}
 	adapter := newSESAdapter(cfg, 0, RetryPolicy{})
 
-	body, _ := json.Marshal(map[string]interface{}{
-		"to": []map[string]interface{}{{"email": "to@example.com"}},
+	body, _ := json.Marshal(map[string]any{
+		"to": []map[string]any{{"email": "to@example.com"}},
 	})
 
 	req := &cloud.Request{

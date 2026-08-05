@@ -52,7 +52,7 @@ func NewIRTScorerClient(cfg IRTScorerConfig, log logger.Service) *IRTScorerClien
 // It delegates execution to BaseClient.Execute so that timeout and logging are
 // applied transparently.
 func (c *IRTScorerClient) Score(ctx context.Context, responses []int) (*IRTScoreResponse, error) {
-	raw, err := c.Execute(ctx, "irt-scorer.score", func(ctx context.Context) (interface{}, error) {
+	raw, err := c.Execute(ctx, "irt-scorer.score", func(ctx context.Context) (any, error) {
 		// In production this would call c.baseURL with responses.
 		// Stubbed here to keep the example self-contained.
 		return &IRTScoreResponse{Theta: 0.42, SE: 0.15}, nil
@@ -107,13 +107,13 @@ func Example_customClient() {
 // noopLogger satisfies logger.Service with silent no-ops for the example.
 type noopLogger struct{}
 
-func (n *noopLogger) Debug(ctx context.Context, msg string, fields map[string]interface{})     {}
-func (n *noopLogger) Info(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (n *noopLogger) Warn(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (n *noopLogger) Error(ctx context.Context, err error, fields map[string]interface{})      {}
-func (n *noopLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (n *noopLogger) WrapError(err error, msg string) error                                    { return err }
-func (n *noopLogger) WithField(key string, value interface{}) logger.Service                   { return n }
-func (n *noopLogger) WithFields(fields map[string]interface{}) logger.Service                  { return n }
-func (n *noopLogger) GetLogLevel() string                                                      { return "info" }
-func (n *noopLogger) SetLogLevel(level string) error                                           { return nil }
+func (n *noopLogger) Debug(ctx context.Context, msg string, fields map[string]any)     {}
+func (n *noopLogger) Info(ctx context.Context, msg string, fields map[string]any)      {}
+func (n *noopLogger) Warn(ctx context.Context, msg string, fields map[string]any)      {}
+func (n *noopLogger) Error(ctx context.Context, err error, fields map[string]any)      {}
+func (n *noopLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
+func (n *noopLogger) WrapError(err error, msg string) error                            { return err }
+func (n *noopLogger) WithField(key string, value any) logger.Service                   { return n }
+func (n *noopLogger) WithFields(fields map[string]any) logger.Service                  { return n }
+func (n *noopLogger) GetLogLevel() string                                              { return "info" }
+func (n *noopLogger) SetLogLevel(level string) error                                   { return nil }

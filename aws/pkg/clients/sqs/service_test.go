@@ -20,19 +20,19 @@ type mockLogger struct {
 	mock.Mock
 }
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{}) {
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any) {
 	m.Called(ctx, err, fields)
 }
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
 func (m *mockLogger) WrapError(err error, msg string) error {
 	args := m.Called(err, msg)
 	if args.Get(0) != nil {
@@ -40,10 +40,10 @@ func (m *mockLogger) WrapError(err error, msg string) error {
 	}
 	return err
 }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service  { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string                                     { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                          { return nil }
+func (m *mockLogger) WithField(key string, value any) logger.Service  { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service { return m }
+func (m *mockLogger) GetLogLevel() string                             { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                  { return nil }
 
 func TestNewClient(t *testing.T) {
 	acf := aws.Config{
@@ -106,7 +106,7 @@ func TestNewClient_WithResilience(t *testing.T) {
 	assert.NotNil(t, cliente.resilience)
 }
 
-func TestCliente_SendMsj_InvalidInput(t *testing.T) {
+func TestCliente_SendMessage_InvalidInput(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
@@ -114,11 +114,11 @@ func TestCliente_SendMsj_InvalidInput(t *testing.T) {
 	client := NewClient(acf, cfg, log)
 
 	ctx := context.Background()
-	_, err := client.SendMsj(ctx, "", "message", nil)
+	_, err := client.SendMessage(ctx, "", "message", nil)
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 
-	_, err = client.SendMsj(ctx, "queue-url", "", nil)
+	_, err = client.SendMessage(ctx, "queue-url", "", nil)
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 }
@@ -140,7 +140,7 @@ func TestCliente_SendJSON_InvalidInput(t *testing.T) {
 	assert.Equal(t, ErrInvalidInput, err)
 }
 
-func TestCliente_ReceiveMsj_InvalidInput(t *testing.T) {
+func TestCliente_ReceiveMessages_InvalidInput(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
@@ -148,12 +148,12 @@ func TestCliente_ReceiveMsj_InvalidInput(t *testing.T) {
 	client := NewClient(acf, cfg, log)
 
 	ctx := context.Background()
-	_, err := client.ReceiveMsj(ctx, "", 10, 0)
+	_, err := client.ReceiveMessages(ctx, "", 10, 0)
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 }
 
-func TestCliente_ReceiveMsj_DefaultMaxMessages(t *testing.T) {
+func TestCliente_ReceiveMessages_DefaultMaxMessages(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
@@ -165,14 +165,14 @@ func TestCliente_ReceiveMsj_DefaultMaxMessages(t *testing.T) {
 
 	ctx := context.Background()
 	// This will fail without a real AWS connection, but tests the default logic
-	_, err := client.ReceiveMsj(ctx, "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue", 0, 0)
+	_, err := client.ReceiveMessages(ctx, "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue", 0, 0)
 	// We expect an error since there's no real AWS connection
 	assert.Error(t, err)
 	// But the error should not be ErrInvalidInput since queueURL is provided
 	assert.NotEqual(t, ErrInvalidInput, err)
 }
 
-func TestCliente_DeleteMsj_InvalidInput(t *testing.T) {
+func TestCliente_DeleteMessage_InvalidInput(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
@@ -180,11 +180,11 @@ func TestCliente_DeleteMsj_InvalidInput(t *testing.T) {
 	client := NewClient(acf, cfg, log)
 
 	ctx := context.Background()
-	err := client.DeleteMsj(ctx, "", "receipt-handle")
+	err := client.DeleteMessage(ctx, "", "receipt-handle")
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 
-	err = client.DeleteMsj(ctx, "queue-url", "")
+	err = client.DeleteMessage(ctx, "queue-url", "")
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 }
@@ -308,7 +308,7 @@ func TestCliente_SendJSON_ValidJSON(t *testing.T) {
 	client := NewClient(acf, cfg, log)
 
 	ctx := context.Background()
-	message := map[string]interface{}{
+	message := map[string]any{
 		"key":    "value",
 		"number": 42,
 		"bool":   true,

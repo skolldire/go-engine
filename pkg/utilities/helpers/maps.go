@@ -88,16 +88,16 @@ func NewStringMap() map[string]string {
 	return make(map[string]string)
 }
 
-// NewStringInterfaceMap creates a new map[string]interface{}.
-// This is a more readable alternative to make(map[string]interface{}).
+// NewStringInterfaceMap creates a new map[string]any.
+// This is a more readable alternative to make(map[string]any).
 //
 // Example:
 //
 //	m := NewStringInterfaceMap()
 //	m["key"] = "value"
 //	m["number"] = 42
-func NewStringInterfaceMap() map[string]interface{} {
-	return make(map[string]interface{})
+func NewStringInterfaceMap() map[string]any {
+	return make(map[string]any)
 }
 
 // NewMap creates a new map with the specified key and value types.

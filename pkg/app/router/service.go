@@ -149,7 +149,7 @@ func (a *App) Run(ctx context.Context) error {
 	errorCh := make(chan error, 1)
 
 	go func() {
-		a.logger.Info(ctx, "Iniciando servidor", map[string]interface{}{
+		a.logger.Info(ctx, "Iniciando servidor", map[string]any{
 			"address": a.server.Addr,
 		})
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -163,7 +163,7 @@ func (a *App) Run(ctx context.Context) error {
 	case <-stop:
 		a.logger.Info(ctx, "shutdown signal received, initiating graceful shutdown", nil)
 	case err := <-errorCh:
-		a.logger.Error(ctx, err, map[string]interface{}{
+		a.logger.Error(ctx, err, map[string]any{
 			"message": "error starting server",
 		})
 		return err
@@ -175,7 +175,7 @@ func (a *App) Run(ctx context.Context) error {
 	defer cancel()
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		a.logger.Error(ctx, err, map[string]interface{}{
+		a.logger.Error(ctx, err, map[string]any{
 			"message": "error during server shutdown",
 		})
 		return err
@@ -183,7 +183,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	for _, hook := range a.shutdownHooks {
 		if err := hook(shutdownCtx); err != nil {
-			a.logger.Error(ctx, err, map[string]interface{}{
+			a.logger.Error(ctx, err, map[string]any{
 				"message": "error during shutdown hook",
 			})
 		}

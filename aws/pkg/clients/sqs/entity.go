@@ -12,10 +12,10 @@ import (
 )
 
 type Service interface {
-	SendMsj(ctx context.Context, queueURL string, mensaje string, atributos map[string]types.MessageAttributeValue) (string, error)
-	SendJSON(ctx context.Context, queueURL string, mensaje interface{}, atributos map[string]types.MessageAttributeValue) (string, error)
-	ReceiveMsj(ctx context.Context, queueURL string, maxMensajes int32, tiempoEspera int32) ([]types.Message, error)
-	DeleteMsj(ctx context.Context, queueURL string, receiptHandle string) error
+	SendMessage(ctx context.Context, queueURL string, mensaje string, atributos map[string]types.MessageAttributeValue) (string, error)
+	SendJSON(ctx context.Context, queueURL string, mensaje any, atributos map[string]types.MessageAttributeValue) (string, error)
+	ReceiveMessages(ctx context.Context, queueURL string, maxMensajes int32, tiempoEspera int32) ([]types.Message, error)
+	DeleteMessage(ctx context.Context, queueURL string, receiptHandle string) error
 	CreateQueue(ctx context.Context, nombre string, atributos map[string]string) (string, error)
 	DeleteQueue(ctx context.Context, queueURL string) error
 	ListQueue(ctx context.Context, prefijo string) ([]string, error)
@@ -31,13 +31,13 @@ type Config struct {
 }
 
 var (
-	ErrEnviarMensaje   = errors.New("error sending message")
-	ErrRecibirMensajes = errors.New("error receiving messages")
-	ErrEliminarMensaje = errors.New("error deleting message")
-	ErrCrearCola       = errors.New("error creating queue")
-	ErrEliminarCola    = errors.New("error deleting queue")
-	ErrListarColas     = errors.New("error listing queues")
-	ErrObtenerURLCola  = errors.New("error getting queue URL")
+	ErrSendMessage     = errors.New("error sending message")
+	ErrReceiveMessages = errors.New("error receiving messages")
+	ErrDeleteMessage   = errors.New("error deleting message")
+	ErrCreateQueue     = errors.New("error creating queue")
+	ErrDeleteQueue     = errors.New("error deleting queue")
+	ErrListQueues      = errors.New("error listing queues")
+	ErrGetQueueURL     = errors.New("error getting queue URL")
 	ErrInvalidInput    = errors.New("invalid input")
 )
 

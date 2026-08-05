@@ -29,9 +29,9 @@ func NewResilienceService(config Config, log logger.Service) *Service {
 }
 
 func (rs *Service) Execute(ctx context.Context,
-	operation func(context.Context) (interface{}, error)) (interface{}, error) {
-	result, err := rs.circuitBreaker.Execute(ctx, func() (interface{}, error) {
-		var opResult interface{}
+	operation func(context.Context) (any, error)) (any, error) {
+	result, err := rs.circuitBreaker.Execute(ctx, func() (any, error) {
+		var opResult any
 
 		retryErr := rs.retryer.Do(ctx, func() error {
 			var err error

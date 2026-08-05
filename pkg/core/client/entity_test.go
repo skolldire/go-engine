@@ -15,16 +15,16 @@ import (
 
 type mockLogger struct{}
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{})     {}
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{})      {}
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
-func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any)     {}
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any)      {}
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any)      {}
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any)      {}
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
+func (m *mockLogger) WrapError(err error, msg string) error                            { return err }
+func (m *mockLogger) WithField(key string, value any) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                              { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                   { return nil }
 
 func TestNewBaseClient(t *testing.T) {
 	config := BaseConfig{
@@ -104,7 +104,7 @@ func TestBaseClient_Execute_Success(t *testing.T) {
 	client := NewBaseClient(config, log)
 
 	ctx := context.Background()
-	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
+	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (any, error) {
 		return "success", nil
 	})
 
@@ -124,7 +124,7 @@ func TestBaseClient_Execute_Error(t *testing.T) {
 
 	ctx := context.Background()
 	testErr := errors.New("test error")
-	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
+	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (any, error) {
 		return nil, testErr
 	})
 
@@ -152,7 +152,7 @@ func TestBaseClient_Execute_WithResilience(t *testing.T) {
 	client := NewBaseClient(config, log)
 
 	ctx := context.Background()
-	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
+	result, err := client.Execute(ctx, "test-operation", func(ctx context.Context) (any, error) {
 		return "success", nil
 	})
 
@@ -172,11 +172,11 @@ func TestBaseClient_Execute_WithTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	done := make(chan bool, 1)
-	var result interface{}
+	var result any
 	var err error
 
 	go func() {
-		result, err = client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
+		result, err = client.Execute(ctx, "test-operation", func(ctx context.Context) (any, error) {
 			time.Sleep(100 * time.Millisecond)
 			return "success", nil
 		})
@@ -205,7 +205,7 @@ func TestBaseClient_Execute_PassesBoundedContext(t *testing.T) {
 	client := NewBaseClient(config, &mockLogger{})
 
 	var hadDeadline bool
-	_, err := client.Execute(context.Background(), "op", func(ctx context.Context) (interface{}, error) {
+	_, err := client.Execute(context.Background(), "op", func(ctx context.Context) (any, error) {
 		_, hadDeadline = ctx.Deadline()
 		// Cooperative operation: block on the operation's own context.
 		<-ctx.Done()
@@ -233,7 +233,7 @@ func TestBaseClient_Execute_WithContextDeadline(t *testing.T) {
 	var err error
 
 	go func() {
-		_, err = client.Execute(ctx, "test-operation", func(ctx context.Context) (interface{}, error) {
+		_, err = client.Execute(ctx, "test-operation", func(ctx context.Context) (any, error) {
 			time.Sleep(100 * time.Millisecond)
 			return "success", nil
 		})

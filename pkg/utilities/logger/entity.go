@@ -17,17 +17,17 @@ type Config struct {
 	ContextExtractor ContextExtractor `mapstructure:"-" json:"-"`
 }
 
-type ContextExtractor func(ctx context.Context) map[string]interface{}
+type ContextExtractor func(ctx context.Context) map[string]any
 
 type Service interface {
-	Info(ctx context.Context, msg string, fields map[string]interface{})
-	Error(ctx context.Context, err error, fields map[string]interface{})
-	Debug(ctx context.Context, msg string, fields map[string]interface{})
-	Warn(ctx context.Context, msg string, fields map[string]interface{})
-	FatalError(ctx context.Context, err error, fields map[string]interface{})
+	Info(ctx context.Context, msg string, fields map[string]any)
+	Error(ctx context.Context, err error, fields map[string]any)
+	Debug(ctx context.Context, msg string, fields map[string]any)
+	Warn(ctx context.Context, msg string, fields map[string]any)
+	FatalError(ctx context.Context, err error, fields map[string]any)
 	WrapError(err error, msg string) error
-	WithField(key string, value interface{}) Service
-	WithFields(fields map[string]interface{}) Service
+	WithField(key string, value any) Service
+	WithFields(fields map[string]any) Service
 	GetLogLevel() string
 	SetLogLevel(level string) error
 }

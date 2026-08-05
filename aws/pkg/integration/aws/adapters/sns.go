@@ -77,7 +77,7 @@ func (a *snsAdapter) publish(ctx context.Context, req *cloud.Request) (*cloud.Re
 		Headers: map[string]string{
 			"sns.message_id": aws.ToString(result.MessageId),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"sns.message_id": aws.ToString(result.MessageId),
 		},
 	}, nil

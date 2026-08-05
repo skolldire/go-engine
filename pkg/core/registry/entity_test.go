@@ -14,24 +14,24 @@ type mockLogger struct {
 	mock.Mock
 }
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{}) {
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any) {
 	m.Called(ctx, err, fields)
 }
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
-func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
+func (m *mockLogger) WrapError(err error, msg string) error                            { return err }
+func (m *mockLogger) WithField(key string, value any) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                              { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                   { return nil }
 
 func TestGetRegistry(t *testing.T) {
 	log := &mockLogger{}
@@ -55,7 +55,7 @@ func TestRegistry_Register(t *testing.T) {
 	registry.SetLogger(log)
 
 	clientName := "test-client-register"
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return "test-client", nil
 	}
 
@@ -71,7 +71,7 @@ func TestRegistry_Register_Duplicate(t *testing.T) {
 	registry := GetRegistry()
 	registry.SetLogger(log)
 
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return "test-client", nil
 	}
 
@@ -92,7 +92,7 @@ func TestRegistry_Create(t *testing.T) {
 	registry := GetRegistry()
 	registry.SetLogger(log)
 
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return "created-client", nil
 	}
 
@@ -125,7 +125,7 @@ func TestRegistry_Create_WithError(t *testing.T) {
 	registry.SetLogger(log)
 
 	testErr := errors.New("factory error")
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return nil, testErr
 	}
 
@@ -149,7 +149,7 @@ func TestRegistry_IsRegistered(t *testing.T) {
 	clientName := "test-client-is-registered"
 	assert.False(t, registry.IsRegistered(clientName))
 
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return "test-client", nil
 	}
 
@@ -165,7 +165,7 @@ func TestRegistry_ListRegistered(t *testing.T) {
 	registry := GetRegistry()
 	registry.SetLogger(log)
 
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return "client", nil
 	}
 
@@ -189,7 +189,7 @@ func TestRegistry_Unregister(t *testing.T) {
 	registry.SetLogger(log)
 
 	clientName := "test-client-unregister"
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return "test-client", nil
 	}
 
@@ -219,7 +219,7 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 	registry := GetRegistry()
 	registry.SetLogger(log)
 
-	factory := func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, config any, log logger.Service) (any, error) {
 		return "client", nil
 	}
 
@@ -250,7 +250,7 @@ func TestRegistry_Create_WithConfig(t *testing.T) {
 
 	clientName := "test-client-config"
 	config := map[string]string{"key": "value"}
-	factory := func(ctx context.Context, cfg interface{}, log logger.Service) (interface{}, error) {
+	factory := func(ctx context.Context, cfg any, log logger.Service) (any, error) {
 		assert.Equal(t, config, cfg)
 		return "configured-client", nil
 	}

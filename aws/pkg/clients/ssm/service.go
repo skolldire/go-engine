@@ -40,7 +40,7 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 
 	if c.IsLoggingEnabled() {
 		log.Debug(context.Background(), "SSM client initialized",
-			map[string]interface{}{
+			map[string]any{
 				"region": cfg.Region,
 			})
 	}
@@ -53,7 +53,7 @@ func (c *SSMClient) GetParameter(ctx context.Context, name string, decrypt bool)
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "GetParameter", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "GetParameter", func(ctx context.Context) (any, error) {
 		return c.ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 			Name:           aws.String(name),
 			WithDecryption: aws.Bool(decrypt),
@@ -76,7 +76,7 @@ func (c *SSMClient) GetParameters(ctx context.Context, names []string, decrypt b
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "GetParameters", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "GetParameters", func(ctx context.Context) (any, error) {
 		return c.ssmClient.GetParameters(ctx, &ssm.GetParametersInput{
 			Names:          names,
 			WithDecryption: aws.Bool(decrypt),
@@ -110,7 +110,7 @@ func (c *SSMClient) GetParametersByPath(ctx context.Context, path string, recurs
 	var nextToken *string
 
 	for {
-		result, err := c.Execute(ctx, "GetParametersByPath", func(ctx context.Context) (interface{}, error) {
+		result, err := c.Execute(ctx, "GetParametersByPath", func(ctx context.Context) (any, error) {
 			return c.ssmClient.GetParametersByPath(ctx, &ssm.GetParametersByPathInput{
 				Path:           aws.String(path),
 				Recursive:      aws.Bool(recursive),
@@ -179,7 +179,7 @@ func (c *SSMClient) PutParameter(ctx context.Context, name, value, parameterType
 		input.Tags = tagList
 	}
 
-	_, err := c.Execute(ctx, "PutParameter", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "PutParameter", func(ctx context.Context) (any, error) {
 		return c.ssmClient.PutParameter(ctx, input)
 	})
 
@@ -199,7 +199,7 @@ func (c *SSMClient) DeleteParameter(ctx context.Context, name string) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeleteParameter", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "DeleteParameter", func(ctx context.Context) (any, error) {
 		return c.ssmClient.DeleteParameter(ctx, &ssm.DeleteParameterInput{
 			Name: aws.String(name),
 		})
@@ -217,7 +217,7 @@ func (c *SSMClient) DeleteParameters(ctx context.Context, names []string) (*Dele
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "DeleteParameters", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "DeleteParameters", func(ctx context.Context) (any, error) {
 		return c.ssmClient.DeleteParameters(ctx, &ssm.DeleteParametersInput{
 			Names: names,
 		})
@@ -246,7 +246,7 @@ func (c *SSMClient) GetParameterHistory(ctx context.Context, name string) ([]*Pa
 	var nextToken *string
 
 	for {
-		result, err := c.Execute(ctx, "GetParameterHistory", func(ctx context.Context) (interface{}, error) {
+		result, err := c.Execute(ctx, "GetParameterHistory", func(ctx context.Context) (any, error) {
 			return c.ssmClient.GetParameterHistory(ctx, &ssm.GetParameterHistoryInput{
 				Name:      aws.String(name),
 				NextToken: nextToken,
@@ -287,7 +287,7 @@ func (c *SSMClient) AddTagsToResource(ctx context.Context, resourceType, resourc
 		})
 	}
 
-	_, err := c.Execute(ctx, "AddTagsToResource", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "AddTagsToResource", func(ctx context.Context) (any, error) {
 		return c.ssmClient.AddTagsToResource(ctx, &ssm.AddTagsToResourceInput{
 			ResourceType: types.ResourceTypeForTagging(resourceType),
 			ResourceId:   aws.String(resourceID),
@@ -307,7 +307,7 @@ func (c *SSMClient) ListTagsForResource(ctx context.Context, resourceType, resou
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "ListTagsForResource", func(ctx context.Context) (interface{}, error) {
+	result, err := c.Execute(ctx, "ListTagsForResource", func(ctx context.Context) (any, error) {
 		return c.ssmClient.ListTagsForResource(ctx, &ssm.ListTagsForResourceInput{
 			ResourceType: types.ResourceTypeForTagging(resourceType),
 			ResourceId:   aws.String(resourceID),

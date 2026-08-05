@@ -54,7 +54,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 
 	if c.IsLoggingEnabled() {
 		log.Debug(context.Background(), "RabbitMQ connection established successfully",
-			map[string]interface{}{
+			map[string]any{
 				"url":     cfg.URL,
 				"timeout": timeout.String(),
 			})
@@ -68,7 +68,7 @@ func (c *RabbitMQClient) Publish(ctx context.Context, msg Message) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "Publish", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "Publish", func(ctx context.Context) (any, error) {
 		return nil, c.channel.PublishWithContext(ctx,
 			msg.Exchange,
 			msg.RoutingKey,
@@ -101,7 +101,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 		defer func() {
 			if r := recover(); r != nil {
 				if c.IsLoggingEnabled() {
-					c.GetLogger().Error(ctx, fmt.Errorf("panic in consume handler: %v", r), map[string]interface{}{
+					c.GetLogger().Error(ctx, fmt.Errorf("panic in consume handler: %v", r), map[string]any{
 						"queue": queue,
 					})
 				}
@@ -112,7 +112,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 			select {
 			case <-ctx.Done():
 				if c.IsLoggingEnabled() {
-					c.GetLogger().Debug(ctx, "context cancelled, stopping message consumption", map[string]interface{}{
+					c.GetLogger().Debug(ctx, "context cancelled, stopping message consumption", map[string]any{
 						"queue": queue,
 					})
 				}
@@ -120,7 +120,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 			case delivery, ok := <-deliveries:
 				if !ok {
 					if c.IsLoggingEnabled() {
-						c.GetLogger().Debug(ctx, "delivery channel closed", map[string]interface{}{
+						c.GetLogger().Debug(ctx, "delivery channel closed", map[string]any{
 							"queue": queue,
 						})
 					}
@@ -134,14 +134,14 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 						// Handler returned error, Nack the message
 						if nackErr := delivery.Nack(false, true); nackErr != nil {
 							if c.IsLoggingEnabled() {
-								c.GetLogger().Error(ctx, nackErr, map[string]interface{}{
+								c.GetLogger().Error(ctx, nackErr, map[string]any{
 									"queue":   queue,
 									"message": "failed to nack message",
 								})
 							}
 						}
 						if c.IsLoggingEnabled() {
-							c.GetLogger().Error(ctx, err, map[string]interface{}{
+							c.GetLogger().Error(ctx, err, map[string]any{
 								"queue": queue,
 							})
 						}
@@ -149,7 +149,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 						// Handler succeeded, Ack the message
 						if ackErr := delivery.Ack(false); ackErr != nil {
 							if c.IsLoggingEnabled() {
-								c.GetLogger().Error(ctx, ackErr, map[string]interface{}{
+								c.GetLogger().Error(ctx, ackErr, map[string]any{
 									"queue":   queue,
 									"message": "failed to ack message",
 								})
@@ -160,7 +160,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 					// autoAck is true, RabbitMQ handles Ack automatically
 					if err := handler(delivery); err != nil {
 						if c.IsLoggingEnabled() {
-							c.GetLogger().Error(ctx, err, map[string]interface{}{
+							c.GetLogger().Error(ctx, err, map[string]any{
 								"queue": queue,
 							})
 						}
@@ -178,7 +178,7 @@ func (c *RabbitMQClient) DeclareQueue(ctx context.Context, name string, durable,
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeclareQueue", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "DeclareQueue", func(ctx context.Context) (any, error) {
 		return c.channel.QueueDeclare(name, durable, autoDelete, exclusive, noWait, args)
 	})
 
@@ -190,7 +190,7 @@ func (c *RabbitMQClient) DeclareExchange(ctx context.Context, name, kind string,
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeclareExchange", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "DeclareExchange", func(ctx context.Context) (any, error) {
 		return nil, c.channel.ExchangeDeclare(name, kind, durable, autoDelete, internal, noWait, args)
 	})
 
@@ -202,7 +202,7 @@ func (c *RabbitMQClient) BindQueue(ctx context.Context, queue, routingKey, excha
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "BindQueue", func(ctx context.Context) (interface{}, error) {
+	_, err := c.Execute(ctx, "BindQueue", func(ctx context.Context) (any, error) {
 		return nil, c.channel.QueueBind(queue, routingKey, exchange, noWait, args)
 	})
 

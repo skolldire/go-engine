@@ -11,17 +11,17 @@ import (
 // noopLogWriter is a minimal logger.LogWriter for tests.
 type noopLogWriter struct{}
 
-func (noopLogWriter) Info(...interface{})                              {}
-func (noopLogWriter) Warn(...interface{})                              {}
-func (noopLogWriter) Error(...interface{})                             {}
-func (noopLogWriter) Debug(...interface{})                             {}
-func (noopLogWriter) Fatal(...interface{})                             {}
-func (noopLogWriter) Infof(string, ...interface{})                     {}
-func (noopLogWriter) Warnf(string, ...interface{})                     {}
-func (noopLogWriter) Errorf(string, ...interface{})                    {}
-func (noopLogWriter) Debugf(string, ...interface{})                    {}
-func (n noopLogWriter) WithField(string, interface{}) logger.LogWriter { return n }
-func (n noopLogWriter) WithFields(logrus.Fields) logger.LogWriter      { return n }
+func (noopLogWriter) Info(...any)                                 {}
+func (noopLogWriter) Warn(...any)                                 {}
+func (noopLogWriter) Error(...any)                                {}
+func (noopLogWriter) Debug(...any)                                {}
+func (noopLogWriter) Fatal(...any)                                {}
+func (noopLogWriter) Infof(string, ...any)                        {}
+func (noopLogWriter) Warnf(string, ...any)                        {}
+func (noopLogWriter) Errorf(string, ...any)                       {}
+func (noopLogWriter) Debugf(string, ...any)                       {}
+func (n noopLogWriter) WithField(string, any) logger.LogWriter    { return n }
+func (n noopLogWriter) WithFields(logrus.Fields) logger.LogWriter { return n }
 
 // TestNewService_NotASingleton verifies NewService returns a fresh instance on
 // every call, so multiple engines and isolated tests are possible.

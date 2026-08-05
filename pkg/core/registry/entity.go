@@ -11,7 +11,7 @@ import (
 // ClientFactory is a constructor function that the Registry invokes when Create is called.
 // It receives the calling context, an opaque config value, and the registry's logger.
 // The returned value is the fully-initialised client instance.
-type ClientFactory func(ctx context.Context, config interface{}, log logger.Service) (interface{}, error)
+type ClientFactory func(ctx context.Context, config any, log logger.Service) (any, error)
 
 // Registry is a thread-safe factory registry that maps client-type names to their
 // ClientFactory functions. It is used internally by go-engine to defer client
@@ -76,7 +76,7 @@ func (r *Registry) Register(clientType string, factory ClientFactory) error {
 // Create invokes the factory registered under clientType, passing ctx and config.
 // Returns an error if clientType has not been registered, or if the factory itself
 // returns an error.
-func (r *Registry) Create(ctx context.Context, clientType string, config interface{}) (interface{}, error) {
+func (r *Registry) Create(ctx context.Context, clientType string, config any) (any, error) {
 	r.mu.RLock()
 	factory, exists := r.factories[clientType]
 	logger := r.logger // Copy logger while holding lock

@@ -81,7 +81,7 @@ func (a *ssmAdapter) getParameter(ctx context.Context, req *cloud.Request) (*clo
 			"ssm.parameter_name": aws.ToString(result.Parameter.Name),
 			"ssm.parameter_type": string(result.Parameter.Type),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"ssm.parameter_name": aws.ToString(result.Parameter.Name),
 			"ssm.parameter_type": string(result.Parameter.Type),
 			"ssm.version":        result.Parameter.Version,
@@ -131,7 +131,7 @@ func (a *ssmAdapter) getParameters(ctx context.Context, req *cloud.Request) (*cl
 		return nil, normalizeSSMError(err, "ssm.get_parameters")
 	}
 
-	params := make(map[string]interface{})
+	params := make(map[string]any)
 	for _, param := range result.Parameters {
 		params[aws.ToString(param.Name)] = mapParameter(&param)
 	}
@@ -153,7 +153,7 @@ func (a *ssmAdapter) putParameter(ctx context.Context, req *cloud.Request) (*clo
 	}
 
 	// Parse body as JSON
-	var paramData map[string]interface{}
+	var paramData map[string]any
 	if err := json.Unmarshal(req.Body, &paramData); err != nil {
 		return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, fmt.Sprintf("invalid JSON body: %v", err))
 	}
@@ -185,7 +185,7 @@ func (a *ssmAdapter) putParameter(ctx context.Context, req *cloud.Request) (*clo
 	}
 
 	// Parse tags if present
-	if tags, ok := paramData["tags"].(map[string]interface{}); ok {
+	if tags, ok := paramData["tags"].(map[string]any); ok {
 		tagList := make([]types.Tag, 0, len(tags))
 		for k, v := range tags {
 			tagList = append(tagList, types.Tag{
@@ -208,7 +208,7 @@ func (a *ssmAdapter) putParameter(ctx context.Context, req *cloud.Request) (*clo
 		Headers: map[string]string{
 			"ssm.version": fmt.Sprintf("%d", result.Version),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"ssm.version": result.Version,
 		},
 	}, nil
@@ -252,7 +252,7 @@ func (a *ssmAdapter) getParametersByPath(ctx context.Context, req *cloud.Request
 		}
 	}
 
-	var allParams []interface{}
+	var allParams []any
 	var nextToken *string
 
 	for {
@@ -294,7 +294,7 @@ func (a *ssmAdapter) getParameterHistory(ctx context.Context, req *cloud.Request
 		return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, "parameter name is required")
 	}
 
-	var allHistory []interface{}
+	var allHistory []any
 	var nextToken *string
 
 	for {
@@ -345,7 +345,7 @@ func (a *ssmAdapter) describeParameters(ctx context.Context, req *cloud.Request)
 		}
 	}
 
-	var allParams []interface{}
+	var allParams []any
 	var nextToken *string
 
 	for {
@@ -357,7 +357,7 @@ func (a *ssmAdapter) describeParameters(ctx context.Context, req *cloud.Request)
 		}
 
 		for _, param := range result.Parameters {
-			allParams = append(allParams, map[string]interface{}{
+			allParams = append(allParams, map[string]any{
 				"name":               aws.ToString(param.Name),
 				"type":               string(param.Type),
 				"last_modified_date": param.LastModifiedDate,
@@ -400,8 +400,8 @@ func normalizeSSMError(err error, operation string) *cloud.Error {
 	return normalizeAWSError(err, operation)
 }
 
-func mapParameter(param *types.Parameter) map[string]interface{} {
-	p := map[string]interface{}{
+func mapParameter(param *types.Parameter) map[string]any {
+	p := map[string]any{
 		"name":    aws.ToString(param.Name),
 		"value":   aws.ToString(param.Value),
 		"type":    string(param.Type),
@@ -420,8 +420,8 @@ func mapParameter(param *types.Parameter) map[string]interface{} {
 	return p
 }
 
-func mapParameterHistory(hist *types.ParameterHistory) map[string]interface{} {
-	ph := map[string]interface{}{
+func mapParameterHistory(hist *types.ParameterHistory) map[string]any {
+	ph := map[string]any{
 		"name":    aws.ToString(hist.Name),
 		"type":    string(hist.Type),
 		"value":   aws.ToString(hist.Value),

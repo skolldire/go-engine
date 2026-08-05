@@ -93,7 +93,7 @@ func (a *s3Adapter) putObject(ctx context.Context, req *cloud.Request) (*cloud.R
 		Headers: map[string]string{
 			"s3.etag": aws.ToString(result.ETag),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"s3.etag":                   aws.ToString(result.ETag),
 			"s3.version_id":             aws.ToString(result.VersionId),
 			"s3.server_side_encryption": string(result.ServerSideEncryption),
@@ -142,7 +142,7 @@ func (a *s3Adapter) getObject(ctx context.Context, req *cloud.Request) (*cloud.R
 		StatusCode: 200,
 		Body:       body,
 		Headers:    headers,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"s3.content_type":   aws.ToString(result.ContentType),
 			"s3.content_length": result.ContentLength,
 			"s3.etag":           aws.ToString(result.ETag),
@@ -204,7 +204,7 @@ func (a *s3Adapter) headObject(ctx context.Context, req *cloud.Request) (*cloud.
 	return &cloud.Response{
 		StatusCode: 200,
 		Headers:    headers,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"s3.content_type":   aws.ToString(result.ContentType),
 			"s3.content_length": result.ContentLength,
 			"s3.etag":           aws.ToString(result.ETag),
@@ -246,9 +246,9 @@ func (a *s3Adapter) listObjects(ctx context.Context, req *cloud.Request) (*cloud
 	}
 
 	// Convert to JSON array
-	objects := make([]map[string]interface{}, len(result.Contents))
+	objects := make([]map[string]any, len(result.Contents))
 	for i, obj := range result.Contents {
-		objects[i] = map[string]interface{}{
+		objects[i] = map[string]any{
 			"key":           aws.ToString(obj.Key),
 			"size":          obj.Size,
 			"last_modified": obj.LastModified,
@@ -305,7 +305,7 @@ func (a *s3Adapter) copyObject(ctx context.Context, req *cloud.Request) (*cloud.
 			"s3.copy_source_version_id": aws.ToString(result.CopySourceVersionId),
 			"s3.version_id":             aws.ToString(result.VersionId),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"s3.copy_source_version_id": aws.ToString(result.CopySourceVersionId),
 			"s3.version_id":             aws.ToString(result.VersionId),
 		},

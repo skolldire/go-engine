@@ -18,7 +18,7 @@ func (c *Client) ValidateToken(ctx context.Context, token string) (*TokenClaims,
 		return nil, ErrInvalidToken
 	}
 
-	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v (expected RSA)", token.Header["alg"])
 		}
@@ -63,7 +63,7 @@ func (c *Client) ValidateToken(ctx context.Context, token string) (*TokenClaims,
 	if audStr, ok := claims["aud"].(string); ok {
 		audMatch = audStr == c.config.ClientID
 		audValue = audStr
-	} else if audSlice, ok := claims["aud"].([]interface{}); ok {
+	} else if audSlice, ok := claims["aud"].([]any); ok {
 		for _, v := range audSlice {
 			if audStr, ok := v.(string); ok && audStr == c.config.ClientID {
 				audMatch = true
@@ -100,7 +100,7 @@ func (c *Client) ValidateToken(ctx context.Context, token string) (*TokenClaims,
 		Exp:           int64(exp),
 		Iat:           int64(getFloat64Claim(claims, "iat")),
 		TokenUse:      getStringClaim(claims, "token_use"),
-		CustomClaims:  make(map[string]interface{}),
+		CustomClaims:  make(map[string]any),
 	}
 
 	return tokenClaims, nil
@@ -119,7 +119,7 @@ func (c *Client) GetUserByAccessToken(ctx context.Context, accessToken string) (
 	}
 
 	var result *cognitoidentityprovider.GetUserOutput
-	_, err := c.executeOperation(ctx, "GetUserByAccessToken", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "GetUserByAccessToken", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.GetUser(ctx, input)
 		return result, err
@@ -198,7 +198,7 @@ func (c *Client) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*Au
 	}
 
 	var result *cognitoidentityprovider.InitiateAuthOutput
-	_, err := c.executeOperation(ctx, "RefreshToken", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "RefreshToken", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.InitiateAuth(ctx, input)
 		return result, err

@@ -162,7 +162,7 @@ func (s *service) ApplyDynamic(log logger.Service) (*dynamic.DynamicConfig, erro
 	// The reload path reuses buildConfig, so every reloaded snapshot is validated
 	// before it is published — a snapshot that fails validation is rejected and
 	// the previous configuration is kept.
-	dynamicConfig.SetReloadFunc(func() (interface{}, error) {
+	dynamicConfig.SetReloadFunc(func() (any, error) {
 		newConfig, _, err := s.buildConfig()
 		if err != nil {
 			return nil, err
@@ -241,8 +241,8 @@ func envVarDecodeHook() mapstructure.DecodeHookFunc {
 	return func(
 		f reflect.Type,
 		t reflect.Type,
-		data interface{},
-	) (interface{}, error) {
+		data any,
+	) (any, error) {
 		if f.Kind() != reflect.String {
 			return data, nil
 		}

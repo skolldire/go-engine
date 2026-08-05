@@ -64,7 +64,7 @@ func (m *MockS3Client) EnableLogging(enable bool) {
 }
 
 // AssertUploaded verifies that PutObject was called with the given key.
-func (m *MockS3Client) AssertUploaded(t interface{ Errorf(string, ...interface{}) }, key string) {
+func (m *MockS3Client) AssertUploaded(t interface{ Errorf(string, ...any) }, key string) {
 	for _, call := range m.Calls {
 		if call.Method == "PutObject" {
 			if k, ok := call.Arguments[1].(string); ok && k == key {

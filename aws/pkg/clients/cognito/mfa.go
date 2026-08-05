@@ -46,7 +46,7 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 	}
 
 	var result *cognitoidentityprovider.RespondToAuthChallengeOutput
-	_, err := c.executeOperation(ctx, "RespondToMFAChallenge", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "RespondToMFAChallenge", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.RespondToAuthChallenge(ctx, input)
 		return result, err
@@ -84,7 +84,7 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 
 	if c.logging {
 		c.logger.Info(ctx, "MFA challenge completed successfully",
-			map[string]interface{}{
+			map[string]any{
 				"challenge_type": req.ChallengeType,
 			})
 	}
@@ -110,7 +110,7 @@ func (c *Client) AssociateSoftwareToken(ctx context.Context, accessToken string)
 	}
 
 	var result *cognitoidentityprovider.AssociateSoftwareTokenOutput
-	_, err = c.executeOperation(ctx, "AssociateSoftwareToken", func(ctx context.Context) (interface{}, error) {
+	_, err = c.executeOperation(ctx, "AssociateSoftwareToken", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.AssociateSoftwareToken(ctx, input)
 		return result, err
@@ -157,7 +157,7 @@ func (c *Client) AssociateSoftwareToken(ctx context.Context, accessToken string)
 
 	if c.logging {
 		c.logger.Info(ctx, "Software token associated successfully",
-			map[string]interface{}{
+			map[string]any{
 				"user_id": user.ID,
 			})
 	}
@@ -198,7 +198,7 @@ func (c *Client) VerifySoftwareToken(ctx context.Context, accessToken, userCode,
 		input.Session = aws.String(session)
 	}
 
-	_, err := c.executeOperation(ctx, "VerifySoftwareToken", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "VerifySoftwareToken", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.VerifySoftwareToken(ctx, input)
 	})
 
@@ -262,7 +262,7 @@ func (c *Client) SetUserMFAPreference(ctx context.Context, accessToken string, s
 		},
 	}
 
-	_, err = c.executeOperation(ctx, "SetUserMFAPreference", func(ctx context.Context) (interface{}, error) {
+	_, err = c.executeOperation(ctx, "SetUserMFAPreference", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.SetUserMFAPreference(ctx, input)
 	})
 
@@ -278,7 +278,7 @@ func (c *Client) SetUserMFAPreference(ctx context.Context, accessToken string, s
 
 	if c.logging {
 		c.logger.Info(ctx, "User MFA preference updated",
-			map[string]interface{}{
+			map[string]any{
 				"sms_enabled":  smsEnabled,
 				"totp_enabled": totpEnabled,
 			})
@@ -305,7 +305,7 @@ func (c *Client) GetUserMFAStatus(ctx context.Context, accessToken string) (*MFA
 	}
 
 	var result *cognitoidentityprovider.GetUserOutput
-	_, err = c.executeOperation(ctx, "GetUserMFAStatus", func(ctx context.Context) (interface{}, error) {
+	_, err = c.executeOperation(ctx, "GetUserMFAStatus", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.GetUser(ctx, input)
 		return result, err
@@ -364,7 +364,7 @@ func (c *Client) GetUserMFAStatus(ctx context.Context, accessToken string) (*MFA
 
 	if c.logging {
 		c.logger.Info(ctx, "User MFA status retrieved",
-			map[string]interface{}{
+			map[string]any{
 				"mfa_enabled":      mfaStatus.MFAEnabled,
 				"mfa_types":        mfaStatus.MFATypes,
 				"preferred_method": mfaStatus.PreferredMethod,

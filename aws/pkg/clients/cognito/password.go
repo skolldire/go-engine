@@ -25,7 +25,7 @@ func (c *Client) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) 
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ForgotPassword", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "ForgotPassword", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.ForgotPassword(ctx, input)
 	})
 
@@ -35,7 +35,7 @@ func (c *Client) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) 
 
 	if c.logging {
 		c.logger.Info(ctx, "Password recovery initiated",
-			map[string]interface{}{
+			map[string]any{
 				"username": req.Username,
 			})
 	}
@@ -63,7 +63,7 @@ func (c *Client) ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPas
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ConfirmForgotPassword", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "ConfirmForgotPassword", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.ConfirmForgotPassword(ctx, input)
 	})
 
@@ -73,7 +73,7 @@ func (c *Client) ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPas
 
 	if c.logging {
 		c.logger.Info(ctx, "Password recovery confirmed",
-			map[string]interface{}{
+			map[string]any{
 				"username": req.Username,
 			})
 	}

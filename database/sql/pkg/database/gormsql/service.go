@@ -78,7 +78,7 @@ func New(cfg Config, dialector gorm.Dialector, log logger.Service) (*DBClient, e
 
 	if client.logging {
 		log.Debug(context.Background(), fmt.Sprintf("database connection to %s established", cfg.Type),
-			map[string]interface{}{"type": cfg.Type})
+			map[string]any{"type": cfg.Type})
 	}
 
 	return client, nil
@@ -91,11 +91,11 @@ func (dbc *DBClient) ensureContextWithTimeout(ctx context.Context) (context.Cont
 	return context.WithCancel(ctx)
 }
 
-func (dbc *DBClient) execute(ctx context.Context, op string, fn func(context.Context) (interface{}, error)) (interface{}, error) {
+func (dbc *DBClient) execute(ctx context.Context, op string, fn func(context.Context) (any, error)) (any, error) {
 	ctx, cancel := dbc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	fields := map[string]interface{}{"operation": op, "db_type": dbc.dbType}
+	fields := map[string]any{"operation": op, "db_type": dbc.dbType}
 
 	if dbc.resilience != nil {
 		if dbc.logging {
@@ -135,15 +135,15 @@ func (dbc *DBClient) WithContext(ctx context.Context) *gorm.DB {
 	return dbc.db.WithContext(ctx)
 }
 
-func (dbc *DBClient) Create(ctx context.Context, value interface{}) error {
-	_, err := dbc.execute(ctx, "Create", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Create(ctx context.Context, value any) error {
+	_, err := dbc.execute(ctx, "Create", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Create(value).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) First(ctx context.Context, dest interface{}, conditions ...interface{}) error {
-	_, err := dbc.execute(ctx, "First", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) First(ctx context.Context, dest any, conditions ...any) error {
+	_, err := dbc.execute(ctx, "First", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).First(dest, conditions...).Error
 	})
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -152,29 +152,29 @@ func (dbc *DBClient) First(ctx context.Context, dest interface{}, conditions ...
 	return err
 }
 
-func (dbc *DBClient) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error {
-	_, err := dbc.execute(ctx, "Find", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Find(ctx context.Context, dest any, conditions ...any) error {
+	_, err := dbc.execute(ctx, "Find", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Find(dest, conditions...).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Update(ctx context.Context, model interface{}, updates interface{}) error {
-	_, err := dbc.execute(ctx, "Update", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Update(ctx context.Context, model any, updates any) error {
+	_, err := dbc.execute(ctx, "Update", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Model(model).Updates(updates).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Delete(ctx context.Context, value interface{}, conditions ...interface{}) error {
-	_, err := dbc.execute(ctx, "Delete", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Delete(ctx context.Context, value any, conditions ...any) error {
+	_, err := dbc.execute(ctx, "Delete", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Delete(value, conditions...).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error {
-	_, err := dbc.execute(ctx, "Count", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Count(ctx context.Context, model any, count *int64, conditions ...any) error {
+	_, err := dbc.execute(ctx, "Count", func(ctx context.Context) (any, error) {
 		q := dbc.db.WithContext(ctx).Model(model)
 		if len(conditions) > 0 {
 			q = q.Where(conditions[0], conditions[1:]...)
@@ -184,15 +184,15 @@ func (dbc *DBClient) Count(ctx context.Context, model interface{}, count *int64,
 	return err
 }
 
-func (dbc *DBClient) Exec(ctx context.Context, sql string, values ...interface{}) error {
-	_, err := dbc.execute(ctx, "Exec", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Exec(ctx context.Context, sql string, values ...any) error {
+	_, err := dbc.execute(ctx, "Exec", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Exec(sql, values...).Error
 	})
 	return err
 }
 
 func (dbc *DBClient) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
-	_, err := dbc.execute(ctx, "Transaction", func(ctx context.Context) (interface{}, error) {
+	_, err := dbc.execute(ctx, "Transaction", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Transaction(fn)
 	})
 	if err != nil {
@@ -201,47 +201,47 @@ func (dbc *DBClient) Transaction(ctx context.Context, fn func(tx *gorm.DB) error
 	return nil
 }
 
-func (dbc *DBClient) Preload(ctx context.Context, dest interface{}, relation string, conditions ...interface{}) error {
-	_, err := dbc.execute(ctx, "Preload", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Preload(ctx context.Context, dest any, relation string, conditions ...any) error {
+	_, err := dbc.execute(ctx, "Preload", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Preload(relation, conditions...).Find(dest).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Where(ctx context.Context, dest interface{}, query interface{}, args ...interface{}) error {
-	_, err := dbc.execute(ctx, "Where", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Where(ctx context.Context, dest any, query any, args ...any) error {
+	_, err := dbc.execute(ctx, "Where", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Where(query, args...).Find(dest).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Order(ctx context.Context, dest interface{}, value interface{}) error {
-	_, err := dbc.execute(ctx, "Order", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Order(ctx context.Context, dest any, value any) error {
+	_, err := dbc.execute(ctx, "Order", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Order(value).Find(dest).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Limit(ctx context.Context, dest interface{}, limit int) error {
-	_, err := dbc.execute(ctx, "Limit", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Limit(ctx context.Context, dest any, limit int) error {
+	_, err := dbc.execute(ctx, "Limit", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Limit(limit).Find(dest).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Offset(ctx context.Context, dest interface{}, offset int) error {
-	_, err := dbc.execute(ctx, "Offset", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Offset(ctx context.Context, dest any, offset int) error {
+	_, err := dbc.execute(ctx, "Offset", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Offset(offset).Find(dest).Error
 	})
 	return err
 }
 
-func (dbc *DBClient) Upsert(ctx context.Context, value interface{}, conflictColumns []string, updateColumns []string) error {
+func (dbc *DBClient) Upsert(ctx context.Context, value any, conflictColumns []string, updateColumns []string) error {
 	cols := make([]clause.Column, len(conflictColumns))
 	for i, c := range conflictColumns {
 		cols[i] = clause.Column{Name: c}
 	}
-	_, err := dbc.execute(ctx, "Upsert", func(ctx context.Context) (interface{}, error) {
+	_, err := dbc.execute(ctx, "Upsert", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns:   cols,
 			DoUpdates: clause.AssignmentColumns(updateColumns),
@@ -250,15 +250,15 @@ func (dbc *DBClient) Upsert(ctx context.Context, value interface{}, conflictColu
 	return err
 }
 
-func (dbc *DBClient) AutoMigrate(models ...interface{}) error {
+func (dbc *DBClient) AutoMigrate(models ...any) error {
 	if err := dbc.db.AutoMigrate(models...); err != nil {
 		return dbc.logger.WrapError(err, "error in auto migration")
 	}
 	return nil
 }
 
-func (dbc *DBClient) Raw(ctx context.Context, dest interface{}, sql string, values ...interface{}) error {
-	_, err := dbc.execute(ctx, "Raw", func(ctx context.Context) (interface{}, error) {
+func (dbc *DBClient) Raw(ctx context.Context, dest any, sql string, values ...any) error {
+	_, err := dbc.execute(ctx, "Raw", func(ctx context.Context) (any, error) {
 		return nil, dbc.db.WithContext(ctx).Raw(sql, values...).Scan(dest).Error
 	})
 	return err
@@ -285,21 +285,21 @@ type gormLogAdapter struct {
 
 func (l *gormLogAdapter) LogMode(_ gormlogger.LogLevel) gormlogger.Interface { return l }
 
-func (l *gormLogAdapter) Info(ctx context.Context, msg string, data ...interface{}) {
-	l.logger.Info(ctx, fmt.Sprintf(msg, data...), map[string]interface{}{"type": "info"})
+func (l *gormLogAdapter) Info(ctx context.Context, msg string, data ...any) {
+	l.logger.Info(ctx, fmt.Sprintf(msg, data...), map[string]any{"type": "info"})
 }
 
-func (l *gormLogAdapter) Warn(ctx context.Context, msg string, data ...interface{}) {
-	l.logger.Warn(ctx, fmt.Sprintf(msg, data...), map[string]interface{}{"type": "warn"})
+func (l *gormLogAdapter) Warn(ctx context.Context, msg string, data ...any) {
+	l.logger.Warn(ctx, fmt.Sprintf(msg, data...), map[string]any{"type": "warn"})
 }
 
-func (l *gormLogAdapter) Error(ctx context.Context, msg string, data ...interface{}) {
-	l.logger.Error(ctx, fmt.Errorf(msg, data...), map[string]interface{}{"type": "error"})
+func (l *gormLogAdapter) Error(ctx context.Context, msg string, data ...any) {
+	l.logger.Error(ctx, fmt.Errorf(msg, data...), map[string]any{"type": "error"})
 }
 
 func (l *gormLogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	sql, rows := fc()
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"elapsed": time.Since(begin),
 		"rows":    rows,
 		"sql":     sql,

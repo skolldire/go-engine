@@ -14,7 +14,7 @@ type DynamicConfig struct {
 	config      atomic.Value
 	mu          sync.RWMutex
 	logger      logger.Service
-	reloadFunc  func() (interface{}, error)
+	reloadFunc  func() (any, error)
 	watchers    []ConfigWatcher
 	reloadHooks []ReloadHook
 	lastReload  atomic.Value
@@ -25,9 +25,9 @@ type ConfigWatcher interface {
 	Stop() error
 }
 
-type ReloadHook func(oldConfig, newConfig interface{}) error
+type ReloadHook func(oldConfig, newConfig any) error
 
-func NewDynamicConfig(initialConfig interface{}, log logger.Service) *DynamicConfig {
+func NewDynamicConfig(initialConfig any, log logger.Service) *DynamicConfig {
 	dc := &DynamicConfig{
 		logger:      log,
 		watchers:    make([]ConfigWatcher, 0),
@@ -40,11 +40,11 @@ func NewDynamicConfig(initialConfig interface{}, log logger.Service) *DynamicCon
 	return dc
 }
 
-func (dc *DynamicConfig) Get() interface{} {
+func (dc *DynamicConfig) Get() any {
 	return dc.config.Load()
 }
 
-func (dc *DynamicConfig) SetReloadFunc(fn func() (interface{}, error)) {
+func (dc *DynamicConfig) SetReloadFunc(fn func() (any, error)) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	dc.reloadFunc = fn
@@ -61,14 +61,14 @@ func (dc *DynamicConfig) Reload() error {
 	oldConfig := dc.Get()
 	newConfig, err := dc.reloadFunc()
 	if err != nil {
-		dc.logger.Error(context.Background(), err, map[string]interface{}{
+		dc.logger.Error(context.Background(), err, map[string]any{
 			"event": "config_reload_failed",
 		})
 		return err
 	}
 
 	if err := dc.validateConfig(newConfig); err != nil {
-		dc.logger.Error(context.Background(), err, map[string]interface{}{
+		dc.logger.Error(context.Background(), err, map[string]any{
 			"event": "config_validation_failed",
 		})
 		return err
@@ -76,7 +76,7 @@ func (dc *DynamicConfig) Reload() error {
 
 	for _, hook := range dc.reloadHooks {
 		if err := hook(oldConfig, newConfig); err != nil {
-			dc.logger.Warn(context.Background(), "reload hook failed: "+err.Error(), map[string]interface{}{
+			dc.logger.Warn(context.Background(), "reload hook failed: "+err.Error(), map[string]any{
 				"event": "reload_hook_failed",
 			})
 		}
@@ -85,7 +85,7 @@ func (dc *DynamicConfig) Reload() error {
 	dc.config.Store(newConfig)
 	dc.lastReload.Store(time.Now())
 
-	dc.logger.Info(context.Background(), "configuration reloaded successfully", map[string]interface{}{
+	dc.logger.Info(context.Background(), "configuration reloaded successfully", map[string]any{
 		"event": "config_reloaded",
 	})
 
@@ -116,7 +116,7 @@ func (dc *DynamicConfig) StartWatching(ctx context.Context) error {
 			if err := w.Watch(ctx, func() error {
 				return dc.Reload()
 			}); err != nil {
-				dc.logger.Error(ctx, err, map[string]interface{}{
+				dc.logger.Error(ctx, err, map[string]any{
 					"event": "watcher_error",
 				})
 			}
@@ -151,7 +151,7 @@ func (dc *DynamicConfig) GetLastReload() time.Time {
 	return lastReload.(time.Time)
 }
 
-func (dc *DynamicConfig) validateConfig(config interface{}) error {
+func (dc *DynamicConfig) validateConfig(config any) error {
 	if config == nil {
 		return fmt.Errorf("configuration cannot be nil")
 	}

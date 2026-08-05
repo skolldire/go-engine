@@ -16,8 +16,8 @@ import (
 
 var _ Service = (*service)(nil)
 
-var defaultContextExtractor = func(ctx context.Context) map[string]interface{} {
-	return map[string]interface{}{}
+var defaultContextExtractor = func(ctx context.Context) map[string]any {
+	return map[string]any{}
 }
 
 // logrusUnwrapper is implemented by logrusadapter.adapter to expose the
@@ -144,7 +144,7 @@ func getContextExtractor(extractor ContextExtractor) ContextExtractor {
 	return defaultContextExtractor
 }
 
-func (l *service) WithField(key string, value interface{}) Service {
+func (l *service) WithField(key string, value any) Service {
 	newFields := make(logrus.Fields, len(l.fields)+1)
 	for k, v := range l.fields {
 		newFields[k] = v
@@ -158,7 +158,7 @@ func (l *service) WithField(key string, value interface{}) Service {
 	}
 }
 
-func (l *service) WithFields(fields map[string]interface{}) Service {
+func (l *service) WithFields(fields map[string]any) Service {
 	if len(fields) == 0 {
 		return l
 	}
@@ -178,12 +178,12 @@ func (l *service) WithFields(fields map[string]interface{}) Service {
 	}
 }
 
-func (l *service) Info(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *service) Info(ctx context.Context, msg string, fields map[string]any) {
 	entry := l.createEntry(ctx, fields)
 	entry.Info(msg)
 }
 
-func (l *service) Error(ctx context.Context, err error, fields map[string]interface{}) {
+func (l *service) Error(ctx context.Context, err error, fields map[string]any) {
 	entry := l.createEntry(ctx, fields)
 
 	if err != nil {
@@ -194,17 +194,17 @@ func (l *service) Error(ctx context.Context, err error, fields map[string]interf
 	}
 }
 
-func (l *service) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *service) Debug(ctx context.Context, msg string, fields map[string]any) {
 	entry := l.createEntry(ctx, fields)
 	entry.Debug(msg)
 }
 
-func (l *service) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *service) Warn(ctx context.Context, msg string, fields map[string]any) {
 	entry := l.createEntry(ctx, fields)
 	entry.Warn(msg)
 }
 
-func (l *service) FatalError(ctx context.Context, err error, fields map[string]interface{}) {
+func (l *service) FatalError(ctx context.Context, err error, fields map[string]any) {
 	entry := l.createEntry(ctx, fields)
 
 	if err != nil {
@@ -235,7 +235,7 @@ func (l *service) SetLogLevel(level string) error {
 	return nil
 }
 
-func (l *service) createEntry(ctx context.Context, fields map[string]interface{}) *logrus.Entry {
+func (l *service) createEntry(ctx context.Context, fields map[string]any) *logrus.Entry {
 	// Sanitize base fields
 	sanitizedBaseFields := SanitizeFields(l.fields)
 	entry := l.Log.WithFields(sanitizedBaseFields)

@@ -36,7 +36,7 @@ func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
 			endpoint = "default AWS"
 		}
 		l.Debug(context.Background(), "SQS client initialized",
-			map[string]interface{}{
+			map[string]any{
 				"endpoint": endpoint,
 			})
 	}
@@ -52,7 +52,7 @@ func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context
 }
 
 func (c *Cliente) execute(ctx context.Context, operationName string,
-	operation func(context.Context) (interface{}, error)) (interface{}, error) {
+	operation func(context.Context) (any, error)) (any, error) {
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
@@ -60,8 +60,8 @@ func (c *Cliente) execute(ctx context.Context, operationName string,
 }
 
 func (c *Cliente) executeOperation(ctx context.Context, operationName string,
-	operation func(context.Context) (interface{}, error)) (interface{}, error) {
-	logFields := map[string]interface{}{"operation": operationName, "service": "SQS"}
+	operation func(context.Context) (any, error)) (any, error) {
+	logFields := map[string]any{"operation": operationName, "service": "SQS"}
 
 	if c.resilience != nil {
 		return c.executeWithResilience(ctx, operationName, operation, logFields)
@@ -71,7 +71,7 @@ func (c *Cliente) executeOperation(ctx context.Context, operationName string,
 }
 
 func (c *Cliente) executeWithResilience(ctx context.Context, operationName string,
-	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (any, error), logFields map[string]any) (any, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting SQS operation with resilience: %s", operationName), logFields)
 	}
@@ -88,7 +88,7 @@ func (c *Cliente) executeWithResilience(ctx context.Context, operationName strin
 }
 
 func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
-	operation func(context.Context) (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
+	operation func(context.Context) (any, error), logFields map[string]any) (any, error) {
 	if c.logging {
 		c.logger.Debug(ctx, fmt.Sprintf("starting SQS operation: %s", operationName), logFields)
 	}
@@ -104,7 +104,7 @@ func (c *Cliente) executeWithLogging(ctx context.Context, operationName string,
 	return result, err
 }
 
-func (c *Cliente) SendMsj(ctx context.Context, queueURL string, mensaje string,
+func (c *Cliente) SendMessage(ctx context.Context, queueURL string, mensaje string,
 	atributos map[string]types.MessageAttributeValue) (string, error) {
 	if queueURL == "" || mensaje == "" {
 		return "", ErrInvalidInput
@@ -116,25 +116,25 @@ func (c *Cliente) SendMsj(ctx context.Context, queueURL string, mensaje string,
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "SendMsj", func(ctx context.Context) (interface{}, error) {
+	result, err := c.execute(ctx, "SendMessage", func(ctx context.Context) (any, error) {
 		return c.cliente.SendMessage(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrEnviarMensaje.Error())
+		return "", c.logger.WrapError(err, ErrSendMessage.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sqs.SendMessageOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrEnviarMensaje.Error())
+		return "", c.logger.WrapError(err, ErrSendMessage.Error())
 	}
 	if response == nil || response.MessageId == nil {
-		return "", c.logger.WrapError(ErrEnviarMensaje, "SQS response or MessageId is nil")
+		return "", c.logger.WrapError(ErrSendMessage, "SQS response or MessageId is nil")
 	}
 	return *response.MessageId, nil
 }
 
-func (c *Cliente) SendJSON(ctx context.Context, queueURL string, mensaje interface{},
+func (c *Cliente) SendJSON(ctx context.Context, queueURL string, mensaje any,
 	atributos map[string]types.MessageAttributeValue) (string, error) {
 	if queueURL == "" || mensaje == nil {
 		return "", ErrInvalidInput
@@ -145,10 +145,10 @@ func (c *Cliente) SendJSON(ctx context.Context, queueURL string, mensaje interfa
 		return "", fmt.Errorf("error converting message to JSON: %w", err)
 	}
 
-	return c.SendMsj(ctx, queueURL, string(jsonBytes), atributos)
+	return c.SendMessage(ctx, queueURL, string(jsonBytes), atributos)
 }
 
-func (c *Cliente) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes int32,
+func (c *Cliente) ReceiveMessages(ctx context.Context, queueURL string, maxMensajes int32,
 	tiempoEspera int32) ([]types.Message, error) {
 	if queueURL == "" {
 		return nil, ErrInvalidInput
@@ -165,25 +165,25 @@ func (c *Cliente) ReceiveMsj(ctx context.Context, queueURL string, maxMensajes i
 		MessageAttributeNames: []string{"All"},
 	}
 
-	result, err := c.execute(ctx, "RecibirMensajes", func(ctx context.Context) (interface{}, error) {
+	result, err := c.execute(ctx, "RecibirMensajes", func(ctx context.Context) (any, error) {
 		return c.cliente.ReceiveMessage(ctx, input)
 	})
 
 	if err != nil {
-		return nil, c.logger.WrapError(err, ErrRecibirMensajes.Error())
+		return nil, c.logger.WrapError(err, ErrReceiveMessages.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sqs.ReceiveMessageOutput](result)
 	if err != nil {
-		return nil, c.logger.WrapError(err, ErrRecibirMensajes.Error())
+		return nil, c.logger.WrapError(err, ErrReceiveMessages.Error())
 	}
 	if response == nil {
-		return nil, c.logger.WrapError(fmt.Errorf("received nil response"), ErrRecibirMensajes.Error())
+		return nil, c.logger.WrapError(fmt.Errorf("received nil response"), ErrReceiveMessages.Error())
 	}
 	return response.Messages, nil
 }
 
-func (c *Cliente) DeleteMsj(ctx context.Context, queueURL string, receiptHandle string) error {
+func (c *Cliente) DeleteMessage(ctx context.Context, queueURL string, receiptHandle string) error {
 	if queueURL == "" || receiptHandle == "" {
 		return ErrInvalidInput
 	}
@@ -193,12 +193,12 @@ func (c *Cliente) DeleteMsj(ctx context.Context, queueURL string, receiptHandle 
 		ReceiptHandle: aws.String(receiptHandle),
 	}
 
-	_, err := c.execute(ctx, "DeleteMsj", func(ctx context.Context) (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteMessage", func(ctx context.Context) (any, error) {
 		return c.cliente.DeleteMessage(ctx, input)
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, ErrEliminarMensaje.Error())
+		return c.logger.WrapError(err, ErrDeleteMessage.Error())
 	}
 
 	return nil
@@ -217,20 +217,20 @@ func (c *Cliente) CreateQueue(ctx context.Context, nombre string, atributos map[
 		input.Attributes = atributos
 	}
 
-	result, err := c.execute(ctx, "CreateQueue", func(ctx context.Context) (interface{}, error) {
+	result, err := c.execute(ctx, "CreateQueue", func(ctx context.Context) (any, error) {
 		return c.cliente.CreateQueue(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCrearCola.Error())
+		return "", c.logger.WrapError(err, ErrCreateQueue.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sqs.CreateQueueOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCrearCola.Error())
+		return "", c.logger.WrapError(err, ErrCreateQueue.Error())
 	}
 	if response == nil || response.QueueUrl == nil {
-		return "", c.logger.WrapError(ErrCrearCola, "SQS response or QueueUrl is nil")
+		return "", c.logger.WrapError(ErrCreateQueue, "SQS response or QueueUrl is nil")
 	}
 	return *response.QueueUrl, nil
 }
@@ -240,14 +240,14 @@ func (c *Cliente) DeleteQueue(ctx context.Context, queueURL string) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteQueue", func(ctx context.Context) (interface{}, error) {
+	_, err := c.execute(ctx, "DeleteQueue", func(ctx context.Context) (any, error) {
 		return c.cliente.DeleteQueue(ctx, &sqs.DeleteQueueInput{
 			QueueUrl: aws.String(queueURL),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, ErrEliminarCola.Error())
+		return c.logger.WrapError(err, ErrDeleteQueue.Error())
 	}
 
 	return nil
@@ -259,17 +259,17 @@ func (c *Cliente) ListQueue(ctx context.Context, prefijo string) ([]string, erro
 		input.QueueNamePrefix = aws.String(prefijo)
 	}
 
-	result, err := c.execute(ctx, "ListQueue", func(ctx context.Context) (interface{}, error) {
+	result, err := c.execute(ctx, "ListQueue", func(ctx context.Context) (any, error) {
 		return c.cliente.ListQueues(ctx, input)
 	})
 
 	if err != nil {
-		return nil, c.logger.WrapError(err, ErrListarColas.Error())
+		return nil, c.logger.WrapError(err, ErrListQueues.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sqs.ListQueuesOutput](result)
 	if err != nil {
-		return nil, c.logger.WrapError(err, ErrListarColas.Error())
+		return nil, c.logger.WrapError(err, ErrListQueues.Error())
 	}
 	urls := make([]string, len(response.QueueUrls))
 	copy(urls, response.QueueUrls)
@@ -282,22 +282,22 @@ func (c *Cliente) GetURLQueue(ctx context.Context, nombre string) (string, error
 		return "", ErrInvalidInput
 	}
 
-	result, err := c.execute(ctx, "GetURLQueue", func(ctx context.Context) (interface{}, error) {
+	result, err := c.execute(ctx, "GetURLQueue", func(ctx context.Context) (any, error) {
 		return c.cliente.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{
 			QueueName: aws.String(nombre),
 		})
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrObtenerURLCola.Error())
+		return "", c.logger.WrapError(err, ErrGetQueueURL.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sqs.GetQueueUrlOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrObtenerURLCola.Error())
+		return "", c.logger.WrapError(err, ErrGetQueueURL.Error())
 	}
 	if response == nil || response.QueueUrl == nil {
-		return "", c.logger.WrapError(ErrObtenerURLCola, "SQS response or QueueUrl is nil")
+		return "", c.logger.WrapError(ErrGetQueueURL, "SQS response or QueueUrl is nil")
 	}
 	return *response.QueueUrl, nil
 }

@@ -241,7 +241,7 @@ func (b *AppBuilder) WithJWTAuth(cfg router.JWTAuthConfig) *AppBuilder {
 	return b
 }
 
-func (b *AppBuilder) WithCustomClient(name string, client interface{}) *AppBuilder {
+func (b *AppBuilder) WithCustomClient(name string, client any) *AppBuilder {
 	if name == "" {
 		b.addError(fmt.Errorf("client name cannot be empty"))
 		return b

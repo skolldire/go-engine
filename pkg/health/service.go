@@ -30,7 +30,7 @@ func (hs *HealthService) Register(name string, checker Checker) *HealthService {
 	hs.mu.Unlock()
 	if hs.cfg.EnableLogging {
 		hs.log.Debug(context.Background(), "health checker registered",
-			map[string]interface{}{"checker": name})
+			map[string]any{"checker": name})
 	}
 	return hs
 }

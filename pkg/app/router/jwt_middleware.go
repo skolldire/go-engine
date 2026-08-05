@@ -170,7 +170,7 @@ func extractBearer(r *http.Request) string {
 }
 
 func parseAndValidate(ctx context.Context, tokenStr string, cfg JWTAuthConfig, cache *jwksCache) (*Claims, error) {
-	parsed, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+	parsed, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
 		if token.Method.Alg() != "RS256" {
 			return nil, fmt.Errorf("unexpected signing method: %v (expected RS256)", token.Header["alg"])
 		}
@@ -213,7 +213,7 @@ func audienceMatches(claims jwt.MapClaims, expected string) bool {
 	if aud, ok := claims["aud"].(string); ok && aud == expected {
 		return true
 	}
-	if auds, ok := claims["aud"].([]interface{}); ok {
+	if auds, ok := claims["aud"].([]any); ok {
 		for _, a := range auds {
 			if s, ok := a.(string); ok && s == expected {
 				return true
@@ -228,7 +228,7 @@ func audienceMatches(claims jwt.MapClaims, expected string) bool {
 }
 
 func buildClaims(m jwt.MapClaims, groupsClaim string) *Claims {
-	c := &Claims{Raw: make(map[string]interface{})}
+	c := &Claims{Raw: make(map[string]any)}
 	for k, v := range m {
 		c.Raw[k] = v
 	}
@@ -244,7 +244,7 @@ func buildClaims(m jwt.MapClaims, groupsClaim string) *Claims {
 	if v, ok := m["token_use"].(string); ok {
 		c.TokenUse = v
 	}
-	if raw, ok := m[groupsClaim].([]interface{}); ok {
+	if raw, ok := m[groupsClaim].([]any); ok {
 		for _, g := range raw {
 			if s, ok := g.(string); ok {
 				c.Groups = append(c.Groups, s)

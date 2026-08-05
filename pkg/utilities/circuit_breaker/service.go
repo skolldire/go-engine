@@ -25,8 +25,8 @@ func NewCircuitBreaker(d Dependencies) *CircuitBreaker {
 	}
 }
 
-func (cb *CircuitBreaker) Execute(ctx context.Context, operation func() (interface{}, error)) (interface{}, error) {
-	result, err := cb.cb.Execute(func() (interface{}, error) {
+func (cb *CircuitBreaker) Execute(ctx context.Context, operation func() (any, error)) (any, error) {
+	result, err := cb.cb.Execute(func() (any, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -63,7 +63,7 @@ func createReadyToTripFunc(config *Config, log logger.Service) func(counts gobre
 
 			if shouldTrip && log != nil {
 				log.Warn(context.Background(), "circuit breaker changing to open state",
-					map[string]interface{}{"circuit": config.Name,
+					map[string]any{"circuit": config.Name,
 						"requests":    counts.Requests,
 						"failures":    counts.TotalFailures,
 						"failureRate": failureRate,
@@ -80,7 +80,7 @@ func createOnStateChangeFunc(config *Config, log logger.Service) func(name strin
 	return func(name string, from gobreaker.State, to gobreaker.State) {
 		if log != nil {
 			log.Warn(context.Background(), "circuit breaker state changed",
-				map[string]interface{}{"circuit": name,
+				map[string]any{"circuit": name,
 					"from": stateToString(from),
 					"to":   stateToString(to)})
 		}

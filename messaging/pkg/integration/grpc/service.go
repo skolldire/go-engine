@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func NewCliente(cfg Config, log logger.Service) (Service, error) {
+func NewClient(cfg Config, log logger.Service) (Service, error) {
 	timeout := cfg.TimeOut
 	if timeout <= 0 {
 		timeout = DefaultTimeout
@@ -57,7 +57,7 @@ func NewCliente(cfg Config, log logger.Service) (Service, error) {
 
 	if c.logging {
 		c.logger.Debug(ctx, "gRPC server connection established successfully",
-			map[string]interface{}{"target": cfg.Target})
+			map[string]any{"target": cfg.Target})
 	}
 
 	return c, nil
@@ -87,7 +87,7 @@ func waitForConnection(ctx context.Context, conn *grpc.ClientConn) error {
 	}
 }
 
-func (c *Cliente) execute(ctx context.Context, operationName string, operation func(context.Context) (interface{}, error)) (interface{}, error) {
+func (c *Cliente) execute(ctx context.Context, operationName string, operation func(context.Context) (any, error)) (any, error) {
 	ctx, cancel := c.ensureContextWithTimeout(ctx)
 	defer cancel()
 
@@ -95,11 +95,11 @@ func (c *Cliente) execute(ctx context.Context, operationName string, operation f
 	if state != connectivity.Ready && state != connectivity.Idle {
 		if c.logging {
 			c.logger.Warn(ctx, fmt.Sprintf("gRPC connection state not optimal: %v", state),
-				map[string]interface{}{"operation": operationName})
+				map[string]any{"operation": operationName})
 		}
 	}
 
-	logFields := map[string]interface{}{"operation": operationName}
+	logFields := map[string]any{"operation": operationName}
 
 	if c.resilience != nil {
 		if c.logging {
@@ -175,7 +175,7 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 
 	if c.logging {
 		c.logger.Warn(ctx, "attempting gRPC reconnection",
-			map[string]interface{}{"state": state, "target": c.target})
+			map[string]any{"state": state, "target": c.target})
 	}
 
 	// Dial the new connection before closing the old one, and reuse the same
@@ -199,7 +199,7 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 
 	if c.logging {
 		c.logger.Info(ctx, "gRPC reconnection successful",
-			map[string]interface{}{"target": c.target})
+			map[string]any{"target": c.target})
 	}
 
 	return nil
@@ -208,7 +208,7 @@ func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
 func (c *Cliente) Close() error {
 	if c.logging {
 		c.logger.Debug(context.Background(), "closing gRPC connection",
-			map[string]interface{}{"target": c.target})
+			map[string]any{"target": c.target})
 	}
 	return c.getConn().Close()
 }
@@ -218,16 +218,16 @@ func (c *Cliente) WithLogging(enable bool) {
 }
 
 func (c *Cliente) InvokeRPC(ctx context.Context, operationName string,
-	invokeFunc func(ctx context.Context) (interface{}, error)) (interface{}, error) {
+	invokeFunc func(ctx context.Context) (any, error)) (any, error) {
 	state := c.getConn().GetState()
 	if state != connectivity.Ready && state != connectivity.Idle {
 		if err := c.ReconnectIfNeeded(ctx); err != nil && c.logging {
 			c.logger.Warn(ctx, "reconnection failed, attempting operation with current connection",
-				map[string]interface{}{"error": err.Error(), "operation": operationName})
+				map[string]any{"error": err.Error(), "operation": operationName})
 		}
 	}
 
-	return c.execute(ctx, operationName, func(ctx context.Context) (interface{}, error) {
+	return c.execute(ctx, operationName, func(ctx context.Context) (any, error) {
 		return invokeFunc(ctx)
 	})
 }

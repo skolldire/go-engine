@@ -30,7 +30,7 @@ type Service interface {
 	Close() error
 	WithLogging(enable bool)
 	InvokeRPC(ctx context.Context, operationName string,
-		invokeFunc func(ctx context.Context) (interface{}, error)) (interface{}, error)
+		invokeFunc func(ctx context.Context) (any, error)) (any, error)
 }
 
 type Config struct {

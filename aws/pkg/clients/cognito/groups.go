@@ -28,7 +28,7 @@ func (c *Client) AddUserToGroup(ctx context.Context, username, group string) err
 		GroupName:  aws.String(group),
 	}
 
-	_, err := c.executeOperation(ctx, "AddUserToGroup", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "AddUserToGroup", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.AdminAddUserToGroup(ctx, input)
 	})
 
@@ -40,7 +40,7 @@ func (c *Client) AddUserToGroup(ctx context.Context, username, group string) err
 		// No se registra el username: puede ser PII (email/teléfono).
 		// group es el nombre del rol, no es PII.
 		c.logger.Info(ctx, "User added to group successfully",
-			map[string]interface{}{
+			map[string]any{
 				"group": group,
 			})
 	}
@@ -67,7 +67,7 @@ func (c *Client) RemoveUserFromGroup(ctx context.Context, username, group string
 		GroupName:  aws.String(group),
 	}
 
-	_, err := c.executeOperation(ctx, "RemoveUserFromGroup", func(ctx context.Context) (interface{}, error) {
+	_, err := c.executeOperation(ctx, "RemoveUserFromGroup", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.AdminRemoveUserFromGroup(ctx, input)
 	})
 
@@ -78,7 +78,7 @@ func (c *Client) RemoveUserFromGroup(ctx context.Context, username, group string
 	if c.logging {
 		// No se registra el username: puede ser PII (email/teléfono).
 		c.logger.Info(ctx, "User removed from group successfully",
-			map[string]interface{}{
+			map[string]any{
 				"group": group,
 			})
 	}
@@ -107,7 +107,7 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 			NextToken:  nextToken,
 		}
 
-		result, err := c.executeOperation(ctx, "ListGroupsForUser", func(ctx context.Context) (interface{}, error) {
+		result, err := c.executeOperation(ctx, "ListGroupsForUser", func(ctx context.Context) (any, error) {
 			return c.cognitoClient.AdminListGroupsForUser(ctx, input)
 		})
 
@@ -137,7 +137,7 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 	if c.logging {
 		// No se registra el username: puede ser PII (email/teléfono).
 		c.logger.Info(ctx, "Listed groups for user successfully",
-			map[string]interface{}{
+			map[string]any{
 				"count": len(groups),
 			})
 	}

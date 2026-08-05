@@ -53,7 +53,7 @@ type Request struct {
 }
 
 // WithJSONBody sets Body by JSON-marshaling the given value
-func (r *Request) WithJSONBody(v interface{}) error {
+func (r *Request) WithJSONBody(v any) error {
 	body, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON body: %w", err)

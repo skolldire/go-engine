@@ -66,7 +66,7 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 
 		if r.logger != nil {
 			r.logger.Debug(ctx, "retrying operation after error",
-				map[string]interface{}{"attempt": attempt + 1,
+				map[string]any{"attempt": attempt + 1,
 					"maxRetries": r.config.MaxRetries,
 					"waitTime":   waitTime,
 					"error":      err.Error()})

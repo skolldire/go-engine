@@ -36,7 +36,7 @@ func (m *loggingMiddleware) Do(ctx context.Context, req *cloud.Request) (*cloud.
 	service, verb := extractServiceVerb(req.Operation)
 
 	// Build log fields
-	logFields := map[string]interface{}{
+	logFields := map[string]any{
 		"request_id": requestID,
 		"operation":  req.Operation,
 		"service":    service,

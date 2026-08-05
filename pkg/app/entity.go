@@ -170,28 +170,28 @@ func (e *Engine) GetConfigs() *ConfigRegistry {
 }
 
 // Legacy getters for backward compatibility
-func (e *Engine) GetRepositoryConfig(name string) interface{} {
+func (e *Engine) GetRepositoryConfig(name string) any {
 	if e.Configs == nil || e.Configs.Repositories == nil {
 		return nil
 	}
 	return e.Configs.Repositories[name]
 }
 
-func (e *Engine) GetUseCaseConfig(name string) interface{} {
+func (e *Engine) GetUseCaseConfig(name string) any {
 	if e.Configs == nil || e.Configs.UseCases == nil {
 		return nil
 	}
 	return e.Configs.UseCases[name]
 }
 
-func (e *Engine) GetHandlerConfig(name string) interface{} {
+func (e *Engine) GetHandlerConfig(name string) any {
 	if e.Configs == nil || e.Configs.Handlers == nil {
 		return nil
 	}
 	return e.Configs.Handlers[name]
 }
 
-func (e *Engine) GetBatchConfig(name string) interface{} {
+func (e *Engine) GetBatchConfig(name string) any {
 	if e.Configs == nil || e.Configs.Batches == nil {
 		return nil
 	}
@@ -308,7 +308,7 @@ func (e *Engine) GetOTELProvider() pkgotel.Provider {
 }
 
 // GetCustomClient retrieves a custom client by name
-func (e *Engine) GetCustomClient(name string) interface{} {
+func (e *Engine) GetCustomClient(name string) any {
 	if e.Services == nil || e.Services.CustomClients == nil {
 		return nil
 	}
