@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	baseclient "github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
@@ -41,9 +41,7 @@ type Config struct {
 }
 
 type RedisClient struct {
-	client     *redis.Client
-	logger     logger.Service
-	logging    bool
-	resilience *resilience.Service
-	keyPrefix  string
+	client    *redis.Client
+	keyPrefix string
+	*baseclient.BaseClient
 }

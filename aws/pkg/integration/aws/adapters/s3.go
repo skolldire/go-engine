@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"time"
 
@@ -231,7 +232,12 @@ func (a *s3Adapter) listObjects(ctx context.Context, req *cloud.Request) (*cloud
 	if req.QueryParams != nil {
 		if maxKeys, ok := req.QueryParams["MaxKeys"]; ok {
 			var max int
-			if _, err := fmt.Sscanf(maxKeys, "%d", &max); err == nil {
+			// Clamp before narrowing: an unchecked int -> int32 conversion wraps
+			// negative on 64-bit platforms for large caller-supplied values.
+			if _, err := fmt.Sscanf(maxKeys, "%d", &max); err == nil && max > 0 {
+				if max > math.MaxInt32 {
+					max = math.MaxInt32
+				}
 				input.MaxKeys = aws.Int32(int32(max))
 			}
 		}

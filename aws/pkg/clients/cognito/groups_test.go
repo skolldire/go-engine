@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	baseclient "github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,8 +37,7 @@ func newGroupsStubClient(api cognitoAPI) *Client {
 	return &Client{
 		config:        Config{UserPoolID: "us-east-1_TestPool123"},
 		cognitoClient: api,
-		logger:        &mockLogger{},
-		logging:       false,
+		BaseClient:    baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, &mockLogger{}, "Cognito"),
 	}
 }
 

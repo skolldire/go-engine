@@ -38,13 +38,6 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 		region:     cfg.Region,
 	}
 
-	if c.IsLoggingEnabled() {
-		log.Debug(context.Background(), "SSM client initialized",
-			map[string]any{
-				"region": cfg.Region,
-			})
-	}
-
 	return c
 }
 
@@ -146,11 +139,11 @@ func (c *SSMClient) PutParameter(ctx context.Context, name, value, parameterType
 	}
 
 	if err := validation.GetGlobalValidator().Var(name, "max=2048"); err != nil {
-		return fmt.Errorf("%w: parameter name %v", ErrInvalidInput, err)
+		return fmt.Errorf("%w: parameter name %w", ErrInvalidInput, err)
 	}
 
 	if err := validation.GetGlobalValidator().Var(value, "max=4096"); err != nil {
-		return fmt.Errorf("%w: parameter value %v", ErrInvalidInput, err)
+		return fmt.Errorf("%w: parameter value %w", ErrInvalidInput, err)
 	}
 
 	if parameterType == "" {

@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/skolldire/go-engine/pkg/utilities/error_handler"
+	"golang.org/x/sync/singleflight"
 )
 
 // JWTAuthConfig configures the JWT validation middleware.
@@ -137,10 +139,11 @@ func configError(cfg JWTAuthConfig) string {
 }
 
 // errorCode maps a validation error to a stable reason string surfaced in
-// the CommonApiError "details.reason" field.
+// the CommonApiError "details.reason" field. It matches on the library's
+// sentinel errors rather than on message text, which COMPATIBILITY.md requires
+// and which survives upstream wording changes.
 func errorCode(err error) string {
-	msg := err.Error()
-	if strings.Contains(msg, "expired") {
+	if errors.Is(err, jwt.ErrTokenExpired) {
 		return "expired_token"
 	}
 	return "invalid_token"
@@ -264,6 +267,10 @@ type jwksCache struct {
 	fetchedAt  time.Time
 	httpClient *http.Client
 	now        func() time.Time
+	// refresh collapses concurrent refreshes into a single JWKS fetch. Without
+	// it the write lock was held for the whole HTTP round trip, so every
+	// in-flight request serialised behind a key rotation.
+	refresh singleflight.Group
 }
 
 const jwksRefreshThreshold = 10 * time.Minute
@@ -303,27 +310,47 @@ func (c *jwksCache) getKey(ctx context.Context, kid string) (*rsa.PublicKey, err
 		return key, nil
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Exactly one goroutine performs the fetch; the others wait for its result.
+	// The mutex is never held across the network call.
+	_, err, _ := c.refresh.Do("jwks", func() (any, error) {
+		// A concurrent refresh may have completed while this call queued.
+		c.mu.RLock()
+		fresh := c.clock().Sub(c.fetchedAt) < threshold
+		c.mu.RUnlock()
+		if fresh {
+			return nil, nil
+		}
 
-	// double-check: another goroutine may have refreshed already
-	if k, ok := c.keys[kid]; ok && c.clock().Sub(c.fetchedAt) < threshold {
-		return k, nil
-	}
+		newKeys, fetchErr := fetchJWKS(ctx, c.httpClient, c.endpoint)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
 
-	newKeys, err := fetchJWKS(ctx, c.httpClient, c.endpoint)
+		c.mu.Lock()
+		c.keys = newKeys
+		c.fetchedAt = c.clock()
+		c.mu.Unlock()
+
+		return nil, nil
+	})
+
 	if err != nil {
 		// Stale fallback on network failure, bounded to maxStaleWindow so
 		// arbitrarily old keys are never trusted.
-		if key != nil && c.clock().Sub(c.fetchedAt) < maxStaleWindow {
+		c.mu.RLock()
+		staleAge := c.clock().Sub(c.fetchedAt)
+		c.mu.RUnlock()
+
+		if key != nil && staleAge < maxStaleWindow {
 			return key, nil
 		}
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
-	c.keys = newKeys
-	c.fetchedAt = c.clock()
 
+	c.mu.RLock()
 	k, ok := c.keys[kid]
+	c.mu.RUnlock()
+
 	if !ok {
 		return nil, fmt.Errorf("key with kid %q not found in JWKS endpoint %s", kid, c.endpoint)
 	}

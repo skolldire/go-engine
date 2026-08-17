@@ -48,6 +48,13 @@ type Checker interface {
 	Check(ctx context.Context) error
 }
 
+// CheckerFunc adapts a plain function to Checker, so a provider can contribute
+// a health check without declaring a type for it.
+type CheckerFunc func(ctx context.Context) error
+
+// Check implements Checker.
+func (f CheckerFunc) Check(ctx context.Context) error { return f(ctx) }
+
 // DependencyStatus is the result of one checker run.
 type DependencyStatus struct {
 	Name      string `json:"name"`

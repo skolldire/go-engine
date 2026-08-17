@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -38,6 +37,13 @@ func NewService(c Config, opts ...RouterOption) *App {
 	if c.ShutdownTimeout == 0 {
 		c.ShutdownTimeout = defaultShutdownTimeout
 	}
+	if c.HandlerTimeout == 0 {
+		// Track WriteTimeout so the two stay coherent when only one is set.
+		c.HandlerTimeout = c.WriteTimeout
+		if c.HandlerTimeout == 0 {
+			c.HandlerTimeout = defaultHandlerTimeout
+		}
+	}
 
 	app := &App{
 		router:          chi.NewRouter(),
@@ -47,6 +53,12 @@ func NewService(c Config, opts ...RouterOption) *App {
 
 	for _, opt := range opts {
 		opt(app)
+	}
+
+	// NewService(cfg) without WithLogger is a supported call; without this the
+	// first a.logger.Info in Run panicked on a nil interface.
+	if app.logger == nil {
+		app.logger = noopLogger{}
 	}
 
 	app.configureMiddlewares()
@@ -75,7 +87,7 @@ func (a *App) configureMiddlewares() {
 	}
 	a.router.Use(middleware.Logger)
 	a.router.Use(middleware.Recoverer)
-	a.router.Use(middleware.Timeout(60 * time.Second))
+	a.router.Use(middleware.Timeout(a.config.HandlerTimeout))
 	a.router.Use(middleware.Compress(5))
 	if a.config.EnableCORS {
 		a.router.Use(cors.Handler(cors.Options{
@@ -124,9 +136,26 @@ func (a *App) Router() *chi.Mux {
 }
 
 // RegisterShutdownHook registers fn to be called during graceful shutdown,
-// after the HTTP server stops accepting connections.
+// after the HTTP server stops accepting connections. Safe for concurrent use:
+// nothing stops a caller from registering a hook after Run has started.
 func (a *App) RegisterShutdownHook(fn func(context.Context) error) {
+	if fn == nil {
+		return
+	}
+	a.hooksMu.Lock()
+	defer a.hooksMu.Unlock()
 	a.shutdownHooks = append(a.shutdownHooks, fn)
+}
+
+// takeShutdownHooks returns the registered hooks and clears the list, so hooks
+// run exactly once and a concurrent registration cannot mutate the slice while
+// it is being iterated.
+func (a *App) takeShutdownHooks() []func(context.Context) error {
+	a.hooksMu.Lock()
+	defer a.hooksMu.Unlock()
+	hooks := a.shutdownHooks
+	a.shutdownHooks = nil
+	return hooks
 }
 
 // Run starts the HTTP server and blocks until one of the following happens:
@@ -149,7 +178,7 @@ func (a *App) Run(ctx context.Context) error {
 	errorCh := make(chan error, 1)
 
 	go func() {
-		a.logger.Info(ctx, "Iniciando servidor", map[string]any{
+		a.logger.Info(ctx, "starting server", map[string]any{
 			"address": a.server.Addr,
 		})
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -181,7 +210,7 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 
-	for _, hook := range a.shutdownHooks {
+	for _, hook := range a.takeShutdownHooks() {
 		if err := hook(shutdownCtx); err != nil {
 			a.logger.Error(ctx, err, map[string]any{
 				"message": "error during shutdown hook",

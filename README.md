@@ -8,19 +8,26 @@ Go framework for enterprise microservices. Provides a fluent builder that wires 
 
 ---
 
-## Modules
+## Packages
 
-| Module | Import path | Details |
+`go-engine` is a **single Go module** (`github.com/skolldire/go-engine`). The
+directories below are package groups inside it, not separately versioned
+modules: `go get github.com/skolldire/go-engine` brings in all of them.
+
+> Splitting these into independent modules, so consumers only download what they
+> import, is planned — see [`docs/plan-auditoria-2026-08.md`](docs/plan-auditoria-2026-08.md).
+
+| Package group | Import path | Details |
 |---|---|---|
-| **core** | `github.com/skolldire/go-engine` | AppBuilder, Engine, health, resilience, error_handler, app_profile, OTEL, observability |
-| **aws** | `github.com/skolldire/go-engine/aws` | Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, AWS facade |
-| **messaging** | `github.com/skolldire/go-engine/messaging` | Kafka, RabbitMQ, gRPC client/server |
-| **database/sql** | `github.com/skolldire/go-engine/database/sql` | GORM wrapper (`gormsql.DBClient`) |
-| **database/redis** | `github.com/skolldire/go-engine/database/redis` | Redis client (go-redis/v9) |
-| **database/mongodb** | `github.com/skolldire/go-engine/database/mongodb` | MongoDB client |
-| **database/memcached** | `github.com/skolldire/go-engine/database/memcached` | Memcached client |
+| **core** | `github.com/skolldire/go-engine/pkg/...` | AppBuilder, Engine, health, resilience, error_handler, app_profile, OTEL, observability |
+| **aws** | `github.com/skolldire/go-engine/aws/pkg/...` | Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, AWS facade |
+| **messaging** | `github.com/skolldire/go-engine/messaging/pkg/...` | Kafka, RabbitMQ, gRPC client/server |
+| **database/sql** | `github.com/skolldire/go-engine/database/sql/pkg/...` | GORM wrapper (`gormsql.DBClient`) |
+| **database/redis** | `github.com/skolldire/go-engine/database/redis/pkg/...` | Redis client (go-redis/v9) |
+| **database/mongodb** | `github.com/skolldire/go-engine/database/mongodb/pkg/...` | MongoDB client |
+| **database/memcached** | `github.com/skolldire/go-engine/database/memcached/pkg/...` | Memcached client |
 
-Each module has its own README with configuration reference and usage examples:
+Each package group has its own README with configuration reference and usage examples:
 [`aws/`](aws/README.md) · [`messaging/`](messaging/README.md) · [`database/sql/`](database/sql/README.md) · [`database/redis/`](database/redis/README.md) · [`database/mongodb/`](database/mongodb/README.md) · [`database/memcached/`](database/memcached/README.md)
 
 ---
@@ -38,6 +45,7 @@ import (
     "time"
 
     "github.com/skolldire/go-engine/pkg/app"
+    "github.com/skolldire/go-engine/pkg/app/router"
     "github.com/skolldire/go-engine/pkg/health"
     pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 )
@@ -63,7 +71,7 @@ func main() {
         RegisterHealthChecker("postgres", myDBChecker).
         RegisterHealthChecker("redis", myRedisChecker).
         WithJWTAuth(router.JWTAuthConfig{           // validate Bearer tokens
-            JWKSEndpoint: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
+            JWKSURL:  "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
             Issuer:       "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX",
             Audience:     "your-client-id",
             SkipPaths:    []string{"/health", "/ping", "/live", "/ready"},
@@ -74,7 +82,10 @@ func main() {
     }
 
     engine.GetRouter().AddRoute("GET", "/users", usersHandler)
-    engine.Run()
+
+    if err := engine.Run(); err != nil {
+        os.Exit(1)
+    }
 }
 ```
 
@@ -107,7 +118,7 @@ redis_clients:
 sqs_clients:
   - orders:
       endpoint: "http://localhost:4566"
-      wait_time: 20
+      enable_logging: true
 
 kafka:
   brokers: ["kafka:9092"]
@@ -143,8 +154,6 @@ Full schema: see [CLAUDE.md](CLAUDE.md).
 | `WithGracefulShutdown()` | No-op — graceful shutdown is built into `Router.Run()` |
 | `Build()` | Returns `*Engine` or accumulated errors |
 
-| `WithJWTAuth(cfg)` | Registers JWT Bearer validation middleware; must be called after `WithRouter` |
-
 ---
 
 ## Engine getters
@@ -172,7 +181,7 @@ engine.GetGRPCClient("auth")           // grpcClient.Service
 engine.GetKafkaProducer()              // kafka.Producer
 engine.GetKafkaConsumer()              // kafka.Consumer
 engine.GetCognito()                    // cognito.Service
-engine.GetCustomClient("my-db")        // interface{}
+engine.GetCustomClient("my-db")        // any
 ```
 
 ---
@@ -219,8 +228,8 @@ cfg := resilience.Config{
     },
 }
 svc := resilience.NewResilienceService(cfg, log)
-result, err := svc.Execute(ctx, func() (interface{}, error) {
-    return callExternalAPI()
+result, err := svc.Execute(ctx, func(ctx context.Context) (any, error) {
+    return callExternalAPI(ctx)
 })
 ```
 
@@ -313,7 +322,7 @@ engine, _ := app.NewAppBuilder().
     WithDynamicConfig().
     WithRouter().
     WithJWTAuth(router.JWTAuthConfig{
-        JWKSEndpoint: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
+        JWKSURL:  "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
         Issuer:       "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX",
         Audience:     "your-app-client-id",
         SkipPaths:    []string{"/health", "/ping", "/live", "/ready"},
@@ -398,7 +407,7 @@ make test        # go test ./...
 
 - `entity.go` — structs, interfaces, constants. `service.go` — implementation. `service_test.go` — tests.
 - Multi-instance clients use `[]map[name]Config` in YAML (e.g. `redis_clients`). Singular fields are legacy.
-- `client.SafeTypeAssert[T](raw)` — safe type assertion on `interface{}` values from `GetCustomClient`.
+- `client.SafeTypeAssert[T](raw)` — safe type assertion on `any` values from `GetCustomClient`.
 - Comments explain *why*, not *what*. No godoc that restates the function name.
 - Minimum test coverage: 80% per package. Use `testify/assert` + `testify/mock`.
 

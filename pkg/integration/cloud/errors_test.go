@@ -15,7 +15,7 @@ func TestError_Error(t *testing.T) {
 func TestError_Unwrap(t *testing.T) {
 	cause := errors.New("original error")
 	err := NewErrorWithCause("test.code", "test message", cause)
-	if err.Unwrap() != cause {
+	if !errors.Is(err.Unwrap(), cause) {
 		t.Errorf("Unwrap() = %v, want %v", err.Unwrap(), cause)
 	}
 }

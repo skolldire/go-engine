@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -339,7 +340,11 @@ func (a *ssmAdapter) describeParameters(ctx context.Context, req *cloud.Request)
 			_ = path
 		}
 		if maxResults, ok := req.QueryParams["MaxResults"]; ok {
-			if max, err := parseInt(maxResults); err == nil {
+			// Clamp before narrowing: see the equivalent guard in the S3 adapter.
+			if max, err := parseInt(maxResults); err == nil && max > 0 {
+				if max > math.MaxInt32 {
+					max = math.MaxInt32
+				}
 				input.MaxResults = aws.Int32(int32(max))
 			}
 		}

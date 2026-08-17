@@ -2,6 +2,7 @@ package circuit_breaker
 
 import (
 	"context"
+	"errors"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/sony/gobreaker"
@@ -35,10 +36,12 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, operation func() (any, er
 	})
 
 	if err != nil {
-		if err == gobreaker.ErrOpenState {
+		// errors.Is, not ==: gobreaker is free to start wrapping these sentinels,
+		// and a direct comparison would silently stop emitting our own errors.
+		if errors.Is(err, gobreaker.ErrOpenState) {
 			return nil, ErrCircuitOpen
 		}
-		if err == gobreaker.ErrTooManyRequests {
+		if errors.Is(err, gobreaker.ErrTooManyRequests) {
 			return nil, ErrTooManyCalls
 		}
 		return nil, err

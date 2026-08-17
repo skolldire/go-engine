@@ -5,79 +5,47 @@ import (
 	"log"
 	"time"
 
-	"go.opentelemetry.io/otel"
+	otelprovider "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
+// NewTelemetry builds a Telemetry backed by pkg/telemetry/otel.
+//
+// Deprecated: use pkg/telemetry/otel.NewProvider directly. This package is a
+// thin facade kept for compatibility. It used to own a second, independent
+// OpenTelemetry setup that also called otel.SetTracerProvider/SetMeterProvider;
+// an application configuring telemetry through YAML *and* calling WithOTEL got
+// two providers, two OTLP exporters and two sets of goroutines, with whichever
+// registered last silently discarding the other's spans.
 func NewTelemetry(ctx context.Context, config Config) (Telemetry, error) {
 	if !config.Enabled {
 		return &noopTelemetry{}, nil
 	}
 
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(config.ServiceName),
-			semconv.ServiceVersionKey.String(config.ServiceVersion),
-			attribute.String("environment", config.Environment),
-		),
-	)
+	provider, err := otelprovider.NewProvider(ctx, otelprovider.OTELConfig{
+		ServiceName:      config.ServiceName,
+		ServiceVersion:   config.ServiceVersion,
+		ExporterEndpoint: config.OtelEndpoint,
+		SamplingRate:     config.SampleRate,
+		Enabled:          true,
+		Insecure:         config.Insecure,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(config.OtelEndpoint),
-		otlptracegrpc.WithInsecure(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	traceProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(traceExporter),
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(config.SampleRate)),
-	)
-
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(config.OtelEndpoint),
-		otlpmetricgrpc.WithInsecure(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	metricProvider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
-		sdkmetric.WithResource(res),
-	)
-
-	otel.SetTracerProvider(traceProvider)
-	otel.SetMeterProvider(metricProvider)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	tel := &telemetry{
-		meter:          metricProvider.Meter(config.ServiceName),
-		tracer:         traceProvider.Tracer(config.ServiceName),
-		traceProvider:  traceProvider,
-		metricProvider: metricProvider,
+	return &telemetry{
+		provider: provider,
+		meter:    provider.Meter(config.ServiceName),
+		tracer:   provider.Tracer(config.ServiceName),
 		attrs: []attribute.KeyValue{
 			attribute.String("service", config.ServiceName),
 			attribute.String("environment", config.Environment),
 		},
-	}
-
-	return tel, nil
+	}, nil
 }
 
 func (t *telemetry) Counter(ctx context.Context, name string, value int64, attrs ...attribute.KeyValue) {
@@ -137,17 +105,10 @@ func (t *telemetry) Span(ctx context.Context, name string, fn func(ctx context.C
 }
 
 func (t *telemetry) Shutdown(ctx context.Context) error {
-	if t.traceProvider != nil {
-		if err := t.traceProvider.Shutdown(ctx); err != nil {
-			return err
-		}
+	if t.provider == nil {
+		return nil
 	}
-	if t.metricProvider != nil {
-		if err := t.metricProvider.Shutdown(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+	return t.provider.Shutdown(ctx)
 }
 
 func (o *Operation) Execute(ctx context.Context, fn func(ctx context.Context) error, attrs ...attribute.KeyValue) error {

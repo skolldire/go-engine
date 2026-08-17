@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,11 @@ const (
 	defaultWriteTimeout    = 30 * time.Second
 	defaultIdleTimeout     = 120 * time.Second
 	defaultShutdownTimeout = 30 * time.Second
+	// defaultHandlerTimeout matches defaultWriteTimeout on purpose: a handler
+	// budget larger than the write timeout means the server gives up on the
+	// response before the handler is cut off, which the previous hardcoded 60s
+	// (against a 30s write timeout) did on every slow request.
+	defaultHandlerTimeout = defaultWriteTimeout
 )
 
 // Service is the public interface for the HTTP router returned by NewService.
@@ -35,6 +41,7 @@ type App struct {
 	config          Config
 	shutdownTimeout time.Duration
 	logger          logger.Service
+	hooksMu         sync.Mutex
 	shutdownHooks   []func(context.Context) error
 }
 
@@ -46,9 +53,12 @@ type Config struct {
 	WriteTimeout    time.Duration `mapstructure:"write_timeout" json:"write_timeout"`
 	IdleTimeout     time.Duration `mapstructure:"idle_timeout" json:"idle_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout" json:"shutdown_timeout"`
-	EnableCORS      bool          `mapstructure:"enable_cors" json:"enable_cors"`
-	CorsConfig      Cors          `mapstructure:"cors_config" json:"cors_config"`
-	TrustedProxies  []string      `mapstructure:"trusted_proxies" json:"trusted_proxies"`
+	// HandlerTimeout bounds how long a single handler may run before the
+	// middleware cancels its request context. Defaults to WriteTimeout.
+	HandlerTimeout time.Duration `mapstructure:"handler_timeout" json:"handler_timeout"`
+	EnableCORS     bool          `mapstructure:"enable_cors" json:"enable_cors"`
+	CorsConfig     Cors          `mapstructure:"cors_config" json:"cors_config"`
+	TrustedProxies []string      `mapstructure:"trusted_proxies" json:"trusted_proxies"`
 	// EnablePprof exposes the net/http/pprof endpoints under /debug/pprof.
 	// It is opt-in and additionally suppressed under the production profile so
 	// profiling data is never exposed in prod even if enabled by mistake.

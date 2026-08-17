@@ -77,17 +77,55 @@ coverage-module:
 	@echo "==> Report: coverage_module.html"
 	@rm -f coverage_module.out
 
-# lint-arch enforces the hexagonal architecture boundary:
-# gorm.io/gorm must NOT be imported in the root pkg/ packages.
-# GORM is confined to the database/sql sub-package; consumers inject a
-# *gorm.DB (or gormsql.DBClient) via app.NewAppBuilder().WithCustomClient().
+# lint-arch enforces the dependency-inversion boundary that makes the library
+# modular: the core must not know about any adapter.
+#
+#   pkg/engine/**  ->  must not import provider/**, preset/**, or any SDK
+#   pkg/**         ->  must not import gorm.io/gorm (confined to database/sql)
+#
+# Without this gate the coupling grows back one import at a time, which is
+# exactly how a YAML reader ended up pulling in forty modules.
 lint-arch:
 	@echo "==> Checking architectural constraints..."
-	@if grep -rn '"gorm.io/gorm"' pkg/ 2>/dev/null; then \
+	@FAILED=0; \
+	if grep -rn '"gorm.io/gorm"' pkg/ 2>/dev/null; then \
 		echo ""; \
 		echo "VIOLATION: gorm.io/gorm imported in pkg/"; \
-		echo "GORM must only be used in the database/sql sub-module."; \
-		echo "Inject a *gormsql.DBClient via WithCustomClient instead."; \
-		exit 1; \
-	fi
+		echo "GORM must only be used in the database/sql sub-package."; \
+		FAILED=1; \
+	fi; \
+	if grep -rn 'skolldire/go-engine/provider/' pkg/engine/ 2>/dev/null | grep -v '_test\.go'; then \
+		echo ""; \
+		echo "VIOLATION: pkg/engine imports a provider."; \
+		echo "The core must not know any adapter; invert the dependency with engine.Provider."; \
+		FAILED=1; \
+	fi; \
+	if grep -rn 'skolldire/go-engine/preset/' pkg/engine/ 2>/dev/null | grep -v '_test\.go'; then \
+		echo ""; \
+		echo "VIOLATION: pkg/engine imports a preset."; \
+		FAILED=1; \
+	fi; \
+	for forbidden in \
+		'github.com/aws/aws-sdk-go-v2' \
+		'go.mongodb.org' \
+		'github.com/redis/go-redis' \
+		'github.com/segmentio/kafka-go' \
+		'github.com/rabbitmq/amqp091-go' \
+		'github.com/bradfitz/gomemcache' \
+		'go.opentelemetry.io/otel/sdk' \
+		'gorm.io/gorm'; do \
+		if grep -rn "\"$$forbidden" pkg/engine/ 2>/dev/null | grep -v '_test\.go'; then \
+			echo ""; \
+			echo "VIOLATION: pkg/engine imports $$forbidden"; \
+			echo "The core carries no adapter SDK. Put it behind an engine.Provider."; \
+			FAILED=1; \
+		fi; \
+	done; \
+	[ $$FAILED -eq 0 ] || (echo ""; echo "FAIL: architectural violations found"; exit 1)
 	@echo "==> OK: no architectural violations found"
+
+## lint-deps: reports how many external packages the core actually resolves
+lint-deps:
+	@echo "==> Core dependency footprint (pkg/engine):"
+	@go list -deps ./pkg/engine/ | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | wc -l | xargs echo "   external packages:"
+	@go list -deps ./pkg/engine/ | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | sed -E 's|^([^/]+/[^/]+).*|\1|' | sort -u | sed 's/^/   /'

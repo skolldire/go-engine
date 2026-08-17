@@ -191,28 +191,32 @@ func BatchWorkPool(ctx context.Context, tasks map[string]Tasker, numWorkers int,
 		batchSize = 100
 	}
 
-	allResults := make(map[string]Result)
+	allResults := make(map[string]Result, len(tasks))
 	batchTasks := make(map[string]Tasker, batchSize)
-	count := 0
+
+	runBatch := func() {
+		for id, result := range WorkerPool(ctx, batchTasks, numWorkers, options...) {
+			allResults[id] = result
+		}
+		batchTasks = make(map[string]Tasker, batchSize)
+	}
 
 	for id, task := range tasks {
 		batchTasks[id] = task
-		count++
 
-		if count >= batchSize || count == len(tasks) {
-			results := WorkerPool(ctx, batchTasks, numWorkers, options...)
-
-			for id, result := range results {
-				allResults[id] = result
-			}
-
-			batchTasks = make(map[string]Tasker, batchSize)
-			count = 0
+		if len(batchTasks) >= batchSize {
+			runBatch()
 
 			if ctx.Err() != nil {
-				break
+				return allResults
 			}
 		}
+	}
+
+	// Flush the remainder. The last batch is only full when len(tasks) is an
+	// exact multiple of batchSize, so skipping this drops work silently.
+	if len(batchTasks) > 0 {
+		runBatch()
 	}
 
 	return allResults
@@ -321,9 +325,9 @@ func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, w
 		result.Err = outcome.err
 	case <-ctx.Done():
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			result.Err = fmt.Errorf("%w: %v", ErrTaskTimeout, ctx.Err())
+			result.Err = fmt.Errorf("%w: %w", ErrTaskTimeout, ctx.Err())
 		} else {
-			result.Err = fmt.Errorf("%w: %v", ErrPoolCancelled, ctx.Err())
+			result.Err = fmt.Errorf("%w: %w", ErrPoolCancelled, ctx.Err())
 		}
 	}
 

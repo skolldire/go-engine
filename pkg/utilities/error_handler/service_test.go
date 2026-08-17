@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // mockLogger is a mock implementation of logger.Service
@@ -75,26 +77,67 @@ func TestCommonApiError_Unwrap(t *testing.T) {
 	assert.Equal(t, underlyingErr, err.Unwrap())
 }
 
-func TestCommonApiError_WithContext(t *testing.T) {
-	err := &CommonApiError{Code: CodeBadRequest, Msg: "test"}
-	ctx := context.Background()
-	result := err.WithContext(ctx)
-	assert.Equal(t, ctx, result.Context)
-	assert.Equal(t, err, result)
-}
-
 func TestCommonApiError_WithRequestID(t *testing.T) {
 	err := &CommonApiError{Code: CodeBadRequest, Msg: "test"}
 	result := err.WithRequestID("req-123")
+
 	assert.Equal(t, "req-123", result.RequestID)
-	assert.Equal(t, err, result)
+	assert.NotSame(t, err, result, "the builder must return a copy")
+	assert.Empty(t, err.RequestID, "the receiver must be left untouched")
 }
 
 func TestCommonApiError_WithDetail(t *testing.T) {
 	err := &CommonApiError{Code: CodeBadRequest, Msg: "test"}
 	result := err.WithDetail("key", "value")
+
 	assert.Equal(t, "value", result.Details["key"])
-	assert.Equal(t, err, result)
+	assert.NotSame(t, err, result, "the builder must return a copy")
+	assert.Empty(t, err.Details, "the receiver must be left untouched")
+}
+
+// TestCommonApiError_SentinelIsNotCorrupted is the regression test for the
+// builders mutating the receiver: a package-level sentinel decorated by one
+// request stayed decorated for every request afterwards.
+func TestCommonApiError_SentinelIsNotCorrupted(t *testing.T) {
+	sentinel := NewNotFoundError("user not found", nil)
+
+	first := sentinel.WithRequestID("req-1").WithDetail("user_id", "1")
+	second := sentinel.WithRequestID("req-2").WithDetail("user_id", "2")
+
+	assert.Equal(t, "req-1", first.RequestID)
+	assert.Equal(t, "1", first.Details["user_id"])
+	assert.Equal(t, "req-2", second.RequestID)
+	assert.Equal(t, "2", second.Details["user_id"])
+
+	assert.Empty(t, sentinel.RequestID, "the shared sentinel must never be decorated")
+	assert.Empty(t, sentinel.Details, "the shared sentinel must never be decorated")
+}
+
+// TestCommonApiError_Is verifies the taxonomy works with errors.Is, which was
+// impossible before because the type implemented no Is method.
+func TestCommonApiError_Is(t *testing.T) {
+	notFound := NewNotFoundError("user not found", nil)
+	other := NewNotFoundError("order not found", errors.New("db"))
+	badRequest := NewBadRequestError("bad", nil)
+
+	assert.True(t, errors.Is(other, notFound), "same code must match")
+	assert.False(t, errors.Is(badRequest, notFound), "different codes must not match")
+
+	wrapped := fmt.Errorf("handling request: %w", other)
+	assert.True(t, errors.Is(wrapped, notFound), "matching must survive wrapping")
+}
+
+// TestWrapError_DoesNotMutate guards the same immutability contract on the
+// package-level WrapError helper.
+func TestWrapError_DoesNotMutate(t *testing.T) {
+	sentinel := NewInternalError("boom", errors.New("cause"))
+
+	wrapped := WrapError(sentinel, "while saving")
+
+	assert.Equal(t, "boom", sentinel.Msg, "the original must keep its message")
+	var typed *CommonApiError
+	require.True(t, errors.As(wrapped, &typed))
+	assert.Equal(t, "while saving: boom", typed.Msg)
 }
 
 func TestNewCommonApiError(t *testing.T) {

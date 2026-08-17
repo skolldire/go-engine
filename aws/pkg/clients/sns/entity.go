@@ -7,7 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
@@ -87,8 +87,6 @@ type Service interface {
 }
 
 type Cliente struct {
-	cliente    *sns.Client
-	logger     logger.Service
-	logging    bool
-	resilience *resilience.Service
+	cliente *sns.Client
+	*client.BaseClient
 }

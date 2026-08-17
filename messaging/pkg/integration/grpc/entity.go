@@ -3,10 +3,9 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -26,7 +25,6 @@ type Service interface {
 	WithHeaders(ctx context.Context, headers map[string]string) context.Context
 	GetConnection() *grpc.ClientConn
 	CheckConnection() connectivity.State
-	ReconnectIfNeeded(ctx context.Context) error
 	Close() error
 	WithLogging(enable bool)
 	InvokeRPC(ctx context.Context, operationName string,
@@ -42,14 +40,20 @@ type Config struct {
 	// TLS configures transport security. When nil or disabled the client uses an
 	// insecure (plaintext) connection.
 	TLS *TLSConfig `mapstructure:"tls" json:"tls"`
+	// WaitForReady makes NewClient block until the connection reaches READY or
+	// TimeOut elapses. It defaults to false: gRPC connections are lazy by design
+	// and the first RPC establishes the transport, so blocking at construction
+	// time is only useful for fail-fast startup checks.
+	WaitForReady bool `mapstructure:"wait_for_ready" json:"wait_for_ready"`
 }
 
+// Cliente embeds BaseClient, so timeout handling, logging, metrics, tracing and
+// resilience come from its middleware chain instead of being re-implemented
+// here. That removed roughly forty lines that duplicated BaseClient.Execute.
 type Cliente struct {
-	mu         sync.RWMutex // guards conn during reconnection
-	conn       *grpc.ClientConn
-	creds      credentials.TransportCredentials
-	logger     logger.Service
-	logging    bool
-	resilience *resilience.Service
-	target     string
+	conn   *grpc.ClientConn
+	creds  credentials.TransportCredentials
+	target string
+
+	*client.BaseClient
 }

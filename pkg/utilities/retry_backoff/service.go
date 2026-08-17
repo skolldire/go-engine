@@ -59,7 +59,7 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 
 		if attempt == r.config.MaxRetries {
-			return err
+			break
 		}
 
 		waitTime := r.calculateWaitTime(attempt)
@@ -79,7 +79,10 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 	}
 
-	// Always wrap error with consistent message regardless of logger configuration
+	// Wrap the exhausted-retries failure so callers can distinguish it from a
+	// first-attempt error. This used to be unreachable: the loop returned the
+	// raw error directly, so the documented wrapping never happened.
+	// errors.Is/errors.As still reach the underlying error through %w.
 	wrappedErr := fmt.Errorf("error executing operation after all retries: %w", err)
 	if r.logger != nil {
 		// Log the error if logger is available
@@ -91,6 +94,9 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 func (r *Retryer) calculateWaitTime(attempt int) time.Duration {
 	baseWaitTime := r.config.InitialWaitTime * time.Duration(math.Pow(r.config.BackoffFactor, float64(attempt)))
 
+	// Jitter only needs to decorrelate retry storms between peers, not to be
+	// unpredictable to an attacker, so math/rand is the right tool here.
+	//nolint:gosec // G404: non-cryptographic randomness is intentional for backoff jitter
 	jitter := time.Duration(rand.Float64() * r.config.JitterFactor * float64(baseWaitTime))
 	waitTime := baseWaitTime + jitter
 

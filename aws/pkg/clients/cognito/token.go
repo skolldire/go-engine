@@ -37,7 +37,7 @@ func (c *Client) ValidateToken(ctx context.Context, token string) (*TokenClaims,
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
 
 	if !parsedToken.Valid {
@@ -111,7 +111,7 @@ func (c *Client) GetUserByAccessToken(ctx context.Context, accessToken string) (
 		return nil, ErrInvalidAccessToken
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.GetUserInput{
@@ -119,7 +119,7 @@ func (c *Client) GetUserByAccessToken(ctx context.Context, accessToken string) (
 	}
 
 	var result *cognitoidentityprovider.GetUserOutput
-	_, err := c.executeOperation(ctx, "GetUserByAccessToken", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "GetUserByAccessToken", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.GetUser(ctx, input)
 		return result, err
@@ -179,7 +179,7 @@ func (c *Client) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*Au
 		return nil, fmt.Errorf("%w: username required when client secret is configured", ErrMissingRequiredField)
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	authParams := map[string]string{
@@ -198,7 +198,7 @@ func (c *Client) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*Au
 	}
 
 	var result *cognitoidentityprovider.InitiateAuthOutput
-	_, err := c.executeOperation(ctx, "RefreshToken", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "RefreshToken", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.InitiateAuth(ctx, input)
 		return result, err

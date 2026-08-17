@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -23,7 +24,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/config/dynamic"
-	"github.com/skolldire/go-engine/pkg/config/viper"
+	"github.com/skolldire/go-engine/pkg/config/viper" //nolint:staticcheck // SA1019: pkg/app is itself deprecated and is the last consumer of this loader
 	"github.com/skolldire/go-engine/pkg/integration/observability"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
@@ -49,9 +50,7 @@ func (c *App) GetConfigs() *App {
 	}
 
 	c.Engine.Conf = &conf
-	log := setLogLevel(conf.Log, tracer)
-	_ = log.SetLogLevel("trace")
-	c.Engine.Log = log
+	c.Engine.Log = buildLogger(conf.Log, tracer)
 
 	return c
 }
@@ -61,18 +60,25 @@ func (c *App) Init() *App {
 		return c
 	}
 
-	awsCfg, err := config.LoadDefaultConfig(c.Engine.ctx,
-		config.WithRegion(c.Engine.Conf.Aws.Region),
-	)
-	if err != nil {
-		c.Engine.errors = append(c.Engine.errors, err)
-		return c
+	initializer := &clients{
+		ctx: c.Engine.ctx,
+		log: c.Engine.Log,
 	}
 
-	initializer := &clients{
-		ctx:       c.Engine.ctx,
-		log:       c.Engine.Log,
-		awsConfig: awsCfg,
+	// Resolving the AWS credential chain is only done when the configuration
+	// actually declares an AWS adapter. Doing it unconditionally cost every
+	// service an IMDS probe at startup and aborted Build() outright wherever no
+	// credentials exist at all.
+	usesAWS := viper.UsesAWS(*c.Engine.Conf)
+	if usesAWS {
+		awsCfg, err := config.LoadDefaultConfig(c.Engine.ctx,
+			config.WithRegion(c.Engine.Conf.Aws.Region),
+		)
+		if err != nil {
+			c.Engine.errors = append(c.Engine.errors, err)
+			return c
+		}
+		initializer.awsConfig = awsCfg
 	}
 
 	c.Engine.GrpcServer = initializer.createServerGRPC(c.Engine.Conf.GrpcServer)
@@ -117,8 +123,12 @@ func (c *App) Init() *App {
 
 	c.Engine.Telemetry = initializer.createTelemetry(c.Engine.Conf.Telemetry)
 
-	// Initialize CloudClient (optional - can be nil if not configured)
-	c.Engine.CloudClient = initializer.createCloudClient(c.Engine.Log, c.Engine.Telemetry)
+	// CloudClient wraps the AWS SDK, so it only exists when the configuration
+	// declares an AWS adapter. Building it unconditionally handed consumers a
+	// client backed by an unresolved credential chain.
+	if usesAWS {
+		c.Engine.CloudClient = initializer.createCloudClient(c.Engine.Log, c.Engine.Telemetry)
+	}
 
 	// Initialize CognitoClient (optional - can be nil if not configured)
 	c.Engine.CognitoClient = initializer.createClientCognito(c.Engine.Conf.Cognito)
@@ -147,7 +157,10 @@ func (c *App) Init() *App {
 	c.Engine.Validator = validation.NewValidator()
 	validation.SetGlobalValidator(c.Engine.Validator)
 
-	if c.Engine.Conf.FeatureFlags != nil {
+	// Do not replace an instance created by WithDynamicConfig: the reload hook
+	// holds it and updates it in place, so swapping the pointer here would
+	// orphan the one consumers observe.
+	if c.Engine.FeatureFlags == nil && c.Engine.Conf.FeatureFlags != nil {
 		c.Engine.FeatureFlags = dynamic.NewFeatureFlags(c.Engine.Conf.FeatureFlags, c.Engine.Log)
 	}
 
@@ -203,12 +216,23 @@ func (e *Engine) registerCloseables() {
 }
 
 func (c *App) InitializeRouter() *App {
-	if c.Engine.Conf == nil || len(c.Engine.errors) > 0 {
+	if len(c.Engine.errors) > 0 {
+		return c
+	}
+
+	// Without configuration this used to return silently, leaving Router nil
+	// and no error recorded: the failure only surfaced later as a nil pointer
+	// dereference far from its cause.
+	if c.Engine.Conf == nil {
+		c.Engine.errors = append(c.Engine.errors,
+			fmt.Errorf("cannot initialize router: no configuration loaded, call WithConfigs or WithDynamicConfig first"))
 		return c
 	}
 
 	c.Engine.Router = router.NewService(c.Engine.Conf.Router, router.WithLogger(c.Engine.Log))
-	_ = c.Engine.Log.SetLogLevel(c.Engine.Conf.Log.Level)
+	if c.Engine.Log != nil {
+		_ = c.Engine.Log.SetLogLevel(c.Engine.Conf.Log.Level)
+	}
 	return c
 }
 
@@ -292,10 +316,18 @@ func (i *clients) createClientRedis(cfg *redis.Config) *redis.RedisClient {
 	return client
 }
 
+// createTelemetry builds Engine.Telemetry from the `telemetry:` YAML section.
+//
+// It still goes through the deprecated facade because Engine.Telemetry is typed
+// as telemetry.Telemetry; the facade now delegates to pkg/telemetry/otel, so
+// there is only ever one set of global OTel providers. Retyping Engine to
+// otel.Provider is a breaking change scheduled for phase C
+// (docs/plan-auditoria-2026-08.md).
 func (i *clients) createTelemetry(cfg *telemetry.Config) telemetry.Telemetry {
 	if cfg == nil {
 		return nil
 	}
+	//nolint:staticcheck // SA1019: intentional until Engine.Telemetry is retyped in phase C
 	tel, err := telemetry.NewTelemetry(i.ctx, *cfg)
 	if err != nil {
 		i.setError(err)
@@ -446,9 +478,9 @@ func (i *clients) createClientsRabbitMQ(configs []map[string]rabbitmq.Config) ma
 	return rabbitMQClients
 }
 
-func setLogLevel(c logger.Config, l logger.LogWriter) logger.Service {
-	return logger.NewService(logger.Config{
-		Level: c.Level,
-		Path:  c.Path,
-	}, l)
+// buildLogger constructs the engine logger from the configuration as declared.
+// It passes the whole logger.Config through: rebuilding it field by field is how
+// format, report_caller and the injected writers/extractor used to get dropped.
+func buildLogger(c logger.Config, l logger.LogWriter) logger.Service {
+	return logger.NewService(c, l)
 }

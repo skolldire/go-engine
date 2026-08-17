@@ -12,7 +12,7 @@ func (c *Client) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) 
 		return ErrMissingRequiredField
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.ForgotPasswordInput{
@@ -25,19 +25,12 @@ func (c *Client) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) 
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ForgotPassword", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "ForgotPassword", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.ForgotPassword(ctx, input)
 	})
 
 	if err != nil {
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "Password recovery initiated",
-			map[string]any{
-				"username": req.Username,
-			})
 	}
 
 	return nil
@@ -48,7 +41,7 @@ func (c *Client) ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPas
 		return ErrMissingRequiredField
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.ConfirmForgotPasswordInput{
@@ -63,19 +56,12 @@ func (c *Client) ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPas
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ConfirmForgotPassword", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "ConfirmForgotPassword", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.ConfirmForgotPassword(ctx, input)
 	})
 
 	if err != nil {
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "Password recovery confirmed",
-			map[string]any{
-				"username": req.Username,
-			})
 	}
 
 	return nil

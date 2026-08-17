@@ -47,7 +47,7 @@ func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, er
 
 	mongoClient, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
+		return nil, fmt.Errorf("%w: %w", ErrConnection, err)
 	}
 
 	baseConfig := client.BaseConfig{
@@ -68,17 +68,7 @@ func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, er
 		// Disconnect so the driver's background monitoring goroutines and
 		// connection pool are not leaked when the initial handshake fails.
 		_ = mongoClient.Disconnect(ctx)
-		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
-	}
-
-	if c.IsLoggingEnabled() {
-		// Redact credentials from URI before logging
-		redactedURI := redactMongoURI(cfg.URI)
-		log.Debug(ctx, "MongoDB connection established successfully",
-			map[string]any{
-				"database": cfg.Database,
-				"uri":      redactedURI,
-			})
+		return nil, fmt.Errorf("%w: %w", ErrConnection, err)
 	}
 
 	return c, nil

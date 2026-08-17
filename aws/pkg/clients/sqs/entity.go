@@ -7,7 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
@@ -45,9 +45,10 @@ const (
 	DefaultTimeout = 5 * time.Second
 )
 
+// Cliente embeds BaseClient rather than re-implementing its timeout handling,
+// logging and resilience. Those concerns are middleware there, so this package
+// carries no `if c.logging` of its own and gains metrics and tracing for free.
 type Cliente struct {
-	cliente    *sqs.Client
-	logger     logger.Service
-	logging    bool
-	resilience *resilience.Service
+	cliente *sqs.Client
+	*client.BaseClient
 }

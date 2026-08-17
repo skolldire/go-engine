@@ -246,16 +246,17 @@ func (e *MFARequiredError) Error() string {
 	return "MFA required: " + string(e.ChallengeType)
 }
 
-// IsCognitoError verifica si un error es de tipo CognitoError
+// IsCognitoError reports whether err is, or wraps, a *CognitoError.
+// It uses errors.As so the check keeps working once a caller wraps the error.
 func IsCognitoError(err error) bool {
-	_, ok := err.(*CognitoError)
-	return ok
+	var target *CognitoError
+	return errors.As(err, &target)
 }
 
-// IsMFARequiredError verifica si un error es de tipo MFARequiredError
+// IsMFARequiredError reports whether err is, or wraps, an *MFARequiredError.
 func IsMFARequiredError(err error) bool {
-	_, ok := err.(*MFARequiredError)
-	return ok
+	var target *MFARequiredError
+	return errors.As(err, &target)
 }
 
 // Service define la interfaz del cliente Cognito

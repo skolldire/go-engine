@@ -30,13 +30,13 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		Dial: dialer.Dial,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
+		return nil, fmt.Errorf("%w: %w", ErrConnection, err)
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
 		_ = conn.Close() // Ignore error on cleanup
-		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
+		return nil, fmt.Errorf("%w: %w", ErrConnection, err)
 	}
 
 	baseConfig := client.BaseConfig{
@@ -50,14 +50,6 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		BaseClient: client.NewBaseClientWithName(baseConfig, log, "RabbitMQ"),
 		conn:       conn,
 		channel:    ch,
-	}
-
-	if c.IsLoggingEnabled() {
-		log.Debug(context.Background(), "RabbitMQ connection established successfully",
-			map[string]any{
-				"url":     cfg.URL,
-				"timeout": timeout.String(),
-			})
 	}
 
 	return c, nil

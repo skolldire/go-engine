@@ -11,24 +11,44 @@ import (
 )
 
 func NewClient(cfg Config, log logger.Service) Service {
-	httpClient := resty.New()
 	timeout := cfg.TimeOut
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
-	if timeout > 0 {
-		httpClient.SetTimeout(timeout)
+
+	httpClient := resty.New().
+		SetTimeout(timeout).
+		SetBaseURL(cfg.BaseURL)
+
+	retryCfg, breakerCfg := cfg.resolveResilience()
+
+	// The breaker is the one gap resty leaves. Installing it as the transport
+	// puts it inside resty's retry loop, so it sees each attempt.
+	if breakerCfg != nil {
+		httpClient.SetTransport(newBreakerTransport(httpClient.GetClient().Transport, breakerCfg, log))
 	}
 
-	baseConfig := client.BaseConfig{
-		EnableLogging:  cfg.EnableLogging,
-		WithResilience: cfg.WithResilience,
-		Resilience:     cfg.Resilience,
-		Timeout:        timeout,
+	// Resty owns the retry loop, its exponential backoff and its jitter. All we
+	// contribute is the policy: what may be replayed, and honouring Retry-After.
+	if retryCfg != nil {
+		httpClient.
+			SetRetryCount(retryCfg.maxRetries()).
+			SetRetryWaitTime(retryCfg.waitTime()).
+			SetRetryMaxWaitTime(retryCfg.maxWaitTime()).
+			SetRetryAfter(RetryAfter)
+
+		if retryCfg.RetryNonIdempotent {
+			httpClient.AddRetryCondition(AllowNonIdempotentRetryCondition)
+		} else {
+			httpClient.AddRetryCondition(ConservativeRetryCondition)
+		}
 	}
 
 	c := &restClient{
-		BaseClient: client.NewBaseClientWithName(baseConfig, log, "REST"),
+		BaseClient: client.NewBaseClientWithName(client.BaseConfig{
+			EnableLogging: cfg.EnableLogging,
+			Timeout:       timeout,
+		}, log, "REST"),
 		baseURL:    cfg.BaseURL,
 		httpClient: httpClient,
 	}
@@ -36,44 +56,30 @@ func NewClient(cfg Config, log logger.Service) Service {
 	return c
 }
 
-func (c *restClient) executeRequest(ctx context.Context, operationName string, reqFunc func() (*resty.Response, error)) (*resty.Response, error) {
-	result, err := c.Execute(ctx, operationName, func(ctx context.Context) (any, error) {
-		return c.processRequest(ctx, reqFunc)
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.SafeTypeAssert[*resty.Response](result)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+// R returns a request builder bound to this client.
+func (c *restClient) R(ctx context.Context) *resty.Request {
+	return c.httpClient.R().SetContext(ctx)
 }
 
-func (c *restClient) processRequest(ctx context.Context, reqFunc func() (*resty.Response, error)) (*resty.Response, error) {
-	resp, err := reqFunc()
-	if err != nil {
-		if c.IsLoggingEnabled() {
-			c.GetLogger().Warn(ctx, "request_failed",
-				map[string]any{"event": "request_failed", "error": err.Error()})
-		}
-		return nil, err
-	}
+func (c *restClient) executeRequest(ctx context.Context, operationName string, reqFunc func() (*resty.Response, error)) (*resty.Response, error) {
+	// Logging, metrics and tracing come from the BaseClient middleware chain,
+	// so this client carries no `if c.logging` of its own.
+	var resp *resty.Response
 
-	if err := validateResponse(resp); err != nil {
-		if c.IsLoggingEnabled() {
-			c.GetLogger().Warn(ctx, "Error HTTP",
-				map[string]any{"event": "http_error",
-					"status": resp.StatusCode(),
-					"error":  err.Error()})
+	_, err := c.Execute(ctx, operationName, func(context.Context) (any, error) {
+		r, reqErr := reqFunc()
+		resp = r
+		if reqErr != nil {
+			return nil, reqErr
 		}
-		return nil, err
-	}
+		// The response travels with the error. Folding the status into a
+		// formatted string and discarding the response is what stopped callers
+		// from branching on the status code, and stopped any retry policy from
+		// telling a retryable 503 from a permanent 400.
+		return r, validateResponse(r)
+	})
 
-	return resp, nil
+	return resp, err
 }
 
 func (c *restClient) Get(ctx context.Context, endpoint string, headers map[string]string) (*resty.Response, error) {

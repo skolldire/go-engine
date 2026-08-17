@@ -3,11 +3,13 @@ package task_executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )
 
@@ -272,4 +274,68 @@ func TestWorkerPool_NoGoroutineLeak(t *testing.T) {
 
 	results := WorkerPool(context.Background(), tasks, 2, WithLogger(&mockLogger{}))
 	assert.Len(t, results, 2)
+}
+
+// TestBatchWorkPool_ProcessesFinalPartialBatch is the regression test for the
+// bug where the per-batch counter was compared against the total task count, so
+// any remainder smaller than batchSize was silently dropped: no error, no log,
+// just lost work.
+func TestBatchWorkPool_ProcessesFinalPartialBatch(t *testing.T) {
+	cases := []struct {
+		name      string
+		total     int
+		batchSize int
+	}{
+		{"remainder smaller than batch", 250, 100},
+		{"exact multiple", 200, 100},
+		{"single partial batch", 30, 100},
+		{"batch size of one", 7, 1},
+		{"remainder of one", 101, 10},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := make(map[string]Tasker, tc.total)
+			for i := 0; i < tc.total; i++ {
+				tasks[fmt.Sprintf("task-%d", i)] = &Task[int, int]{
+					Func: func(ctx context.Context, in int) (int, error) { return in * 2, nil },
+					Args: i,
+				}
+			}
+
+			results := BatchWorkPool(context.Background(), tasks, 4, tc.batchSize)
+
+			assert.Equal(t, tc.total, len(results),
+				"every task must run exactly once regardless of how the last batch divides")
+			for id := range tasks {
+				res, ok := results[id]
+				require.True(t, ok, "missing result for %s", id)
+				assert.NoError(t, res.Err)
+			}
+		})
+	}
+}
+
+// TestBatchWorkPool_EmptyTaskSet guards the boundary where there is no work.
+func TestBatchWorkPool_EmptyTaskSet(t *testing.T) {
+	results := BatchWorkPool(context.Background(), map[string]Tasker{}, 4, 100)
+	assert.Empty(t, results)
+}
+
+// TestBatchWorkPool_StopsOnCancelledContext verifies cancellation still short
+// circuits the remaining batches instead of flushing them anyway.
+func TestBatchWorkPool_StopsOnCancelledContext(t *testing.T) {
+	tasks := make(map[string]Tasker, 500)
+	for i := 0; i < 500; i++ {
+		tasks[fmt.Sprintf("task-%d", i)] = &Task[int, int]{
+			Func: func(ctx context.Context, in int) (int, error) { return in, nil },
+			Args: i,
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	results := BatchWorkPool(ctx, tasks, 4, 50)
+	assert.Less(t, len(results), 500)
 }

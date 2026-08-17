@@ -19,7 +19,7 @@ func (c *Client) AddUserToGroup(ctx context.Context, username, group string) err
 		return ErrMissingRequiredField
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.AdminAddUserToGroupInput{
@@ -28,21 +28,12 @@ func (c *Client) AddUserToGroup(ctx context.Context, username, group string) err
 		GroupName:  aws.String(group),
 	}
 
-	_, err := c.executeOperation(ctx, "AddUserToGroup", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "AddUserToGroup", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.AdminAddUserToGroup(ctx, input)
 	})
 
 	if err != nil {
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		// No se registra el username: puede ser PII (email/teléfono).
-		// group es el nombre del rol, no es PII.
-		c.logger.Info(ctx, "User added to group successfully",
-			map[string]any{
-				"group": group,
-			})
 	}
 
 	return nil
@@ -58,7 +49,7 @@ func (c *Client) RemoveUserFromGroup(ctx context.Context, username, group string
 		return ErrMissingRequiredField
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.AdminRemoveUserFromGroupInput{
@@ -67,20 +58,12 @@ func (c *Client) RemoveUserFromGroup(ctx context.Context, username, group string
 		GroupName:  aws.String(group),
 	}
 
-	_, err := c.executeOperation(ctx, "RemoveUserFromGroup", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "RemoveUserFromGroup", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.AdminRemoveUserFromGroup(ctx, input)
 	})
 
 	if err != nil {
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		// No se registra el username: puede ser PII (email/teléfono).
-		c.logger.Info(ctx, "User removed from group successfully",
-			map[string]any{
-				"group": group,
-			})
 	}
 
 	return nil
@@ -94,7 +77,7 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 		return nil, ErrMissingRequiredField
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	var groups []string
@@ -107,7 +90,7 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 			NextToken:  nextToken,
 		}
 
-		result, err := c.executeOperation(ctx, "ListGroupsForUser", func(ctx context.Context) (any, error) {
+		result, err := c.Execute(ctx, "ListGroupsForUser", func(ctx context.Context) (any, error) {
 			return c.cognitoClient.AdminListGroupsForUser(ctx, input)
 		})
 
@@ -132,14 +115,6 @@ func (c *Client) ListGroupsForUser(ctx context.Context, username string) ([]stri
 			break
 		}
 		nextToken = output.NextToken
-	}
-
-	if c.logging {
-		// No se registra el username: puede ser PII (email/teléfono).
-		c.logger.Info(ctx, "Listed groups for user successfully",
-			map[string]any{
-				"count": len(groups),
-			})
 	}
 
 	return groups, nil

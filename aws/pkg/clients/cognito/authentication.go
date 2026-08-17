@@ -2,6 +2,7 @@ package cognito
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,7 +16,7 @@ func (c *Client) RegisterUser(ctx context.Context, req RegisterUserRequest) (*Us
 		return nil, err
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	attributes := []types.AttributeType{
@@ -47,7 +48,7 @@ func (c *Client) RegisterUser(ctx context.Context, req RegisterUserRequest) (*Us
 	}
 
 	var result *cognitoidentityprovider.SignUpOutput
-	_, err := c.executeOperation(ctx, "RegisterUser", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "RegisterUser", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.SignUp(ctx, input)
 		return result, err
@@ -71,17 +72,6 @@ func (c *Client) RegisterUser(ctx context.Context, req RegisterUserRequest) (*Us
 		Enabled:    true,
 	}
 
-	if c.logging {
-		logFields := map[string]any{
-			"user_id":  user.ID,
-			"username": user.Username,
-		}
-		if user.Email != "" {
-			logFields["email"] = maskEmail(user.Email)
-		}
-		c.logger.Info(ctx, "User registered successfully", logFields)
-	}
-
 	return user, nil
 }
 
@@ -90,7 +80,7 @@ func (c *Client) ConfirmSignUp(ctx context.Context, req ConfirmSignUpRequest) er
 		return ErrMissingRequiredField
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.ConfirmSignUpInput{
@@ -104,19 +94,12 @@ func (c *Client) ConfirmSignUp(ctx context.Context, req ConfirmSignUpRequest) er
 		input.SecretHash = aws.String(secretHash)
 	}
 
-	_, err := c.executeOperation(ctx, "ConfirmSignUp", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "ConfirmSignUp", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.ConfirmSignUp(ctx, input)
 	})
 
 	if err != nil {
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "User signup confirmed successfully",
-			map[string]any{
-				"username": req.Username,
-			})
 	}
 
 	return nil
@@ -129,7 +112,7 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 		return nil, err
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	authParams := map[string]string{
@@ -149,7 +132,7 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 	}
 
 	var result *cognitoidentityprovider.InitiateAuthOutput
-	_, err := c.executeOperation(ctx, "Authenticate", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "Authenticate", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.InitiateAuth(ctx, input)
 		return result, err
@@ -157,7 +140,8 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 
 	if err != nil {
 		cognitoErr := handleCognitoError(err)
-		if cognitoErr, ok := cognitoErr.(*CognitoError); ok && cognitoErr.Code == "MFARequired" {
+		var typedErr *CognitoError
+		if errors.As(cognitoErr, &typedErr) && typedErr.Code == "MFARequired" {
 			sessionToken := ""
 			challengeType := MFAChallengeTypeSMS
 
@@ -223,13 +207,6 @@ func (c *Client) Authenticate(ctx context.Context, req AuthenticateRequest) (*Au
 		IDToken:      safeString(result.AuthenticationResult.IdToken),
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(result.AuthenticationResult.ExpiresIn),
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "User authenticated successfully",
-			map[string]any{
-				"username": req.Username,
-			})
 	}
 
 	return tokens, nil

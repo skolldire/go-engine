@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -51,7 +52,8 @@ func (m *tracingMiddleware) Do(ctx context.Context, req *cloud.Request) (*cloud.
 		resp, err = m.next.Do(ctx, req)
 
 		if err != nil {
-			if cloudErr, ok := err.(*cloud.Error); ok {
+			var cloudErr *cloud.Error
+			if errors.As(err, &cloudErr) {
 				attrs = append(attrs,
 					attribute.String("aws.error_code", cloudErr.Code),
 					attribute.Bool("aws.retriable", cloudErr.Retriable),

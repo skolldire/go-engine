@@ -11,7 +11,6 @@ import (
 	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/helpers"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
 )
 
@@ -24,82 +23,15 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 
 	cliente := &Cliente{
 		cliente: snsClient,
-		logger:  log,
-		logging: cfg.EnableLogging,
-	}
-
-	if cfg.WithResilience {
-		cliente.resilience = resilience.NewResilienceService(cfg.Resilience, log)
-	}
-
-	if cliente.logging {
-		endpoint := cfg.BaseEndpoint
-		if endpoint == "" {
-			endpoint = "default AWS"
-		}
-		log.Debug(context.Background(), "SNS client initialized",
-			map[string]any{
-				"endpoint": endpoint,
-			})
+		BaseClient: client.NewBaseClientWithName(client.BaseConfig{
+			EnableLogging:  cfg.EnableLogging,
+			WithResilience: cfg.WithResilience,
+			Resilience:     cfg.Resilience,
+			Timeout:        DefaultTimeout,
+		}, log, "SNS"),
 	}
 
 	return cliente
-}
-
-func (c *Cliente) execute(ctx context.Context, operationName string, operation func(context.Context) (any, error)) (any, error) {
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
-	defer cancel()
-
-	return c.executeOperation(ctx, operationName, operation)
-}
-
-func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		return context.WithTimeout(ctx, DefaultTimeout)
-	}
-	return context.WithCancel(ctx)
-}
-
-func (c *Cliente) executeOperation(ctx context.Context, operationName string, operation func(context.Context) (any, error)) (any, error) {
-	logFields := map[string]any{"operation": operationName, "service": "SNS"}
-
-	if c.resilience != nil {
-		return c.executeWithResilience(ctx, operationName, operation, logFields)
-	}
-
-	return c.executeWithLogging(ctx, operationName, operation, logFields)
-}
-
-func (c *Cliente) executeWithResilience(ctx context.Context, operationName string, operation func(context.Context) (any, error), logFields map[string]any) (any, error) {
-	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("starting SNS operation with resilience: %s", operationName), logFields)
-	}
-
-	result, err := c.resilience.Execute(ctx, operation)
-
-	if err != nil && c.logging {
-		c.logger.Error(ctx, err, logFields)
-	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("SNS operation completed with resilience: %s", operationName), logFields)
-	}
-
-	return result, err
-}
-
-func (c *Cliente) executeWithLogging(ctx context.Context, operationName string, operation func(context.Context) (any, error), logFields map[string]any) (any, error) {
-	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("starting SNS operation: %s", operationName), logFields)
-	}
-
-	result, err := operation(ctx)
-
-	if err != nil && c.logging {
-		c.logger.Error(ctx, err, logFields)
-	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("SNS operation completed: %s", operationName), logFields)
-	}
-
-	return result, err
 }
 
 func (c *Cliente) CreateTopic(ctx context.Context, nombre string, atributos map[string]string) (string, error) {
@@ -115,20 +47,20 @@ func (c *Cliente) CreateTopic(ctx context.Context, nombre string, atributos map[
 		input.Attributes = atributos
 	}
 
-	result, err := c.execute(ctx, "CreateTopic", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "CreateTopic", func(ctx context.Context) (any, error) {
 		return c.cliente.CreateTopic(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCreateTopic.Error())
+		return "", c.GetLogger().WrapError(err, ErrCreateTopic.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.CreateTopicOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCreateTopic.Error())
+		return "", c.GetLogger().WrapError(err, ErrCreateTopic.Error())
 	}
 	if response == nil || response.TopicArn == nil {
-		return "", c.logger.WrapError(ErrCreateTopic, "SNS response or TopicArn is nil")
+		return "", c.GetLogger().WrapError(ErrCreateTopic, "SNS response or TopicArn is nil")
 	}
 	return *response.TopicArn, nil
 }
@@ -138,31 +70,31 @@ func (c *Cliente) DeleteTopic(ctx context.Context, arn string) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteTopic", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "DeleteTopic", func(ctx context.Context) (any, error) {
 		return c.cliente.DeleteTopic(ctx, &sns.DeleteTopicInput{
 			TopicArn: aws.String(arn),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, ErrDeleteTopic.Error())
+		return c.GetLogger().WrapError(err, ErrDeleteTopic.Error())
 	}
 
 	return nil
 }
 
 func (c *Cliente) GetTopics(ctx context.Context) ([]string, error) {
-	result, err := c.execute(ctx, "GetTopics", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "GetTopics", func(ctx context.Context) (any, error) {
 		return c.cliente.ListTopics(ctx, &sns.ListTopicsInput{})
 	})
 
 	if err != nil {
-		return nil, c.logger.WrapError(err, ErrListTopics.Error())
+		return nil, c.GetLogger().WrapError(err, ErrListTopics.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.ListTopicsOutput](result)
 	if err != nil {
-		return nil, c.logger.WrapError(err, ErrListTopics.Error())
+		return nil, c.GetLogger().WrapError(err, ErrListTopics.Error())
 	}
 	topics := make([]string, len(response.Topics))
 
@@ -184,17 +116,17 @@ func (c *Cliente) PublishMessage(ctx context.Context, temaArn string, mensaje st
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "PublishMessage", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "PublishMessage", func(ctx context.Context) (any, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublication.Error())
+		return "", c.GetLogger().WrapError(err, ErrPublication.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.PublishOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublication.Error())
+		return "", c.GetLogger().WrapError(err, ErrPublication.Error())
 	}
 	return *response.MessageId, nil
 }
@@ -216,17 +148,17 @@ func (c *Cliente) PublishJSON(ctx context.Context, temaArn string, mensaje any, 
 		MessageAttributes: atributos,
 	}
 
-	result, err := c.execute(ctx, "PublishJSON", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "PublishJSON", func(ctx context.Context) (any, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublication.Error())
+		return "", c.GetLogger().WrapError(err, ErrPublication.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.PublishOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublication.Error())
+		return "", c.GetLogger().WrapError(err, ErrPublication.Error())
 	}
 	return *response.MessageId, nil
 }
@@ -243,17 +175,17 @@ func (c *Cliente) CreateSubscription(ctx context.Context, temaArn, protocolo, en
 		ReturnSubscriptionArn: true,
 	}
 
-	result, err := c.execute(ctx, "CreateSubscription", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "CreateSubscription", func(ctx context.Context) (any, error) {
 		return c.cliente.Subscribe(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrSubscription.Error())
+		return "", c.GetLogger().WrapError(err, ErrSubscription.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.SubscribeOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrSubscription.Error())
+		return "", c.GetLogger().WrapError(err, ErrSubscription.Error())
 	}
 	return *response.SubscriptionArn, nil
 }
@@ -263,21 +195,21 @@ func (c *Cliente) DeleteSubscription(ctx context.Context, suscripcionArn string)
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteSubscription", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "DeleteSubscription", func(ctx context.Context) (any, error) {
 		return c.cliente.Unsubscribe(ctx, &sns.UnsubscribeInput{
 			SubscriptionArn: aws.String(suscripcionArn),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, ErrSubscription.Error())
+		return c.GetLogger().WrapError(err, ErrSubscription.Error())
 	}
 
 	return nil
 }
 
 func (c *Cliente) EnableLogging(activar bool) {
-	c.logging = activar
+	c.SetLogging(activar)
 }
 
 func (c *Cliente) SendSMS(ctx context.Context, phoneNumber, message string, attributes map[string]types.MessageAttributeValue) (string, error) {
@@ -287,7 +219,7 @@ func (c *Cliente) SendSMS(ctx context.Context, phoneNumber, message string, attr
 
 	cleaned := helpers.RemoveChars(helpers.Trim(phoneNumber), " ", "-", "(", ")")
 	if err := validation.GetGlobalValidator().Var(cleaned, "required,e164"); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidInput, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 
 	input := &sns.PublishInput{
@@ -296,17 +228,17 @@ func (c *Cliente) SendSMS(ctx context.Context, phoneNumber, message string, attr
 		MessageAttributes: attributes,
 	}
 
-	result, err := c.execute(ctx, "SendSMS", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "SendSMS", func(ctx context.Context) (any, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrSMSFailed.Error())
+		return "", c.GetLogger().WrapError(err, ErrSMSFailed.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.PublishOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrSMSFailed.Error())
+		return "", c.GetLogger().WrapError(err, ErrSMSFailed.Error())
 	}
 	return *response.MessageId, nil
 }
@@ -346,31 +278,31 @@ func (c *Cliente) SetSMSAttributes(ctx context.Context, attributes map[string]st
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "SetSMSAttributes", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "SetSMSAttributes", func(ctx context.Context) (any, error) {
 		return c.cliente.SetSMSAttributes(ctx, &sns.SetSMSAttributesInput{
 			Attributes: attributes,
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, "error setting SMS attributes")
+		return c.GetLogger().WrapError(err, "error setting SMS attributes")
 	}
 
 	return nil
 }
 
 func (c *Cliente) GetSMSAttributes(ctx context.Context) (map[string]string, error) {
-	result, err := c.execute(ctx, "GetSMSAttributes", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "GetSMSAttributes", func(ctx context.Context) (any, error) {
 		return c.cliente.GetSMSAttributes(ctx, &sns.GetSMSAttributesInput{})
 	})
 
 	if err != nil {
-		return nil, c.logger.WrapError(err, "error getting SMS attributes")
+		return nil, c.GetLogger().WrapError(err, "error getting SMS attributes")
 	}
 
 	response, err := client.SafeTypeAssert[*sns.GetSMSAttributesOutput](result)
 	if err != nil {
-		return nil, c.logger.WrapError(err, "error getting SMS attributes")
+		return nil, c.GetLogger().WrapError(err, "error getting SMS attributes")
 	}
 	return response.Attributes, nil
 }
@@ -380,19 +312,19 @@ func (c *Cliente) CheckPhoneNumberOptedOut(ctx context.Context, phoneNumber stri
 		return false, ErrInvalidInput
 	}
 
-	result, err := c.execute(ctx, "CheckPhoneNumberOptedOut", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "CheckPhoneNumberOptedOut", func(ctx context.Context) (any, error) {
 		return c.cliente.CheckIfPhoneNumberIsOptedOut(ctx, &sns.CheckIfPhoneNumberIsOptedOutInput{
 			PhoneNumber: aws.String(phoneNumber),
 		})
 	})
 
 	if err != nil {
-		return false, c.logger.WrapError(err, "error checking phone number opt-out status")
+		return false, c.GetLogger().WrapError(err, "error checking phone number opt-out status")
 	}
 
 	response, err := client.SafeTypeAssert[*sns.CheckIfPhoneNumberIsOptedOutOutput](result)
 	if err != nil {
-		return false, c.logger.WrapError(err, "error checking phone number opt-out status")
+		return false, c.GetLogger().WrapError(err, "error checking phone number opt-out status")
 	}
 	return response.IsOptedOut, nil
 }
@@ -402,19 +334,19 @@ func (c *Cliente) ListOptedOutPhoneNumbers(ctx context.Context) ([]string, error
 	var nextToken *string
 
 	for {
-		result, err := c.execute(ctx, "ListOptedOutPhoneNumbers", func(ctx context.Context) (any, error) {
+		result, err := c.Execute(ctx, "ListOptedOutPhoneNumbers", func(ctx context.Context) (any, error) {
 			return c.cliente.ListPhoneNumbersOptedOut(ctx, &sns.ListPhoneNumbersOptedOutInput{
 				NextToken: nextToken,
 			})
 		})
 
 		if err != nil {
-			return nil, c.logger.WrapError(err, "error listing opted-out phone numbers")
+			return nil, c.GetLogger().WrapError(err, "error listing opted-out phone numbers")
 		}
 
 		response, err := client.SafeTypeAssert[*sns.ListPhoneNumbersOptedOutOutput](result)
 		if err != nil {
-			return nil, c.logger.WrapError(err, "error listing opted-out phone numbers")
+			return nil, c.GetLogger().WrapError(err, "error listing opted-out phone numbers")
 		}
 		allNumbers = append(allNumbers, response.PhoneNumbers...)
 
@@ -432,14 +364,14 @@ func (c *Cliente) OptInPhoneNumber(ctx context.Context, phoneNumber string) erro
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "OptInPhoneNumber", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "OptInPhoneNumber", func(ctx context.Context) (any, error) {
 		return c.cliente.OptInPhoneNumber(ctx, &sns.OptInPhoneNumberInput{
 			PhoneNumber: aws.String(phoneNumber),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, "error opting in phone number")
+		return c.GetLogger().WrapError(err, "error opting in phone number")
 	}
 
 	return nil
@@ -459,17 +391,17 @@ func (c *Cliente) CreatePlatformApplication(ctx context.Context, name, platform 
 		input.Attributes = credentials
 	}
 
-	result, err := c.execute(ctx, "CreatePlatformApplication", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "CreatePlatformApplication", func(ctx context.Context) (any, error) {
 		return c.cliente.CreatePlatformApplication(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCreatePlatformApp.Error())
+		return "", c.GetLogger().WrapError(err, ErrCreatePlatformApp.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.CreatePlatformApplicationOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCreatePlatformApp.Error())
+		return "", c.GetLogger().WrapError(err, ErrCreatePlatformApp.Error())
 	}
 	return *response.PlatformApplicationArn, nil
 }
@@ -492,17 +424,17 @@ func (c *Cliente) CreatePlatformEndpoint(ctx context.Context, platformApplicatio
 		input.Attributes = attributes
 	}
 
-	result, err := c.execute(ctx, "CreatePlatformEndpoint", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "CreatePlatformEndpoint", func(ctx context.Context) (any, error) {
 		return c.cliente.CreatePlatformEndpoint(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCreatePlatformEndpoint.Error())
+		return "", c.GetLogger().WrapError(err, ErrCreatePlatformEndpoint.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.CreatePlatformEndpointOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrCreatePlatformEndpoint.Error())
+		return "", c.GetLogger().WrapError(err, ErrCreatePlatformEndpoint.Error())
 	}
 	return *response.EndpointArn, nil
 }
@@ -518,17 +450,17 @@ func (c *Cliente) PublishToEndpoint(ctx context.Context, endpointArn string, mes
 		MessageAttributes: messageAttributes,
 	}
 
-	result, err := c.execute(ctx, "PublishToEndpoint", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "PublishToEndpoint", func(ctx context.Context) (any, error) {
 		return c.cliente.Publish(ctx, input)
 	})
 
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublication.Error())
+		return "", c.GetLogger().WrapError(err, ErrPublication.Error())
 	}
 
 	response, err := client.SafeTypeAssert[*sns.PublishOutput](result)
 	if err != nil {
-		return "", c.logger.WrapError(err, ErrPublication.Error())
+		return "", c.GetLogger().WrapError(err, ErrPublication.Error())
 	}
 	return *response.MessageId, nil
 }
@@ -538,7 +470,7 @@ func (c *Cliente) SetEndpointAttributes(ctx context.Context, endpointArn string,
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "SetEndpointAttributes", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "SetEndpointAttributes", func(ctx context.Context) (any, error) {
 		return c.cliente.SetEndpointAttributes(ctx, &sns.SetEndpointAttributesInput{
 			EndpointArn: aws.String(endpointArn),
 			Attributes:  attributes,
@@ -546,7 +478,7 @@ func (c *Cliente) SetEndpointAttributes(ctx context.Context, endpointArn string,
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, "error setting endpoint attributes")
+		return c.GetLogger().WrapError(err, "error setting endpoint attributes")
 	}
 
 	return nil
@@ -557,19 +489,19 @@ func (c *Cliente) GetEndpointAttributes(ctx context.Context, endpointArn string)
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.execute(ctx, "GetEndpointAttributes", func(ctx context.Context) (any, error) {
+	result, err := c.Execute(ctx, "GetEndpointAttributes", func(ctx context.Context) (any, error) {
 		return c.cliente.GetEndpointAttributes(ctx, &sns.GetEndpointAttributesInput{
 			EndpointArn: aws.String(endpointArn),
 		})
 	})
 
 	if err != nil {
-		return nil, c.logger.WrapError(err, "error getting endpoint attributes")
+		return nil, c.GetLogger().WrapError(err, "error getting endpoint attributes")
 	}
 
 	response, err := client.SafeTypeAssert[*sns.GetEndpointAttributesOutput](result)
 	if err != nil {
-		return nil, c.logger.WrapError(err, "error getting endpoint attributes")
+		return nil, c.GetLogger().WrapError(err, "error getting endpoint attributes")
 	}
 	return response.Attributes, nil
 }
@@ -579,14 +511,14 @@ func (c *Cliente) DeleteEndpoint(ctx context.Context, endpointArn string) error 
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeleteEndpoint", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "DeleteEndpoint", func(ctx context.Context) (any, error) {
 		return c.cliente.DeleteEndpoint(ctx, &sns.DeleteEndpointInput{
 			EndpointArn: aws.String(endpointArn),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, ErrDeleteEndpoint.Error())
+		return c.GetLogger().WrapError(err, ErrDeleteEndpoint.Error())
 	}
 
 	return nil
@@ -597,14 +529,14 @@ func (c *Cliente) DeletePlatformApplication(ctx context.Context, platformApplica
 		return ErrInvalidInput
 	}
 
-	_, err := c.execute(ctx, "DeletePlatformApplication", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "DeletePlatformApplication", func(ctx context.Context) (any, error) {
 		return c.cliente.DeletePlatformApplication(ctx, &sns.DeletePlatformApplicationInput{
 			PlatformApplicationArn: aws.String(platformApplicationArn),
 		})
 	})
 
 	if err != nil {
-		return c.logger.WrapError(err, "error deleting platform application")
+		return c.GetLogger().WrapError(err, "error deleting platform application")
 	}
 
 	return nil
@@ -615,19 +547,19 @@ func (c *Cliente) ListPlatformApplications(ctx context.Context) ([]PlatformAppli
 	var nextToken *string
 
 	for {
-		result, err := c.execute(ctx, "ListPlatformApplications", func(ctx context.Context) (any, error) {
+		result, err := c.Execute(ctx, "ListPlatformApplications", func(ctx context.Context) (any, error) {
 			return c.cliente.ListPlatformApplications(ctx, &sns.ListPlatformApplicationsInput{
 				NextToken: nextToken,
 			})
 		})
 
 		if err != nil {
-			return nil, c.logger.WrapError(err, "error listing platform applications")
+			return nil, c.GetLogger().WrapError(err, "error listing platform applications")
 		}
 
 		response, err := client.SafeTypeAssert[*sns.ListPlatformApplicationsOutput](result)
 		if err != nil {
-			return nil, c.logger.WrapError(err, "error listing platform applications")
+			return nil, c.GetLogger().WrapError(err, "error listing platform applications")
 		}
 		for _, app := range response.PlatformApplications {
 			allApps = append(allApps, PlatformApplication{
@@ -654,7 +586,7 @@ func (c *Cliente) ListEndpointsByPlatformApplication(ctx context.Context, platfo
 	var nextToken *string
 
 	for {
-		result, err := c.execute(ctx, "ListEndpointsByPlatformApplication", func(ctx context.Context) (any, error) {
+		result, err := c.Execute(ctx, "ListEndpointsByPlatformApplication", func(ctx context.Context) (any, error) {
 			return c.cliente.ListEndpointsByPlatformApplication(ctx, &sns.ListEndpointsByPlatformApplicationInput{
 				PlatformApplicationArn: aws.String(platformApplicationArn),
 				NextToken:              nextToken,
@@ -662,12 +594,12 @@ func (c *Cliente) ListEndpointsByPlatformApplication(ctx context.Context, platfo
 		})
 
 		if err != nil {
-			return nil, c.logger.WrapError(err, "error listing endpoints")
+			return nil, c.GetLogger().WrapError(err, "error listing endpoints")
 		}
 
 		response, err := client.SafeTypeAssert[*sns.ListEndpointsByPlatformApplicationOutput](result)
 		if err != nil {
-			return nil, c.logger.WrapError(err, "error listing endpoints")
+			return nil, c.GetLogger().WrapError(err, "error listing endpoints")
 		}
 		for _, endpoint := range response.Endpoints {
 			allEndpoints = append(allEndpoints, Endpoint{

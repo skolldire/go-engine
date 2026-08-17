@@ -27,7 +27,6 @@ type CommonApiError struct {
 	Details   map[string]string `json:"details,omitempty"`
 	Err       error             `json:"-"`
 	HttpCode  int               `json:"-"`
-	Context   context.Context   `json:"-"`
 }
 
 var _ error = (*CommonApiError)(nil)
@@ -43,22 +42,50 @@ func (e *CommonApiError) Unwrap() error {
 	return e.Err
 }
 
-func (e *CommonApiError) WithContext(ctx context.Context) *CommonApiError {
-	e.Context = ctx
-	return e
-}
-
-func (e *CommonApiError) WithRequestID(requestID string) *CommonApiError {
-	e.RequestID = requestID
-	return e
-}
-
-func (e *CommonApiError) WithDetail(key, value string) *CommonApiError {
-	if e.Details == nil {
-		e.Details = make(map[string]string)
+// Is reports whether target is (or wraps) a *CommonApiError carrying the same
+// Code. Without it errors.Is could not be used against this taxonomy at all,
+// so callers had to type-assert and compare codes by hand.
+func (e *CommonApiError) Is(target error) bool {
+	var t *CommonApiError
+	if !errors.As(target, &t) {
+		return false
 	}
-	e.Details[key] = value
-	return e
+	return e.Code == t.Code
+}
+
+// WithRequestID returns a copy carrying requestID.
+//
+// These builders return a copy rather than mutating the receiver. Mutating was
+// unsafe for the common `var ErrNotFound = NewNotFoundError(...)` package-level
+// sentinel: the first request to decorate it corrupted the shared value for
+// every subsequent one.
+func (e *CommonApiError) WithRequestID(requestID string) *CommonApiError {
+	clone := e.clone()
+	clone.RequestID = requestID
+	return clone
+}
+
+// WithDetail returns a copy with key=value added to Details.
+func (e *CommonApiError) WithDetail(key, value string) *CommonApiError {
+	clone := e.clone()
+	if clone.Details == nil {
+		clone.Details = make(map[string]string, 1)
+	}
+	clone.Details[key] = value
+	return clone
+}
+
+// clone produces an independent copy, deep-copying Details so the copy and the
+// original never share the same map.
+func (e *CommonApiError) clone() *CommonApiError {
+	copied := *e
+	if e.Details != nil {
+		copied.Details = make(map[string]string, len(e.Details))
+		for k, v := range e.Details {
+			copied.Details[k] = v
+		}
+	}
+	return &copied
 }
 
 func NewCommonApiError(code, msg string, err error, httpCode int) *CommonApiError {
@@ -70,11 +97,14 @@ func NewCommonApiError(code, msg string, err error, httpCode int) *CommonApiErro
 	}
 }
 
+// WrapError returns a copy of err with msg prefixed to its message when err is
+// (or wraps) a *CommonApiError. It never mutates the error it was given.
 func WrapError(err error, msg string) error {
 	var e *CommonApiError
 	if errors.As(err, &e) {
-		e.Msg = fmt.Sprintf("%s: %s", msg, e.Msg)
-		return e
+		wrapped := e.clone()
+		wrapped.Msg = fmt.Sprintf("%s: %s", msg, e.Msg)
+		return wrapped
 	}
 	return err
 }
@@ -110,14 +140,29 @@ func NewInternalError(msg string, err error) *CommonApiError {
 // HandleApiErrorResponse handles API errors and writes JSON response
 // If logger is provided, errors are logged using structured logging
 func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service) error {
+	return HandleApiErrorResponseCtx(context.Background(), err, w, "", log)
+}
+
+// HandleApiErrorResponseCtx is the context-aware form of the handlers above.
+// The context is passed explicitly instead of being stashed inside the error
+// value, which is the documented Go anti-pattern the old Context field was.
+// requestID may be empty.
+func HandleApiErrorResponseCtx(ctx context.Context, err error, w http.ResponseWriter, requestID string, log logger.Service) error {
 	w.Header().Set("Content-Type", "application/json")
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var errType *CommonApiError
 	if errors.As(err, &errType) {
-		ctx := context.Background()
-		if errType.Context != nil {
-			ctx = errType.Context
+		// Copy before decorating: the caller's error (often a package-level
+		// sentinel) must not acquire this request's ID.
+		payload := errType.clone()
+		if requestID != "" {
+			payload.RequestID = requestID
 		}
+		errType = payload
 
 		if errType.Err == nil {
 			if log != nil {
@@ -163,61 +208,11 @@ func HandleApiErrorResponse(err error, w http.ResponseWriter, log logger.Service
 	return nil
 }
 
-// HandleApiErrorResponseWithRequest handles API errors with request ID and writes JSON response
-// If logger is provided, errors are logged using structured logging
+// HandleApiErrorResponseWithRequest handles API errors with request ID and
+// writes the JSON response. Prefer HandleApiErrorResponseCtx, which also takes
+// the context explicitly.
 func HandleApiErrorResponseWithRequest(err error, w http.ResponseWriter, requestID string, log logger.Service) error {
-	w.Header().Set("Content-Type", "application/json")
-
-	var errType *CommonApiError
-	if errors.As(err, &errType) {
-		errType.RequestID = requestID
-		ctx := context.Background()
-		if errType.Context != nil {
-			ctx = errType.Context
-		}
-
-		if errType.Err == nil {
-			if log != nil {
-				log.Warn(ctx, "CommonApiError has nil Err field", map[string]any{
-					"error_code": errType.Code,
-					"error_msg":  errType.Msg,
-					"http_code":  errType.HttpCode,
-					"request_id": requestID,
-				})
-			}
-		} else {
-			if log != nil {
-				log.Error(ctx, errType.Err, map[string]any{
-					"error_code": errType.Code,
-					"error_msg":  errType.Msg,
-					"http_code":  errType.HttpCode,
-					"request_id": requestID,
-				})
-			}
-		}
-
-		w.WriteHeader(errType.HttpCode)
-		b, _ := json.Marshal(errType)
-		_, _ = w.Write(b)
-		return nil
-	}
-
-	// Unhandled error - log it if logger is available
-	if log != nil {
-		log.Error(context.Background(), err, map[string]any{
-			"error_type": "unhandled_error",
-			"request_id": requestID,
-		})
-	}
-
-	w.WriteHeader(http.StatusInternalServerError)
-	b, _ := json.Marshal(CommonApiError{
-		Code:      CodeInternalError,
-		Msg:       "Internal server error",
-		RequestID: requestID,
-	})
-	_, _ = w.Write(b)
-	return nil
+	return HandleApiErrorResponseCtx(context.Background(), err, w, requestID, log)
 }
 
 // HandleApiErrorResponseLegacy is a legacy version that doesn't require logger

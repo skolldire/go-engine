@@ -38,13 +38,6 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 		region:     cfg.Region,
 	}
 
-	if c.IsLoggingEnabled() {
-		log.Debug(context.Background(), "SES client initialized",
-			map[string]any{
-				"region": cfg.Region,
-			})
-	}
-
 	return c
 }
 
@@ -54,30 +47,30 @@ func (c *SESClient) SendEmail(ctx context.Context, message EmailMessage) (*SendE
 	}
 
 	if err := validation.GetGlobalValidator().Var(message.From.Email, "required,email"); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidAddress, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidAddress, err)
 	}
 
 	for _, to := range message.To {
 		if err := validation.GetGlobalValidator().Var(to.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidAddress, err)
 		}
 	}
 
 	for _, cc := range message.Cc {
 		if err := validation.GetGlobalValidator().Var(cc.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: invalid Cc address: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: invalid Cc address: %w", ErrInvalidAddress, err)
 		}
 	}
 
 	for _, bcc := range message.Bcc {
 		if err := validation.GetGlobalValidator().Var(bcc.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: invalid Bcc address: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: invalid Bcc address: %w", ErrInvalidAddress, err)
 		}
 	}
 
 	for _, replyTo := range message.ReplyTo {
 		if err := validation.GetGlobalValidator().Var(replyTo.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: invalid ReplyTo address: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: invalid ReplyTo address: %w", ErrInvalidAddress, err)
 		}
 	}
 
@@ -192,7 +185,7 @@ func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subjec
 	}
 
 	if err := validation.GetGlobalValidator().Var(from.Email, "required,email"); err != nil {
-		return nil, fmt.Errorf("%w: invalid sender email: %v", ErrInvalidAddress, err)
+		return nil, fmt.Errorf("%w: invalid sender email: %w", ErrInvalidAddress, err)
 	}
 
 	result := &BulkSendResult{

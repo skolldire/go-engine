@@ -20,23 +20,19 @@ func (c *Client) SignOut(ctx context.Context, accessToken string) error {
 		return ErrInvalidToken
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.GlobalSignOutInput{
 		AccessToken: aws.String(accessToken),
 	}
 
-	_, err = c.executeOperation(ctx, "SignOut", func(ctx context.Context) (any, error) {
+	_, err = c.Execute(ctx, "SignOut", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.GlobalSignOut(ctx, input)
 	})
 
 	if err != nil {
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "User signed out successfully", nil)
 	}
 
 	return nil
@@ -54,23 +50,19 @@ func (c *Client) GlobalSignOut(ctx context.Context, accessToken string) error {
 		return ErrInvalidToken
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.GlobalSignOutInput{
 		AccessToken: aws.String(accessToken),
 	}
 
-	_, err = c.executeOperation(ctx, "GlobalSignOut", func(ctx context.Context) (any, error) {
+	_, err = c.Execute(ctx, "GlobalSignOut", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.GlobalSignOut(ctx, input)
 	})
 
 	if err != nil {
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "User signed out from all devices successfully", nil)
 	}
 
 	return nil

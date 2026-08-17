@@ -3,7 +3,9 @@ name: Lint Code
 on:
   pull_request:
     branches: [main, master]
-    # Runs on every PR to main/master
+  push:
+    branches: [main, master]
+    # Also runs on merge so a bad merge cannot land unlinted code.
 
 jobs:
   lint:
@@ -16,12 +18,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          # Pin to the toolchain declared in go.mod for reproducible builds.
+          go-version-file: go.mod
           check-latest: true
 
-      - name: Clean Go Module Cache
-        run: go clean -modcache
-
+      # NOTE: no `go clean -modcache` here. It ran before actions/cache and
+      # deleted exactly what the cache was about to restore.
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -35,8 +37,8 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
-          args: >
-            --timeout=5m
-            --tests=false
-            ./...
+          # Pinned, not `latest`: a linter that changes under us turns CI into a
+          # non-reproducible gate.
+          version: v2.12.2
+          # Tests are linted too; excluding them hid real findings in test code.
+          args: --timeout=10m ./...

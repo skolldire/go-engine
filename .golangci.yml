@@ -1,7 +1,7 @@
 version: "2"
 
 run:
-  timeout: 5m
+  timeout: 10m
   modules-download-mode: readonly
 
 linters:
@@ -11,17 +11,40 @@ linters:
     - staticcheck
     - ineffassign
     - unused
+    # gosec and errorlint were enabled after the 2026-08 audit remediation
+    # (docs/plan-auditoria-2026-08.md, phase B). Production code is clean; the
+    # exclusions below cover patterns that are only ever findings in tests.
+    - gosec
+    - errorlint
 
   # revive was evaluated and removed: golangci-lint v2.12.2 does not respect
   # enable-all-rules: false — default rules (exported, package-comments,
   # unused-parameter) trigger on ~50 pre-existing symbols making CI unusable.
   # Revisit when the project adopts a godoc-first policy or upgrades the linter.
+  # Tracked as item D1 in docs/plan-auditoria-2026-08.md.
 
   exclusions:
     rules:
       - path: "_test\\.go"
         linters:
           - errcheck
+
+      # Test fixtures legitimately use literal credentials, ignore encoder
+      # errors on httptest responses, open temp files by variable path, and
+      # build small int32 constants.
+      - path: "_test\\.go"
+        linters: [gosec]
+        text: "(G101|G104|G304|G115)"
+
+      # Test helpers assert on concrete error types they construct themselves.
+      - path: "_test\\.go"
+        linters: [errorlint]
+
+      # pkg/app and its tests are the last consumers of the deprecated
+      # configuration loader; both are scheduled for removal together.
+      - path: "pkg/app/"
+        linters: [staticcheck]
+        text: "SA1019.*pkg/config/viper"
 
       # middleware.RealIP deprecation — removal requires infrastructure changes; tracked separately
       - linters: [staticcheck]

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	baseclient "github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"gorm.io/gorm"
 )
@@ -38,9 +38,7 @@ type Config struct {
 }
 
 type DBClient struct {
-	db         *gorm.DB
-	logger     logger.Service
-	logging    bool
-	resilience *resilience.Service
-	dbType     string
+	db     *gorm.DB
+	dbType string
+	*baseclient.BaseClient
 }

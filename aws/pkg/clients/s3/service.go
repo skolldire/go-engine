@@ -44,14 +44,6 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 		region:          cfg.Region,
 	}
 
-	if c.IsLoggingEnabled() {
-		log.Debug(context.Background(), "S3 client initialized",
-			map[string]any{
-				"region": cfg.Region,
-				"bucket": cfg.Bucket,
-			})
-	}
-
 	return c
 }
 
@@ -171,11 +163,14 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 	const pageSize int32 = 1000 // Fixed page size for S3 API calls
 
 	for {
-		// Calculate how many keys we still need
-		remaining := maxKeys - int32(len(allObjects))
-		if remaining <= 0 {
+		// Calculate how many keys we still need. The comparison is done in int
+		// so the narrowing conversion below is provably in range.
+		collected := len(allObjects)
+		if collected >= int(maxKeys) {
 			break // We've reached the requested limit
 		}
+		//nolint:gosec // G115: collected < maxKeys (int32) is guaranteed above
+		remaining := maxKeys - int32(collected)
 
 		// Use the smaller of pageSize or remaining keys as the MaxKeys for this request
 		requestMaxKeys := pageSize
@@ -212,14 +207,15 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 				ETag:         aws.ToString(obj.ETag),
 			})
 
-			// Stop if we've reached the requested limit
-			if int32(len(allObjects)) >= maxKeys {
+			// Stop if we've reached the requested limit. Widen maxKeys instead
+			// of narrowing len(), which cannot overflow.
+			if len(allObjects) >= int(maxKeys) {
 				break
 			}
 		}
 
 		// Stop if there are no more pages or we've reached the limit
-		if response.NextContinuationToken == nil || int32(len(allObjects)) >= maxKeys {
+		if response.NextContinuationToken == nil || len(allObjects) >= int(maxKeys) {
 			break
 		}
 		continuationToken = response.NextContinuationToken

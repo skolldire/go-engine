@@ -198,10 +198,11 @@ func TestNewClient_WithLogging(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{Region: "us-east-1", Bucket: "test-bucket", EnableLogging: true}
 	log := &mockLogger{}
-	log.On("Debug", mock.Anything, "S3 client initialized", mock.Anything).Return()
 	c := NewClient(acf, cfg, log)
 	assert.NotNil(t, c)
-	log.AssertExpectations(t)
+	// Constructing a client emits nothing: operations are logged, construction
+	// is not. A library must not write log lines the application did not ask for.
+	log.AssertNotCalled(t, "Debug", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestNewClient_WithResilience(t *testing.T) {

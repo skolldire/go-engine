@@ -26,6 +26,12 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Check architectural constraints
+        run: make lint-arch
+
+      - name: Report core dependency footprint
+        run: make lint-deps
+
       - name: Run Tests with Race Detector and Coverage
         run: |
           go test -race -covermode=atomic -coverprofile=coverage.out ./...
@@ -37,6 +43,9 @@ jobs:
             echo "Coverage report not found!"
             exit 1
           fi
+
+      - name: Enforce minimum coverage on critical packages
+        run: make coverage-check
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4

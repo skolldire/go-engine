@@ -7,7 +7,8 @@ import (
 	"os"
 
 	"github.com/skolldire/go-engine/pkg/app/router"
-	"github.com/skolldire/go-engine/pkg/config/viper"
+	"github.com/skolldire/go-engine/pkg/config/dynamic"
+	"github.com/skolldire/go-engine/pkg/config/viper" //nolint:staticcheck // SA1019: pkg/app is itself deprecated and is the last consumer of this loader
 	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/health"
 	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
@@ -74,9 +75,35 @@ func (b *AppBuilder) WithDynamicConfig() *AppBuilder {
 		return b
 	}
 	b.engine.Conf = config
+	b.engine.currentConf.Store(config)
+	b.engine.dynamicConfig = dynamicConfig
 
-	log := setLogLevel(config.Log, cfgLogger)
+	log := buildLogger(config.Log, cfgLogger)
 	b.engine.Log = log
+
+	// Populate the flags here too: previously only WithConfigs+WithInitialization
+	// did it, so WithDynamicConfig alone left GetFeatureFlags returning nil.
+	// Always construct it so the reload hook has a stable instance to update.
+	b.engine.FeatureFlags = dynamic.NewFeatureFlags(config.FeatureFlags, log)
+
+	// Publish every successful reload so Config() actually returns new values.
+	// Without this hook the watcher updated its own copy and no consumer ever
+	// observed the change.
+	dynamicConfig.AddReloadHook(func(_, newConfig any) error {
+		reloaded, err := client.SafeTypeAssert[*viper.Config](newConfig)
+		if err != nil {
+			return fmt.Errorf("reloaded config has unexpected type: %w", err)
+		}
+
+		b.engine.currentConf.Store(reloaded)
+		// Update in place rather than swapping the pointer: this hook runs on the
+		// watcher goroutine, and SetAll is the only race-free way to publish to
+		// consumers that already hold the *FeatureFlags.
+		if ff := b.engine.FeatureFlags; ff != nil {
+			ff.SetAll(reloaded.FeatureFlags)
+		}
+		return nil
+	})
 
 	ctx := b.engine.ctx
 	if ctx == nil {
@@ -85,6 +112,11 @@ func (b *AppBuilder) WithDynamicConfig() *AppBuilder {
 	if err := dynamicConfig.StartWatching(ctx); err != nil {
 		b.engine.Log.Warn(ctx, "failed to start config watchers: "+err.Error(), nil)
 	}
+
+	// The watcher owns goroutines and fsnotify handles. Registering Stop is what
+	// makes them reachable at shutdown; previously the only reference was local
+	// to this function and the goroutines leaked for the process lifetime.
+	b.engine.registerSimpleCloser("dynamic-config", dynamicConfig.Stop)
 
 	return b
 }
@@ -207,8 +239,19 @@ func (b *AppBuilder) RegisterHealthChecker(name string, c health.Checker) *AppBu
 	return b
 }
 
-// mountHealthIfReady registers GET /health on the router when both the health
-// service and router are available. It is idempotent.
+// mountHealthIfReady registers the health endpoints on the router when both the
+// health service and router are available. It is idempotent.
+//
+// Four routes are mounted:
+//
+//	GET /health → unified payload for ECS/ALB style checks
+//	GET /live   → liveness probe (Kubernetes)
+//	GET /ready  → readiness probe (Kubernetes)
+//	GET /deps   → per-dependency JSON status
+//
+// The last three used to be defined by health.HTTPHandler.Routes but never
+// mounted, so the probes every Kubernetes deployment expects returned 404
+// unless the consumer wired them by hand.
 func (b *AppBuilder) mountHealthIfReady() {
 	if b.healthMounted {
 		return
@@ -218,6 +261,9 @@ func (b *AppBuilder) mountHealthIfReady() {
 	}
 	h := health.NewHTTPHandler(b.engine.Services.Health)
 	b.engine.Router.AddRoute("GET", "/health", h.HealthHandler)
+	b.engine.Router.AddRoute("GET", "/live", h.LiveHandler)
+	b.engine.Router.AddRoute("GET", "/ready", h.ReadyHandler)
+	b.engine.Router.AddRoute("GET", "/deps", h.DepsHandler)
 	b.healthMounted = true
 }
 
@@ -281,7 +327,9 @@ func (b *AppBuilder) Build() (*Engine, error) {
 // resources already created, then returns the aggregated build error. The
 // rollback error (if any) is joined so nothing is silently swallowed.
 func (b *AppBuilder) failBuild() error {
-	buildErr := fmt.Errorf("build errors: %v", b.errors)
+	// errors.Join, not %v: the individual causes must stay reachable through
+	// errors.Is/errors.As instead of being flattened into a formatted string.
+	buildErr := fmt.Errorf("build errors: %w", errors.Join(b.errors...))
 	if b.engine == nil {
 		return buildErr
 	}

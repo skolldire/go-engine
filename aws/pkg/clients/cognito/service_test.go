@@ -93,13 +93,14 @@ func TestNewClient_WithLogging(t *testing.T) {
 		WithResilience: false,
 	}
 	log := &mockLogger{}
-	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
 	client, err := NewClient(cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	log.AssertExpectations(t)
+	// Constructing a client emits nothing: a library must not write log lines
+	// the application did not ask for. Operations are logged, construction is not.
+	log.AssertNotCalled(t, "Debug", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestNewClient_WithResilience(t *testing.T) {
@@ -125,7 +126,8 @@ func TestNewClient_WithResilience(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	cognitoClient := client.(*Client)
-	assert.NotNil(t, cognitoClient.resilience)
+	// Resilience now lives in the embedded BaseClient middleware chain.
+	assert.NotNil(t, cognitoClient.BaseClient)
 }
 
 func TestNewClient_InvalidConfig(t *testing.T) {
@@ -589,7 +591,8 @@ func TestHandleCognitoError(t *testing.T) {
 			assert.NotNil(t, result)
 
 			if tt.expectedCode != "" {
-				cognitoErr, ok := result.(*CognitoError)
+				var cognitoErr *CognitoError
+				ok := errors.As(result, &cognitoErr)
 				assert.True(t, ok, "expected CognitoError")
 				assert.Equal(t, tt.expectedCode, cognitoErr.Code)
 			}

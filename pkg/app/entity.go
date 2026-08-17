@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/skolldire/go-engine/aws/pkg/clients/cognito"
@@ -24,7 +25,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/clients/rest"
 	"github.com/skolldire/go-engine/pkg/config/dynamic"
-	"github.com/skolldire/go-engine/pkg/config/viper"
+	"github.com/skolldire/go-engine/pkg/config/viper" //nolint:staticcheck // SA1019: pkg/app is itself deprecated and is the last consumer of this loader
 	"github.com/skolldire/go-engine/pkg/health"
 	pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
@@ -38,7 +39,19 @@ type Engine struct {
 	GrpcServer grpcServer.Service
 	Log        logger.Service
 	Telemetry  telemetry.Telemetry
-	Conf       *viper.Config
+
+	// Conf is the configuration snapshot taken at build time. With
+	// WithDynamicConfig it does NOT change when the file is reloaded; use
+	// Config() to read the current values.
+	Conf *viper.Config
+
+	// currentConf holds the live configuration published by the file watcher.
+	// It is nil unless WithDynamicConfig was used.
+	currentConf atomic.Pointer[viper.Config]
+
+	// dynamicConfig is the watcher owning the reload goroutines. It is retained
+	// so Stop can be registered with the lifecycle instead of being unreachable.
+	dynamicConfig *dynamic.DynamicConfig
 
 	// Legacy single clients (deprecated, use Services instead)
 	SQSClient      sqs.Service
@@ -74,6 +87,22 @@ type Engine struct {
 
 func (e *Engine) GetErrors() []error {
 	return e.errors
+}
+
+// Config returns the configuration currently in effect. Under WithDynamicConfig
+// it reflects the latest successful reload; otherwise it returns the build-time
+// snapshot. Safe for concurrent use.
+func (e *Engine) Config() *viper.Config {
+	if cfg := e.currentConf.Load(); cfg != nil {
+		return cfg
+	}
+	return e.Conf
+}
+
+// DynamicConfig returns the live-reload controller, or nil when the engine was
+// built without WithDynamicConfig. Use it to register reload hooks.
+func (e *Engine) DynamicConfig() *dynamic.DynamicConfig {
+	return e.dynamicConfig
 }
 
 func (e *Engine) Run() error {

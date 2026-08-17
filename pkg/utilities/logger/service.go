@@ -49,7 +49,8 @@ func NewService(c Config, l LogWriter) Service {
 		contextExtractor: getContextExtractor(c.ContextExtractor),
 	}
 
-	raw.Info("Logger service initialized")
+	// Deliberately silent: a library must not emit log lines the application
+	// did not ask for, and this one fired on every construction.
 	return svc
 }
 
@@ -122,13 +123,24 @@ func configureFileOutput(l *logrus.Logger, path string) {
 	}
 }
 
+// Log files routinely carry request payloads, headers and identifiers, so they
+// are created for the owning user only. A world-writable log file lets any local
+// user forge or truncate the audit trail.
+const (
+	logDirPerm  os.FileMode = 0o750
+	logFilePerm os.FileMode = 0o600
+)
+
 func openLogFile(l *logrus.Logger, path string) io.Writer {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), logDirPerm); err != nil {
 		l.Warnf("Could not create log directory: %v", err)
 		return nil
 	}
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	// path comes from log.path in the application's own configuration file,
+	// never from request input.
+	//nolint:gosec // G304: operator-configured log destination
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFilePerm)
 	if err != nil {
 		l.Warnf("Could not open log file %s: %v, using standard output", path, err)
 		return nil

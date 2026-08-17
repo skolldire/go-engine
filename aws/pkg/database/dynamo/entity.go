@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	baseclient "github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
@@ -47,8 +47,6 @@ type Config struct {
 
 type DynamoClient struct {
 	client      Service
-	logger      logger.Service
-	logging     bool
-	resilience  *resilience.Service
 	tablePrefix string
+	*baseclient.BaseClient
 }

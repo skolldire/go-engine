@@ -1,6 +1,7 @@
 package viper
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -225,7 +226,8 @@ func loadConfigFile(v *viper.Viper, path, name string, logger logger.LogWriter) 
 
 	logger.Debugf("attempting to load configuration file: %s in %s", name, path)
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		var notFound viper.ConfigFileNotFoundError
+		if errors.As(err, &notFound) {
 			logger.Warnf("configuration file not found: %s", name)
 		} else {
 			logger.Errorf("error reading configuration file %s: %v", name, err)

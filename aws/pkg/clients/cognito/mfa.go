@@ -18,7 +18,7 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 		return nil, err
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	challengeParams := map[string]string{
@@ -46,7 +46,7 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 	}
 
 	var result *cognitoidentityprovider.RespondToAuthChallengeOutput
-	_, err := c.executeOperation(ctx, "RespondToMFAChallenge", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "RespondToMFAChallenge", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.RespondToAuthChallenge(ctx, input)
 		return result, err
@@ -82,13 +82,6 @@ func (c *Client) RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequ
 		ExpiresIn:    int64(result.AuthenticationResult.ExpiresIn),
 	}
 
-	if c.logging {
-		c.logger.Info(ctx, "MFA challenge completed successfully",
-			map[string]any{
-				"challenge_type": req.ChallengeType,
-			})
-	}
-
 	return tokens, nil
 }
 
@@ -102,7 +95,7 @@ func (c *Client) AssociateSoftwareToken(ctx context.Context, accessToken string)
 		return nil, ErrInvalidToken
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.AssociateSoftwareTokenInput{
@@ -110,7 +103,7 @@ func (c *Client) AssociateSoftwareToken(ctx context.Context, accessToken string)
 	}
 
 	var result *cognitoidentityprovider.AssociateSoftwareTokenOutput
-	_, err = c.executeOperation(ctx, "AssociateSoftwareToken", func(ctx context.Context) (any, error) {
+	_, err = c.Execute(ctx, "AssociateSoftwareToken", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.AssociateSoftwareToken(ctx, input)
 		return result, err
@@ -155,13 +148,6 @@ func (c *Client) AssociateSoftwareToken(ctx context.Context, accessToken string)
 
 	qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCodePNG)
 
-	if c.logging {
-		c.logger.Info(ctx, "Software token associated successfully",
-			map[string]any{
-				"user_id": user.ID,
-			})
-	}
-
 	return &SoftwareTokenAssociation{
 		SecretCode: secretCode,
 		QRCode:     qrCodeBase64,
@@ -184,7 +170,7 @@ func (c *Client) VerifySoftwareToken(ctx context.Context, accessToken, userCode,
 		}
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.VerifySoftwareTokenInput{
@@ -198,7 +184,7 @@ func (c *Client) VerifySoftwareToken(ctx context.Context, accessToken, userCode,
 		input.Session = aws.String(session)
 	}
 
-	_, err := c.executeOperation(ctx, "VerifySoftwareToken", func(ctx context.Context) (any, error) {
+	_, err := c.Execute(ctx, "VerifySoftwareToken", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.VerifySoftwareToken(ctx, input)
 	})
 
@@ -223,10 +209,6 @@ func (c *Client) VerifySoftwareToken(ctx context.Context, accessToken, userCode,
 		return handleCognitoError(err)
 	}
 
-	if c.logging {
-		c.logger.Info(ctx, "Software token verified successfully", nil)
-	}
-
 	return nil
 }
 
@@ -240,7 +222,7 @@ func (c *Client) SetUserMFAPreference(ctx context.Context, accessToken string, s
 		return ErrInvalidToken
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	preferredSMS := smsEnabled && !totpEnabled
@@ -262,7 +244,7 @@ func (c *Client) SetUserMFAPreference(ctx context.Context, accessToken string, s
 		},
 	}
 
-	_, err = c.executeOperation(ctx, "SetUserMFAPreference", func(ctx context.Context) (any, error) {
+	_, err = c.Execute(ctx, "SetUserMFAPreference", func(ctx context.Context) (any, error) {
 		return c.cognitoClient.SetUserMFAPreference(ctx, input)
 	})
 
@@ -274,14 +256,6 @@ func (c *Client) SetUserMFAPreference(ctx context.Context, accessToken string, s
 			}
 		}
 		return handleCognitoError(err)
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "User MFA preference updated",
-			map[string]any{
-				"sms_enabled":  smsEnabled,
-				"totp_enabled": totpEnabled,
-			})
 	}
 
 	return nil
@@ -297,7 +271,7 @@ func (c *Client) GetUserMFAStatus(ctx context.Context, accessToken string) (*MFA
 		return nil, ErrInvalidToken
 	}
 
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
+	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
 	input := &cognitoidentityprovider.GetUserInput{
@@ -305,7 +279,7 @@ func (c *Client) GetUserMFAStatus(ctx context.Context, accessToken string) (*MFA
 	}
 
 	var result *cognitoidentityprovider.GetUserOutput
-	_, err = c.executeOperation(ctx, "GetUserMFAStatus", func(ctx context.Context) (any, error) {
+	_, err = c.Execute(ctx, "GetUserMFAStatus", func(ctx context.Context) (any, error) {
 		var err error
 		result, err = c.cognitoClient.GetUser(ctx, input)
 		return result, err
@@ -360,15 +334,6 @@ func (c *Client) GetUserMFAStatus(ctx context.Context, accessToken string) (*MFA
 		if mfaStatus.PreferredMethod == "" && len(mfaStatus.MFATypes) > 0 {
 			mfaStatus.PreferredMethod = mfaStatus.MFATypes[0]
 		}
-	}
-
-	if c.logging {
-		c.logger.Info(ctx, "User MFA status retrieved",
-			map[string]any{
-				"mfa_enabled":      mfaStatus.MFAEnabled,
-				"mfa_types":        mfaStatus.MFATypes,
-				"preferred_method": mfaStatus.PreferredMethod,
-			})
 	}
 
 	return mfaStatus, nil

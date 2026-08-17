@@ -73,7 +73,9 @@ func (s *server) Start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		if s.logging {
-			s.logger.Info(context.Background(), "stopping gRPC server", nil)
+			// ctx is already done here, so use a detached copy that keeps its
+			// values (trace IDs, request scope) for the shutdown log line.
+			s.logger.Info(context.WithoutCancel(ctx), "stopping gRPC server", nil)
 		}
 		s.server.GracefulStop()
 	}()

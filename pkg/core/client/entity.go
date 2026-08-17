@@ -71,7 +71,13 @@ type BaseClient struct {
 	resilience  *resilience.Service
 	timeout     time.Duration
 	serviceName string
-	mu          sync.RWMutex // Protects logging and serviceName fields
+
+	// chain is the composed middleware. Cross-cutting concerns live here rather
+	// than as conditionals inside Execute, so adding metrics or tracing is a
+	// composition change instead of an edit to every client package.
+	chain Handler
+
+	mu sync.RWMutex // Protects logging, serviceName and chain
 }
 
 // NewBaseClient creates a BaseClient with service name "base".
@@ -99,10 +105,27 @@ func NewBaseClientWithName(config BaseConfig, log logger.Service, serviceName st
 		bc.timeout = DefaultTimeout
 	}
 
+	// The default chain reproduces the previous behaviour exactly: logging when
+	// EnableLogging is set, resilience when WithResilience is set. Callers that
+	// want metrics or tracing replace it with Use.
+	var mw []Middleware
+	if log != nil {
+		mw = append(mw, WithLogging(log, bc.IsLoggingEnabled))
+	}
 	if config.WithResilience {
 		bc.resilience = resilience.NewResilienceService(config.Resilience, log)
+		mw = append(mw, WithResilienceService(bc.resilience))
 	}
+	bc.chain = Chain(mw...)(baseHandler)
 
+	return bc
+}
+
+// NewBaseClientWithMiddleware builds a client with an explicit chain, bypassing
+// the one derived from BaseConfig.
+func NewBaseClientWithMiddleware(config BaseConfig, log logger.Service, serviceName string, mw ...Middleware) *BaseClient {
+	bc := NewBaseClientWithName(config, log, serviceName)
+	bc.Use(mw...)
 	return bc
 }
 
@@ -126,56 +149,21 @@ func (bc *BaseClient) Execute(ctx context.Context, operationName string, operati
 	ctx, cancel := bc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	logFields := map[string]any{
-		"operation": operationName,
-		"service":   bc.getServiceName(),
-	}
-
-	if bc.resilience != nil {
-		return bc.executeWithResilience(ctx, operationName, operation, logFields)
-	}
-
-	return bc.executeDirectly(ctx, operationName, operation, logFields)
+	return bc.chain(ctx, Invocation{
+		Client:    bc.getServiceName(),
+		Operation: operationName,
+	}, operation)
 }
 
-func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName string, operation Operation, logFields map[string]any) (any, error) {
-	bc.mu.RLock()
-	logging := bc.logging
-	bc.mu.RUnlock()
-
-	if logging {
-		bc.logger.Debug(ctx, "starting operation with resilience: "+operationName, logFields)
-	}
-
-	result, err := bc.resilience.Execute(ctx, operation)
-
-	if err != nil && logging {
-		bc.logger.Error(ctx, err, logFields)
-	} else if logging {
-		bc.logger.Debug(ctx, "operation completed with resilience: "+operationName, logFields)
-	}
-
-	return result, err
-}
-
-func (bc *BaseClient) executeDirectly(ctx context.Context, operationName string, operation Operation, logFields map[string]any) (any, error) {
-	bc.mu.RLock()
-	logging := bc.logging
-	bc.mu.RUnlock()
-
-	if logging {
-		bc.logger.Debug(ctx, "starting operation: "+operationName, logFields)
-	}
-
-	result, err := operation(ctx)
-
-	if err != nil && logging {
-		bc.logger.Error(ctx, err, logFields)
-	} else if logging {
-		bc.logger.Debug(ctx, "operation completed: "+operationName, logFields)
-	}
-
-	return result, err
+// Use replaces the middleware chain. The default chain is built from
+// BaseConfig; this is for clients that need to add metrics, tracing, or their
+// own concern without every client package growing its own conditional.
+//
+// Middleware is applied outermost-first.
+func (bc *BaseClient) Use(mw ...Middleware) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+	bc.chain = Chain(mw...)(baseHandler)
 }
 
 func (bc *BaseClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {

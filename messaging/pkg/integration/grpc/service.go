@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/metadata"
@@ -38,105 +38,63 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		return nil, log.WrapError(err, ErrConnection.Error())
 	}
 
-	if err := waitForConnection(ctx, conn); err != nil {
-		_ = conn.Close()
-		return nil, err
+	// grpc.NewClient returns a connection in IDLE and does not start the
+	// handshake until the first RPC. Connect kicks off the transport so the
+	// client is usable immediately and so waitForConnection can observe progress
+	// instead of blocking on a state that would never change.
+	conn.Connect()
+
+	if cfg.WaitForReady {
+		if err := waitForConnection(ctx, conn); err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
 	}
 
-	c := &Cliente{
-		conn:    conn,
-		creds:   creds,
-		logger:  log,
-		logging: cfg.EnableLogging,
-		target:  cfg.Target,
-	}
-
-	if cfg.WithResilience {
-		c.resilience = resilience.NewResilienceService(cfg.Resilience, log)
-	}
-
-	if c.logging {
-		c.logger.Debug(ctx, "gRPC server connection established successfully",
-			map[string]any{"target": cfg.Target})
-	}
-
-	return c, nil
+	return &Cliente{
+		conn:   conn,
+		creds:  creds,
+		target: cfg.Target,
+		BaseClient: client.NewBaseClientWithName(client.BaseConfig{
+			EnableLogging:  cfg.EnableLogging,
+			WithResilience: cfg.WithResilience,
+			Resilience:     cfg.Resilience,
+			Timeout:        timeout,
+		}, log, "gRPC"),
+	}, nil
 }
 
+// isUsable reports whether an RPC can be issued on a connection in this state.
+// CONNECTING counts: grpc queues the call until the transport is up, which is
+// the normal state right after construction now that connections are lazy.
+func isUsable(state connectivity.State) bool {
+	return state == connectivity.Ready ||
+		state == connectivity.Idle ||
+		state == connectivity.Connecting
+}
+
+// waitForConnection blocks until conn reaches READY, ctx expires or the
+// connection is shut down. TRANSIENT_FAILURE is retried rather than treated as
+// fatal: it is the expected state while the target is still starting up.
 func waitForConnection(ctx context.Context, conn *grpc.ClientConn) error {
 	for {
 		state := conn.GetState()
 
-		if state == connectivity.Ready {
+		switch state {
+		case connectivity.Ready:
 			return nil
-		}
-
-		if state == connectivity.Shutdown || state == connectivity.TransientFailure {
+		case connectivity.Shutdown:
 			return fmt.Errorf("%w: connection state %v", ErrConnection, state)
+		case connectivity.TransientFailure, connectivity.Idle:
+			// Both states are terminal for grpc unless something asks it to
+			// retry, so re-arm the transport before waiting again.
+			conn.Connect()
 		}
 
 		if !conn.WaitForStateChange(ctx, state) {
 			return fmt.Errorf("%w: last state %v", ErrTimeoutConnect, state)
 		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("%w: %v", ErrTimeoutConnect, ctx.Err())
-		default:
-		}
 	}
-}
-
-func (c *Cliente) execute(ctx context.Context, operationName string, operation func(context.Context) (any, error)) (any, error) {
-	ctx, cancel := c.ensureContextWithTimeout(ctx)
-	defer cancel()
-
-	state := c.getConn().GetState()
-	if state != connectivity.Ready && state != connectivity.Idle {
-		if c.logging {
-			c.logger.Warn(ctx, fmt.Sprintf("gRPC connection state not optimal: %v", state),
-				map[string]any{"operation": operationName})
-		}
-	}
-
-	logFields := map[string]any{"operation": operationName}
-
-	if c.resilience != nil {
-		if c.logging {
-			c.logger.Debug(ctx, fmt.Sprintf("starting gRPC operation with resilience: %s", operationName), logFields)
-		}
-
-		result, err := c.resilience.Execute(ctx, operation)
-
-		if err != nil && c.logging {
-			c.logger.Error(ctx, fmt.Errorf("error in gRPC operation: %w", err), logFields)
-		} else if c.logging {
-			c.logger.Debug(ctx, fmt.Sprintf("gRPC operation completed with resilience: %s", operationName), logFields)
-		}
-
-		return result, err
-	}
-
-	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("starting gRPC operation: %s", operationName), logFields)
-	}
-
-	result, err := operation(ctx)
-
-	if err != nil && c.logging {
-		c.logger.Error(ctx, err, logFields)
-	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("gRPC operation completed: %s", operationName), logFields)
-	}
-
-	return result, err
-}
-
-func (c *Cliente) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if _, hasDeadline := ctx.Deadline(); hasDeadline {
-		return context.WithCancel(ctx)
-	}
-	return context.WithTimeout(ctx, DefaultTimeout)
 }
 
 func (c *Cliente) WithMetadata(ctx context.Context, md metadata.MD) context.Context {
@@ -148,86 +106,36 @@ func (c *Cliente) WithHeaders(ctx context.Context, headers map[string]string) co
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
-// getConn returns the current connection under a read lock so callers do not
-// observe a half-swapped conn during ReconnectIfNeeded.
-func (c *Cliente) getConn() *grpc.ClientConn {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+func (c *Cliente) GetConnection() *grpc.ClientConn {
 	return c.conn
 }
 
-func (c *Cliente) GetConnection() *grpc.ClientConn {
-	return c.getConn()
-}
-
 func (c *Cliente) CheckConnection() connectivity.State {
-	return c.getConn().GetState()
-}
-
-func (c *Cliente) ReconnectIfNeeded(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	state := c.conn.GetState()
-	if state == connectivity.Ready || state == connectivity.Idle {
-		return nil
-	}
-
-	if c.logging {
-		c.logger.Warn(ctx, "attempting gRPC reconnection",
-			map[string]any{"state": state, "target": c.target})
-	}
-
-	// Dial the new connection before closing the old one, and reuse the same
-	// transport credentials configured at construction (not hardcoded insecure).
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(c.creds),
-	}
-
-	conn, err := grpc.NewClient(c.target, opts...)
-	if err != nil {
-		return c.logger.WrapError(err, ErrConnection.Error())
-	}
-
-	if err := waitForConnection(ctx, conn); err != nil {
-		_ = conn.Close()
-		return err
-	}
-
-	_ = c.conn.Close()
-	c.conn = conn
-
-	if c.logging {
-		c.logger.Info(ctx, "gRPC reconnection successful",
-			map[string]any{"target": c.target})
-	}
-
-	return nil
+	return c.conn.GetState()
 }
 
 func (c *Cliente) Close() error {
-	if c.logging {
-		c.logger.Debug(context.Background(), "closing gRPC connection",
-			map[string]any{"target": c.target})
-	}
-	return c.getConn().Close()
+	return c.conn.Close()
 }
 
+// WithLogging toggles logging at runtime; the BaseClient middleware reads the
+// flag on every call.
 func (c *Cliente) WithLogging(enable bool) {
-	c.logging = enable
+	c.SetLogging(enable)
 }
 
+// InvokeRPC runs an RPC through the BaseClient middleware chain.
+//
+// There is deliberately no manual reconnection step. grpc.ClientConn already
+// reconnects on its own with its own backoff; the previous ReconnectIfNeeded
+// dialled a replacement connection by hand, which duplicated that logic, could
+// block while holding a write lock, and threw away the healthy subchannels the
+// SDK was already re-establishing. Connect() nudges an idle connection instead.
 func (c *Cliente) InvokeRPC(ctx context.Context, operationName string,
 	invokeFunc func(ctx context.Context) (any, error)) (any, error) {
-	state := c.getConn().GetState()
-	if state != connectivity.Ready && state != connectivity.Idle {
-		if err := c.ReconnectIfNeeded(ctx); err != nil && c.logging {
-			c.logger.Warn(ctx, "reconnection failed, attempting operation with current connection",
-				map[string]any{"error": err.Error(), "operation": operationName})
-		}
+	if !isUsable(c.conn.GetState()) {
+		c.conn.Connect()
 	}
 
-	return c.execute(ctx, operationName, func(ctx context.Context) (any, error) {
-		return invokeFunc(ctx)
-	})
+	return c.Execute(ctx, operationName, invokeFunc)
 }

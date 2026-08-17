@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	baseclient "github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/circuit_breaker"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/skolldire/go-engine/pkg/utilities/resilience"
@@ -163,8 +164,8 @@ func TestRedisClient_KeyName(t *testing.T) {
 	// Create a client that will fail connection but we can test KeyName
 	// Note: KeyName adds ":" between prefix and key, so prefix should not include ":"
 	client := &RedisClient{
-		keyPrefix: "app",
-		logger:    log,
+		keyPrefix:  "app",
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
 	}
 
 	assert.Equal(t, "app:test-key", client.KeyName("test-key"))
@@ -173,8 +174,8 @@ func TestRedisClient_KeyName(t *testing.T) {
 func TestRedisClient_KeyName_NoPrefix(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		keyPrefix: "",
-		logger:    log,
+		keyPrefix:  "",
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
 	}
 
 	assert.Equal(t, "test-key", client.KeyName("test-key"))
@@ -183,7 +184,7 @@ func TestRedisClient_KeyName_NoPrefix(t *testing.T) {
 func TestRedisClient_EnsureDefaultExpiration(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger: log,
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
 	}
 
 	assert.Equal(t, DefaultExpiration, client.ensureDefaultExpiration(0))
@@ -193,12 +194,12 @@ func TestRedisClient_EnsureDefaultExpiration(t *testing.T) {
 func TestRedisClient_EnsureContextWithTimeout(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger: log,
-		client: newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
-	newCtx, cancel := client.ensureContextWithTimeout(ctx)
+	newCtx, cancel := client.ContextWithTimeout(ctx)
 	assert.NotNil(t, newCtx)
 	assert.NotNil(t, cancel)
 	cancel()
@@ -207,14 +208,14 @@ func TestRedisClient_EnsureContextWithTimeout(t *testing.T) {
 func TestRedisClient_EnsureContextWithTimeout_WithDeadline(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger: log,
-		client: newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		client:     newDeadRedisClient(),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	newCtx, cancelFunc := client.ensureContextWithTimeout(ctx)
+	newCtx, cancelFunc := client.ContextWithTimeout(ctx)
 	assert.NotNil(t, newCtx)
 	assert.NotNil(t, cancelFunc)
 	cancelFunc()
@@ -223,9 +224,9 @@ func TestRedisClient_EnsureContextWithTimeout_WithDeadline(t *testing.T) {
 func TestRedisClient_Get_KeyNotFound(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -237,9 +238,9 @@ func TestRedisClient_Get_KeyNotFound(t *testing.T) {
 func TestRedisClient_Set(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -250,9 +251,9 @@ func TestRedisClient_Set(t *testing.T) {
 func TestRedisClient_SetNX(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -263,9 +264,9 @@ func TestRedisClient_SetNX(t *testing.T) {
 func TestRedisClient_Del(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -276,9 +277,9 @@ func TestRedisClient_Del(t *testing.T) {
 func TestRedisClient_Exists(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -289,9 +290,9 @@ func TestRedisClient_Exists(t *testing.T) {
 func TestRedisClient_Expire(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -302,9 +303,9 @@ func TestRedisClient_Expire(t *testing.T) {
 func TestRedisClient_TTL(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -315,9 +316,9 @@ func TestRedisClient_TTL(t *testing.T) {
 func TestRedisClient_Incr(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -328,9 +329,9 @@ func TestRedisClient_Incr(t *testing.T) {
 func TestRedisClient_IncrBy(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -341,9 +342,9 @@ func TestRedisClient_IncrBy(t *testing.T) {
 func TestRedisClient_HGet(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -354,9 +355,9 @@ func TestRedisClient_HGet(t *testing.T) {
 func TestRedisClient_HSet(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -367,9 +368,9 @@ func TestRedisClient_HSet(t *testing.T) {
 func TestRedisClient_HGetAll(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -380,9 +381,9 @@ func TestRedisClient_HGetAll(t *testing.T) {
 func TestRedisClient_LPush(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -393,9 +394,9 @@ func TestRedisClient_LPush(t *testing.T) {
 func TestRedisClient_RPop(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -406,9 +407,9 @@ func TestRedisClient_RPop(t *testing.T) {
 func TestRedisClient_LRange(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -419,9 +420,9 @@ func TestRedisClient_LRange(t *testing.T) {
 func TestRedisClient_ZAdd(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -432,9 +433,9 @@ func TestRedisClient_ZAdd(t *testing.T) {
 func TestRedisClient_ZAddMulti(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -449,9 +450,9 @@ func TestRedisClient_ZAddMulti(t *testing.T) {
 func TestRedisClient_ZScore(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -462,9 +463,9 @@ func TestRedisClient_ZScore(t *testing.T) {
 func TestRedisClient_ZRem(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -475,9 +476,9 @@ func TestRedisClient_ZRem(t *testing.T) {
 func TestRedisClient_ZRange(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -488,9 +489,9 @@ func TestRedisClient_ZRange(t *testing.T) {
 func TestRedisClient_SAdd(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -501,9 +502,9 @@ func TestRedisClient_SAdd(t *testing.T) {
 func TestRedisClient_SAddWithExpire(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -514,9 +515,9 @@ func TestRedisClient_SAddWithExpire(t *testing.T) {
 func TestRedisClient_SMembers(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -527,9 +528,9 @@ func TestRedisClient_SMembers(t *testing.T) {
 func TestRedisClient_SIsMember(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -540,9 +541,9 @@ func TestRedisClient_SIsMember(t *testing.T) {
 func TestRedisClient_SRem(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -553,9 +554,9 @@ func TestRedisClient_SRem(t *testing.T) {
 func TestRedisClient_SCard(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()
@@ -566,8 +567,8 @@ func TestRedisClient_SCard(t *testing.T) {
 func TestRedisClient_Close(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger: log,
-		client: newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		client:     newDeadRedisClient(),
 	}
 
 	err := client.Close()
@@ -577,8 +578,8 @@ func TestRedisClient_Close(t *testing.T) {
 func TestRedisClient_Pipeline(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger: log,
-		client: newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		client:     newDeadRedisClient(),
 	}
 
 	pipeline := client.Pipeline()
@@ -588,8 +589,8 @@ func TestRedisClient_Pipeline(t *testing.T) {
 func TestRedisClient_TxPipeline(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger: log,
-		client: newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		client:     newDeadRedisClient(),
 	}
 
 	pipeline := client.TxPipeline()
@@ -600,8 +601,8 @@ func TestRedisClient_Client(t *testing.T) {
 	log := &mockLogger{}
 	redisClient := newDeadRedisClient()
 	client := &RedisClient{
-		logger: log,
-		client: redisClient,
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		client:     redisClient,
 	}
 
 	assert.Equal(t, redisClient, client.Client())
@@ -610,9 +611,9 @@ func TestRedisClient_Client(t *testing.T) {
 func TestRedisClient_Get_WithKeyNotFoundError(t *testing.T) {
 	log := &mockLogger{}
 	client := &RedisClient{
-		logger:    log,
-		keyPrefix: "",
-		client:    newDeadRedisClient(),
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{}, log, "Redis"),
+		keyPrefix:  "",
+		client:     newDeadRedisClient(),
 	}
 
 	ctx := context.Background()

@@ -76,7 +76,7 @@ func validateAWSConfig(cfg Config) []error {
 	region := cfg.Aws.Region
 
 	if region == "" {
-		if usesAWS(cfg) {
+		if UsesAWS(cfg) {
 			errors = append(errors, &ValidationError{
 				Field:   "aws.region",
 				Message: "AWS region is required when an AWS adapter (SQS, SNS, SES, S3, SSM, DynamoDB, Cognito) is configured",
@@ -95,8 +95,11 @@ func validateAWSConfig(cfg Config) []error {
 	return errors
 }
 
-// usesAWS reports whether the configuration declares any AWS-backed adapter.
-func usesAWS(cfg Config) bool {
+// UsesAWS reports whether the configuration declares any AWS-backed adapter.
+// Callers use it to skip loading the AWS credential chain entirely: resolving
+// it costs startup latency (IMDS probing) and fails outright in environments
+// that have no AWS credentials at all.
+func UsesAWS(cfg Config) bool {
 	return cfg.SQS != nil || cfg.SNS != nil || cfg.Dynamo != nil || cfg.Cognito != nil ||
 		len(cfg.SQSClients) > 0 || len(cfg.SNSClients) > 0 || len(cfg.DynamoClients) > 0 ||
 		len(cfg.SSMClients) > 0 || len(cfg.SESClients) > 0 || len(cfg.S3Clients) > 0

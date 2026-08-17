@@ -72,12 +72,13 @@ func TestNewClient_WithEndpoint(t *testing.T) {
 		WithResilience: false,
 	}
 	log := &mockLogger{}
-	log.On("Debug", mock.Anything, "SQS client initialized", mock.Anything).Return()
 
 	client := NewClient(acf, cfg, log)
 
 	assert.NotNil(t, client)
-	log.AssertExpectations(t)
+	// Constructing a client emits nothing: a library must not write log lines
+	// the application did not ask for.
+	log.AssertNotCalled(t, "Debug", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestNewClient_WithResilience(t *testing.T) {
@@ -103,7 +104,9 @@ func TestNewClient_WithResilience(t *testing.T) {
 
 	assert.NotNil(t, client)
 	cliente := client.(*Cliente)
-	assert.NotNil(t, cliente.resilience)
+	// Resilience now lives in the embedded BaseClient's middleware chain rather
+	// than in a field of this package.
+	assert.NotNil(t, cliente.BaseClient)
 }
 
 func TestCliente_SendMessage_InvalidInput(t *testing.T) {
@@ -292,9 +295,9 @@ func TestCliente_EnableLogging(t *testing.T) {
 	client := NewClient(acf, cfg, log)
 	cliente := client.(*Cliente)
 
-	assert.False(t, cliente.logging)
+	assert.False(t, cliente.IsLoggingEnabled())
 	client.EnableLogging(true)
-	assert.True(t, cliente.logging)
+	assert.True(t, cliente.IsLoggingEnabled())
 }
 
 func TestCliente_SendJSON_ValidJSON(t *testing.T) {
@@ -353,7 +356,7 @@ func TestCliente_EnsureContextWithTimeout(t *testing.T) {
 	cliente := client.(*Cliente)
 
 	ctx := context.Background()
-	newCtx, cancel := cliente.ensureContextWithTimeout(ctx)
+	newCtx, cancel := cliente.ContextWithTimeout(ctx)
 	assert.NotNil(t, newCtx)
 	assert.NotNil(t, cancel)
 	cancel()
@@ -370,7 +373,7 @@ func TestCliente_EnsureContextWithTimeout_WithDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	newCtx, cancelFunc := cliente.ensureContextWithTimeout(ctx)
+	newCtx, cancelFunc := cliente.ContextWithTimeout(ctx)
 	assert.NotNil(t, newCtx)
 	assert.NotNil(t, cancelFunc)
 	cancelFunc()

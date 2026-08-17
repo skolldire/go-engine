@@ -79,10 +79,14 @@ func NewHTTPChecker(url string, timeout time.Duration) *HTTPChecker {
 }
 
 func (c *HTTPChecker) Check(ctx context.Context) error {
+	// The URL is supplied by the application operator when registering the
+	// checker, not by request input, so this is not an SSRF sink.
+	//nolint:gosec // G704: c.url is operator-configured, never request-derived
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
+	//nolint:gosec // G704: see above
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("http get: %w", err)

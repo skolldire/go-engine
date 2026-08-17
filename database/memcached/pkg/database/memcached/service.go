@@ -2,6 +2,7 @@ package memcached
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -46,14 +47,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 	defer cancel()
 
 	if err := c.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
-	}
-
-	if c.IsLoggingEnabled() {
-		log.Debug(ctx, "Memcached connection established successfully",
-			map[string]any{
-				"servers": cfg.Servers,
-			})
+		return nil, fmt.Errorf("%w: %w", ErrConnection, err)
 	}
 
 	return c, nil
@@ -72,7 +66,7 @@ func (c *MemcachedClient) Get(ctx context.Context, key string) ([]byte, error) {
 	result, err := c.Execute(ctx, "Get", func(ctx context.Context) (any, error) {
 		item, err := c.client.Get(fullKey)
 		if err != nil {
-			if err == memcache.ErrCacheMiss {
+			if errors.Is(err, memcache.ErrCacheMiss) {
 				return nil, ErrKeyNotFound
 			}
 			return nil, err

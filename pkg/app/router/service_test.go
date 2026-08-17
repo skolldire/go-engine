@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -292,4 +293,100 @@ func TestApp_ConfigureBasicRoutes(t *testing.T) {
 	app.router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestNewService_WithoutLoggerDoesNotPanic is the regression test for Run
+// dereferencing a nil logger. NewService(cfg) with no WithLogger option is a
+// valid call and used to panic on the first log line inside Run.
+func TestNewService_WithoutLoggerDoesNotPanic(t *testing.T) {
+	app := NewService(Config{Port: "0", ShutdownTimeout: 100 * time.Millisecond})
+
+	assert.NotNil(t, app.logger, "a router built without WithLogger must still have a logger")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	assert.NotPanics(t, func() {
+		_ = app.Run(ctx)
+	})
+}
+
+// TestRegisterShutdownHook_ConcurrentWithRun is the regression test for the
+// unsynchronised shutdownHooks slice: nothing prevents a caller from
+// registering a hook while Run is iterating it.
+func TestRegisterShutdownHook_ConcurrentWithRun(t *testing.T) {
+	app := NewService(Config{Port: "0", ShutdownTimeout: 200 * time.Millisecond})
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	called := 0
+
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			app.RegisterShutdownHook(func(context.Context) error {
+				mu.Lock()
+				called++
+				mu.Unlock()
+				return nil
+			})
+		}()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = app.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.LessOrEqual(t, called, 16)
+}
+
+// TestRegisterShutdownHook_NilIsIgnored guards against a nil hook panicking
+// during shutdown.
+func TestRegisterShutdownHook_NilIsIgnored(t *testing.T) {
+	app := NewService(Config{Port: "0"})
+
+	app.RegisterShutdownHook(nil)
+	assert.Empty(t, app.shutdownHooks)
+}
+
+// TestTakeShutdownHooks_RunsHooksOnce verifies hooks are drained, so a second
+// shutdown path cannot re-run them.
+func TestTakeShutdownHooks_RunsHooksOnce(t *testing.T) {
+	app := NewService(Config{Port: "0"})
+
+	app.RegisterShutdownHook(func(context.Context) error { return nil })
+	assert.Len(t, app.takeShutdownHooks(), 1)
+	assert.Empty(t, app.takeShutdownHooks())
+}
+
+// TestNewService_HandlerTimeoutTracksWriteTimeout is the regression test for
+// middleware.Timeout being hardcoded to 60s while WriteTimeout defaulted to
+// 30s: the server abandoned the response before the handler was ever cancelled.
+func TestNewService_HandlerTimeoutTracksWriteTimeout(t *testing.T) {
+	t.Run("defaults to WriteTimeout", func(t *testing.T) {
+		app := NewService(Config{Port: "0", WriteTimeout: 5 * time.Second})
+		assert.Equal(t, 5*time.Second, app.config.HandlerTimeout)
+	})
+
+	t.Run("explicit value wins", func(t *testing.T) {
+		app := NewService(Config{Port: "0", WriteTimeout: 5 * time.Second, HandlerTimeout: 2 * time.Second})
+		assert.Equal(t, 2*time.Second, app.config.HandlerTimeout)
+	})
+
+	t.Run("falls back to the package default", func(t *testing.T) {
+		app := NewService(Config{Port: "0"})
+		assert.Equal(t, defaultWriteTimeout, app.config.HandlerTimeout)
+		assert.Equal(t, app.config.WriteTimeout, app.config.HandlerTimeout,
+			"handler and write budgets must stay coherent")
+	})
 }

@@ -221,7 +221,8 @@ func TestRestClient_ProcessRequest_Error(t *testing.T) {
 		EnableLogging: true,
 	}
 	log := &mockLogger{}
-	log.On("Warn", mock.Anything, "request_failed", mock.Anything).Return()
+	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
+	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return()
 
 	client := NewClient(cfg, log)
 	restClient := client.(*restClient)
@@ -232,7 +233,7 @@ func TestRestClient_ProcessRequest_Error(t *testing.T) {
 		return nil, testErr
 	}
 
-	_, err := restClient.processRequest(ctx, reqFunc)
+	_, err := restClient.executeRequest(ctx, "GET /x", reqFunc)
 	assert.Error(t, err)
 	assert.Equal(t, testErr, err)
 	log.AssertExpectations(t)
@@ -245,7 +246,8 @@ func TestRestClient_ProcessRequest_InvalidResponse(t *testing.T) {
 		EnableLogging: true,
 	}
 	log := &mockLogger{}
-	log.On("Warn", mock.Anything, mock.Anything, mock.Anything).Return()
+	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
+	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return()
 
 	client := NewClient(cfg, log)
 	restClient := client.(*restClient)
@@ -256,7 +258,7 @@ func TestRestClient_ProcessRequest_InvalidResponse(t *testing.T) {
 		return nil, errors.New("request failed")
 	}
 
-	_, err := restClient.processRequest(ctx, reqFunc)
+	_, err := restClient.executeRequest(ctx, "GET /x", reqFunc)
 	assert.Error(t, err)
 	log.AssertExpectations(t)
 }
