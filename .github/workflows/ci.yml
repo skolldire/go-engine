@@ -8,6 +8,11 @@ on:
     branches: [main, master]
     # Also runs on merge to main/master
 
+env:
+  # Pinned, not @latest: a scanner that changes under us turns a release gate
+  # into a non-reproducible one, and a new advisory can fail an unrelated PR.
+  GOVULNCHECK_VERSION: v1.1.4
+
 jobs:
   test:
     name: Run Unit Tests with Coverage
@@ -31,6 +36,15 @@ jobs:
 
       - name: Check architectural constraints
         run: make lint-arch
+
+      # Catches a submodule requiring a core version that was never published.
+      # Nothing else can: go.work and the replace directives make it build fine
+      # in the repo, and it fails only for the first consumer to run `go get`.
+      - name: Check module versions resolve for consumers
+        run: make check-modules
+
+      - name: Smoke test an external consumer
+        run: make smoke
 
       - name: Report dependency footprint per module
         run: make lint-deps
@@ -76,5 +90,5 @@ jobs:
         run: |
           for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do
             echo "==> govulncheck $m"
-            (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@latest ./...)
+            (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
           done

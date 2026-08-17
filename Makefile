@@ -130,6 +130,16 @@ FORBIDDEN_IN_CORE := \
     github.com/bradfitz/gomemcache \
     gorm.io/gorm
 
+## check-modules: fails if an intra-repository require would break a consumer
+check-modules:
+	@./scripts/check-module-versions.sh
+
+## smoke: builds a throwaway consumer outside the repo with GOWORK=off
+## Usage: make smoke            (working tree, import graph only)
+##        make smoke VERSION=v0.30.0   (published tags, end to end)
+smoke:
+	@./scripts/smoke-external-consumer.sh $(VERSION)
+
 lint-arch:
 	@echo "==> Checking architectural constraints..."
 	@FAILED=0; \

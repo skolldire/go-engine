@@ -1,8 +1,6 @@
 module github.com/skolldire/go-engine/database/memcached
 
-go 1.25.0
-
-toolchain go1.26.5
+go 1.26.6
 
 // The sub-modules are versioned together and never published as separate
 // tags, so every cross-module reference resolves through the checkout.
@@ -10,7 +8,7 @@ replace github.com/skolldire/go-engine => ../../
 
 require (
 	github.com/bradfitz/gomemcache v0.0.0-20260422231931-4d751bb6e37c
-	github.com/skolldire/go-engine v0.0.0-00010101000000-000000000000
+	github.com/skolldire/go-engine v0.30.0
 	github.com/stretchr/testify v1.11.1
 )
 

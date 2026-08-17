@@ -75,3 +75,25 @@ any time:
 Security fixes may ship in a patch release even if they slightly alter
 behaviour (for example, the JWT middleware now fails closed when issuer/audience
 are unset). Such changes are called out in `MIGRATION.md` and `SECURITY.md`.
+
+
+## Go version policy
+
+The `go` directive in every module is the **minimum Go version required to build
+this library**, and it is deliberately kept at a version with no known
+vulnerabilities rather than at the oldest version that would still compile.
+
+Currently: **Go 1.26.6**.
+
+The reasoning: a `toolchain` directive only affects builds of *this* repository —
+Go ignores it in a dependency. So declaring a lower floor while building our own
+CI with a patched toolchain would hand consumers a version they can compile with
+that still carries the vulnerabilities `govulncheck` reports (six were reachable
+in Go 1.26.5: `net/http`, `encoding/asn1` and `golang.org/x/net/idna`).
+
+Raising the floor is treated as a breaking change and is recorded in
+[`MIGRATION.md`](MIGRATION.md).
+
+`scripts/smoke-external-consumer.sh` builds an external consumer with
+`GOTOOLCHAIN` pinned to exactly this floor, so the promise is tested rather than
+assumed.

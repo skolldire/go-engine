@@ -1,8 +1,6 @@
 module github.com/skolldire/go-engine/messaging
 
-go 1.25.0
-
-toolchain go1.26.5
+go 1.26.6
 
 // The sub-modules are versioned together and never published as separate
 // tags, so every cross-module reference resolves through the checkout.
@@ -11,7 +9,7 @@ replace github.com/skolldire/go-engine => ../
 require (
 	github.com/rabbitmq/amqp091-go v1.11.0
 	github.com/segmentio/kafka-go v0.4.51
-	github.com/skolldire/go-engine v0.0.0-00010101000000-000000000000
+	github.com/skolldire/go-engine v0.30.0
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/grpc v1.82.1
 )

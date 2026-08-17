@@ -1,8 +1,6 @@
 module github.com/skolldire/go-engine/preset/full
 
-go 1.25.0
-
-toolchain go1.26.5
+go 1.26.6
 
 // The sub-modules are versioned together and never published as separate
 // tags, so every cross-module reference resolves through the checkout.
@@ -21,13 +19,13 @@ replace github.com/skolldire/go-engine/database/mongodb => ../../database/mongod
 replace github.com/skolldire/go-engine/database/memcached => ../../database/memcached
 
 require (
-	github.com/skolldire/go-engine v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/aws v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/database/memcached v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/database/mongodb v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/database/redis v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/http v0.0.0-00010101000000-000000000000
-	github.com/skolldire/go-engine/messaging v0.0.0-00010101000000-000000000000
+	github.com/skolldire/go-engine v0.30.0
+	github.com/skolldire/go-engine/aws v0.30.0
+	github.com/skolldire/go-engine/database/memcached v0.30.0
+	github.com/skolldire/go-engine/database/mongodb v0.30.0
+	github.com/skolldire/go-engine/database/redis v0.30.0
+	github.com/skolldire/go-engine/http v0.30.0
+	github.com/skolldire/go-engine/messaging v0.30.0
 	github.com/stretchr/testify v1.11.1
 )
 

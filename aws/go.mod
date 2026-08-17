@@ -1,8 +1,6 @@
 module github.com/skolldire/go-engine/aws
 
-go 1.25.0
-
-toolchain go1.26.5
+go 1.26.6
 
 // The sub-modules are versioned together and never published as separate
 // tags, so every cross-module reference resolves through the checkout.
@@ -26,7 +24,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
-	github.com/skolldire/go-engine v0.0.0-00010101000000-000000000000
+	github.com/skolldire/go-engine v0.30.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.43.0
 )

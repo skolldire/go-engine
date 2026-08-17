@@ -19,7 +19,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          # Follow the floor declared in go.mod rather than whatever "stable"
+          # happens to be: a release must be built with the version consumers
+          # are told they need.
+          go-version-file: go.mod
           check-latest: true
 
       - name: Cache Go modules

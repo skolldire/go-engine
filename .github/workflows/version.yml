@@ -34,13 +34,17 @@ jobs:
         with:
           fetch-depth: 0  # Required to fetch all tags
 
-      - name: Get latest tag
+      - name: Get latest root tag
         id: get_tag
         run: |
-          # Get the latest tag, or use v0.0.0 if no tags exist
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # Only root-module tags (vX.Y.Z) count. Submodule tags are prefixed
+          # with their directory (aws/v0.30.0, database/redis/v0.30.0, ...), and
+          # `git describe` would happily return one of those and derive a
+          # nonsense next version from it.
+          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+          LATEST_TAG=${LATEST_TAG:-v0.0.0}
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "Latest tag: $LATEST_TAG"
+          echo "Latest root tag: $LATEST_TAG"
 
       - name: Calculate next version
         id: next_version

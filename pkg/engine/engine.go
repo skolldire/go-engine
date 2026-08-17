@@ -28,6 +28,11 @@ type Engine struct {
 	// instance can be reused once this engine is done with it.
 	providers []Provider
 
+	// closeOnce guards the provider release: lifecycle.close is already
+	// idempotent, but the release loop reads and clears e.providers, so two
+	// concurrent Close calls could double-release or observe a torn slice.
+	closeOnce sync.Once
+
 	core      *coreServices
 	lifecycle *lifecycle
 	telemetry *telemetrySwitch
@@ -62,12 +67,15 @@ func (e *Engine) Close(ctx context.Context) error {
 	}
 	err := e.lifecycle.close(ctx)
 
-	// Release the single-use claim: after Close the engine owns nothing, so the
-	// provider instances may legitimately be handed to a new engine.
-	for _, p := range e.providers {
-		releaseProvider(p)
-	}
-	e.providers = nil
+	// Release the single-use claim exactly once: after Close the engine owns
+	// nothing, so the provider instances may legitimately be handed to a new
+	// engine. Concurrent Close calls must not double-release.
+	e.closeOnce.Do(func() {
+		for _, p := range e.providers {
+			releaseProvider(p)
+		}
+		e.providers = nil
+	})
 
 	return err
 }

@@ -21,11 +21,11 @@ on everyone.
 | **aws** | `github.com/skolldire/go-engine/aws` | Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, the AWS facade, their providers and `aws/preset` |
 | **messaging** | `github.com/skolldire/go-engine/messaging` | Kafka, RabbitMQ, gRPC client/server and their providers |
 | **http** | `github.com/skolldire/go-engine/http` | REST client (`http/pkg/rest`) and its provider |
-| **database/sql** | `github.com/skolldire/go-engine/database/sql` | GORM wrapper (`gormsql.DBClient`) |
+| **database/sql** | `github.com/skolldire/go-engine/database/sql` | GORM wrapper (`gormsql.DBClient`) and its provider |
 | **database/redis** | `github.com/skolldire/go-engine/database/redis` | Redis client (go-redis/v9) and its provider |
 | **database/mongodb** | `github.com/skolldire/go-engine/database/mongodb` | MongoDB client and its provider |
 | **database/memcached** | `github.com/skolldire/go-engine/database/memcached` | Memcached client and its provider |
-| **preset/full** | `github.com/skolldire/go-engine/preset/full` | The everything preset; depends on every module above |
+| **preset/full** | `github.com/skolldire/go-engine/preset/full` | The everything preset; depends on every module above **except `database/sql`** (see below) |
 
 The four database engines are separate modules rather than one because their
 drivers share no dependency: a service using Redis has no reason to resolve
@@ -171,6 +171,32 @@ A section with no registered provider builds nothing. That is what lets a
 service not pay for what it does not use, but it also means a forgotten
 `WithProvider` shows up as a missing component rather than an error —
 `eng.ComponentNames()` lists what was actually built.
+
+### Why SQL is not in `preset/full`
+
+Every other adapter can be built from configuration alone. GORM cannot: it needs
+a `gorm.Dialector`, and picking one from a string such as `"postgres"` would mean
+importing the Postgres, MySQL, SQLite and SQL Server dialects together, so every
+consumer would link all four to use one.
+
+The driver is therefore supplied by the caller, and the SQL provider is
+registered explicitly rather than discovered:
+
+```go
+import (
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "gorm.io/driver/postgres"
+)
+
+eng, err := engine.New(ctx,
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
+
+db, err := sqlprovider.From(eng, "main")
+```
+
+Its `sql_clients` section holds pool and behaviour settings only; the DSN travels
+with the dialector.
 
 Full schema: see [CLAUDE.md](CLAUDE.md).
 

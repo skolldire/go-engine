@@ -569,3 +569,78 @@ la validación de claves desconocidas).
 
 Referencia local (Apple Silicon): `Get` **17 ns/op, 0 allocs**;
 `New` con 32 providers **13,5 µs/op**.
+
+
+---
+
+## Endurecimiento del release (2026-08-17)
+
+### Bloqueantes, reproducidos antes de arreglar
+
+**1. Los submódulos no eran instalables.** Cada `go.mod` requería el core en
+`v0.0.0-00010101000000-000000000000` — la pseudo-versión placeholder que
+`go mod tidy` escribe cuando solo hay un `replace` que lo satisfaga. Un
+`replace` en el `go.mod` de una **dependencia lo ignora el consumidor**, así que
+el `go get` fallaba con `invalid version: unknown revision 000000000000`.
+
+Reproducido desde un consumidor externo. Corregido: todos los requires
+intra-repo apuntan a `v0.30.0`.
+
+**2. Seis vulnerabilidades alcanzables en Go 1.26.5.** `govulncheck` las
+confirmó en el core (`net/http`, `encoding/asn1`, `x/net/idna`), todas
+corregidas en 1.26.6. `toolchain` subido en los 9 módulos y en `go.work`.
+Resultado: **0 alcanzables** en los 9.
+
+**3. `claimProvider` paniqueaba con Providers válidos.** Un Provider puede ser
+un struct valor con un slice — legal y satisface la interfaz, pero **no
+hashable**, y usarlo como clave de `sync.Map` produce
+`panic: hash of unhashable type`. Reproducido. Ahora se comprueba la
+comparabilidad y se omite el registro en vez de reventar.
+
+**4. Carrera en `Engine.Close`.** `lifecycle.close` ya era idempotente, pero el
+bucle que libera los providers leía y limpiaba `e.providers` sin protección.
+Resuelto con `sync.Once`; cubierto con un test de 8 `Close` concurrentes.
+
+### Un gate que escribí mal y tuve que corregir
+
+El primer smoke test externo **no detectaba el bug nº1**: en cuanto el
+consumidor hace `replace` del core, el require bogus del submódulo queda
+satisfecho igualmente. Lo verifiqué reintroduciendo el fallo a propósito y
+viendo que pasaba.
+
+La comprobación que sí lo caza es estática (`scripts/check-module-versions.sh`),
+y su primera versión también fallaba —leía tres campos donde el `go.mod` tiene
+dos, así que se saltaba todas las líneas—. Verificada fallando con el bug
+reintroducido antes de darla por buena.
+
+El smoke test se conserva con su alcance **documentado honestamente**: en modo
+working-tree valida el grafo de imports, no las versiones; el modo con tags
+reales (`make smoke VERSION=v0.30.0`) es el de verdad, y solo puede correr
+después de publicar.
+
+### Automatización añadida
+
+| Pieza | Qué resuelve |
+|---|---|
+| `scripts/check-module-versions.sh` (`make check-modules`) | falla si un require intra-repo es irresoluble o si los módulos no coinciden en versión |
+| `scripts/sync-module-versions.sh vX.Y.Z` | pone todos los requires intra-repo en la versión del release |
+| `scripts/smoke-external-consumer.sh` (`make smoke`) | construye un consumidor fuera del repo con `GOWORK=off` |
+| `version.yml` | filtra tags de submódulo (`aws/v0.30.0`) al calcular la siguiente versión raíz; antes `git describe` podía devolver uno y derivar una versión sin sentido |
+| `ci.yml` | `govulncheck` fijado en `v1.1.4` en vez de `@latest`, y `check-modules` + `smoke` como gates |
+
+### Inconsistencias corregidas
+
+- **`database/sql` no tenía provider**, la única familia sin uno. La causa es
+  real: GORM necesita un `gorm.Dialector` y resolverlo desde un string obligaría
+  a importar los cuatro dialectos. Se añadió `database/sql/provider/sql` con el
+  **driver inyectado por el consumidor** (84,2 % de cobertura), que mantiene la
+  consistencia sin arrastrar drivers.
+- **El README afirmaba que `preset/full` "depende de todos los módulos
+  anteriores"** — falso: no incluye `database/sql`, y no puede, por lo anterior.
+  Corregido y documentado con ejemplo de uso.
+
+### Estado final
+
+`gofmt` · `build` · `vet` · **48 paquetes en verde con `-race`** ·
+`golangci-lint` 0 issues en los 9 módulos · `lint-arch` · `check-modules` ·
+`coverage-check` · `smoke` · `govulncheck` 0 alcanzables.

@@ -755,3 +755,74 @@ func TestEachInstance_VisitsEveryDeclaredInstance(t *testing.T) {
 	require.NoError(t, EachInstance(cfg, "absent", func(n string) { seen = append(seen, n) }))
 	assert.Empty(t, seen)
 }
+
+// uncomparableProvider is a legal Provider that cannot be used as a map key: a
+// struct value carrying a slice. Nearly every real provider is a pointer, but
+// nothing in the interface forbids this shape.
+type uncomparableProvider struct{ tags []string }
+
+func (u uncomparableProvider) Name() string      { return "uncomparable" }
+func (u uncomparableProvider) ConfigKey() string { return "uncomparable" }
+func (u uncomparableProvider) Init(context.Context, RawConfig, Deps) (any, error) {
+	return u, nil
+}
+func (u uncomparableProvider) Close(context.Context) error { return nil }
+
+// TestNew_AcceptsUncomparableProvider is the regression test for the single-use
+// claim panicking with "hash of unhashable type". Guarding a legal provider
+// shape must never crash the application at startup.
+func TestNew_AcceptsUncomparableProvider(t *testing.T) {
+	assert.NotPanics(t, func() {
+		eng, err := New(context.Background(), WithConfig(&Config{}),
+			WithProvider(uncomparableProvider{tags: []string{"a"}}))
+		require.NoError(t, err)
+		require.NoError(t, eng.Close(context.Background()))
+	})
+}
+
+// TestClose_IsSafeUnderConcurrency covers the release loop: lifecycle.close is
+// idempotent on its own, but clearing e.providers was unguarded, so two
+// concurrent Close calls could double-release or read a torn slice.
+func TestClose_IsSafeUnderConcurrency(t *testing.T) {
+	eng, err := New(context.Background(), WithConfig(&Config{}),
+		WithProvider(&fakeProvider{name: "a", configKey: "a"}, &fakeProvider{name: "b", configKey: "b"}))
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = eng.Close(context.Background())
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		assert.NoError(t, err, "concurrent Close %d", i)
+	}
+	assert.NotEmpty(t, eng.ComponentNames(),
+		"Close releases resources; the component map is left intact for diagnostics")
+}
+
+// TestClose_ReleasesProvidersExactlyOnce guards against a second Close freeing
+// a claim that a later engine had already taken.
+func TestClose_ReleasesProvidersExactlyOnce(t *testing.T) {
+	shared := &fakeProvider{name: "shared", configKey: "shared"}
+
+	first, err := New(context.Background(), WithConfig(&Config{}), WithProvider(shared))
+	require.NoError(t, err)
+	require.NoError(t, first.Close(context.Background()))
+
+	second, err := New(context.Background(), WithConfig(&Config{}), WithProvider(shared))
+	require.NoError(t, err, "the closed engine released its provider")
+	t.Cleanup(func() { _ = second.Close(context.Background()) })
+
+	// A redundant Close on the first engine must not steal the claim the second
+	// engine now holds.
+	require.NoError(t, first.Close(context.Background()))
+
+	_, err = New(context.Background(), WithConfig(&Config{}), WithProvider(shared))
+	assert.Error(t, err, "the second engine still owns the provider")
+}

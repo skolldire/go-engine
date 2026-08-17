@@ -8,7 +8,21 @@ The library is no longer a single module, and the old builder is gone. This is
 the largest break so far, released without a deprecation window: nothing under
 `pkg/app` or `pkg/config/viper` still exists.
 
-### 1. Add the modules you actually use
+### 1. Move to Go 1.26.6
+
+Every module now declares `go 1.26.6`. Older toolchains are refused:
+
+```
+go: module github.com/skolldire/go-engine requires go >= 1.26.6
+```
+
+The floor is set to a patched release on purpose. A `toolchain` directive is
+ignored in a dependency, so declaring a lower floor would let you build against
+a Go with the six vulnerabilities `govulncheck` reports as reachable in 1.26.5
+(`net/http`, `encoding/asn1`, `golang.org/x/net/idna`). See
+[`COMPATIBILITY.md`](COMPATIBILITY.md#go-version-policy).
+
+### 2. Add the modules you actually use
 
 ```bash
 go get github.com/skolldire/go-engine                    # core
@@ -19,7 +33,7 @@ go get github.com/skolldire/go-engine/preset/full        # or the everything pre
 
 A pure HTTP service now downloads 55 `require` lines instead of 115.
 
-### 2. Rewrite the import paths
+### 3. Rewrite the import paths
 
 | Before | After |
 |---|---|
@@ -39,7 +53,7 @@ A pure HTTP service now downloads 55 `require` lines instead of 115.
 `pkg/testutil` keeps `MockLogger` and the context helpers — everything that
 carries no adapter dependency.
 
-### 3. Replace the builder with `engine.New`
+### 4. Replace the builder with `engine.New`
 
 ```go
 // before
@@ -53,7 +67,7 @@ eng, err := engine.New(ctx, presetfull.Options()...)
 The full mapping, including the 39 removed getters and the YAML keys that
 changed meaning, is in [`docs/migration-engine.md`](docs/migration-engine.md).
 
-### 4. `rest.Config.WithResilience` and `rest.Config.Resilience` were removed
+### 5. `rest.Config.WithResilience` and `rest.Config.Resilience` were removed
 
 The REST client composes retry and circuit breaking separately; a nil block
 means that decorator is not installed at all.
@@ -73,7 +87,7 @@ rest.Config{
 Other clients (AWS, database, messaging) keep `WithResilience` — it is part of
 `client.BaseConfig` and unchanged.
 
-### 5. `telemetry.Config` was replaced by `otel.OTELConfig`
+### 6. `telemetry.Config` was replaced by `otel.OTELConfig`
 
 `pkg/utilities/telemetry` was a facade over `pkg/telemetry/otel`; the two are now
 one package. `NewTelemetry`, `NewOperation`, `Metrics`, `Tracer` and `Telemetry`
