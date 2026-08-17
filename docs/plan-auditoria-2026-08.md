@@ -140,7 +140,7 @@ Cubierto por `TestWithRouter_WithoutConfigReportsError`.
 
 ---
 
-## Fase C — Desacoplamiento núcleo/proveedores · ~4–6 semanas — 🟡 PARCIAL (C1–C5, C7, C8) · **C6 pendiente** · C9 pendiente de decisión
+## Fase C — Desacoplamiento núcleo/proveedores · ~4–6 semanas — ✅ COMPLETADA (C1–C9)
 
 Es el bloqueador nº1 para publicar la librería y corresponde al milestone diferido en el ADR-0001.
 
@@ -183,9 +183,27 @@ Sustituye las 12 funciones `createClientsXxx` casi idénticas (`pkg/app/service.
 
 De "gorm no entra en pkg/" a la regla estructural: **ningún paquete de `pkg/engine/**` puede importar `provider/**`**. Es el gate que impide que el acoplamiento vuelva.
 
-### C9 — División en módulos Go (opcional, al final)
+### C9 — División en módulos Go — ✅ COMPLETADO (2026-08-17)
 
-`go.work` en la raíz + `go.mod` por `provider/aws`, `provider/messaging`, `provider/database/*`. Solo **después** de C1–C8: en ese punto el grafo ya es un DAG y la división es mecánica. Hacerlo antes es lo que dejó el README describiendo 7 módulos que no existen.
+`go.work` en la raíz + un `go.mod` por familia. Se hizo **después** de C1–C8,
+cuando el grafo ya era un DAG y la división resultó mecánica.
+
+Módulos entregados (9): el núcleo en la raíz, `aws`, `messaging`, `http`,
+`database/{sql,redis,mongodb,memcached}` y `preset/full`. Las cuatro bases de
+datos son módulos separados y no uno solo porque sus drivers no comparten
+ninguna dependencia: un servicio con Redis no tiene por qué resolver los
+dialectos de GORM ni el driver de Mongo.
+
+Cada provider vive en el módulo de su familia (`aws/provider/sqs`,
+`database/redis/provider/redis`, …). Tenía que ser así: `provider/sqs` importa
+el núcleo *y* el adaptador, de modo que dejarlo en la raíz creaba un ciclo
+raíz → aws → raíz entre módulos. `provider/otel` sí se queda en la raíz porque
+solo depende de `pkg/telemetry/otel`, que es del núcleo.
+
+Junto con la división se **borró la superficie antigua** (ver «Lo que NO se
+hizo» más abajo, ahora obsoleto): `pkg/app`, `pkg/app/build`, `pkg/config/viper`
+y `pkg/utilities/telemetry` ya no existen. `pkg/app/router` se salvó antes de
+borrar — no era legacy sino núcleo vivo — y hoy es `pkg/router`.
 
 **Criterio de salida C — verificado en local (2026-08-17):**
 
@@ -226,26 +244,43 @@ y jwt.
 | C6b | ✅ | `provider/otel` adapta OTel a la interfaz estrecha del núcleo, que ya no conoce el SDK (trabajo adicional, no sustituye a C6) |
 | C7 | ✅ | `preset/http`, `preset/aws`, `preset/full` con descubrimiento desde el YAML |
 | C8 | ✅ | `lint-arch` generalizado: `pkg/engine/**` no puede importar `provider/**`, `preset/**` ni ningún SDK |
-| C9 | ⏸️ | División en módulos Go: **pendiente de decisión** (ver abajo) |
+| C9 | ✅ | **9 módulos Go** con `go.work` + `replace` locales; superficie legacy borrada |
 
 Guía de migración: [`migration-engine.md`](migration-engine.md).
 
-### Lo que NO se hizo, y por qué
+### Lo que se resolvió al cerrar C9 (2026-08-17)
 
-**1. No se borró la superficie antigua.** `pkg/app` y `pkg/config/viper` siguen
-funcionando y testeados; ambos quedan marcados `Deprecated:` con la referencia a
-su reemplazo, y `staticcheck` ya avisa a quien los importe. Borrarlos elimina de
-golpe la API pública completa de la librería: es irreversible para los
-consumidores y merece ser una decisión explícita, no un efecto colateral de esta
-fase. El desacoplamiento **ya está conseguido** para quien use `pkg/engine`; lo
-que queda es retirar el camino viejo.
+Los dos puntos que esta fase había dejado abiertos ya no lo están.
 
-**2. C9 (multi-módulo) sigue sin hacerse, ahora con datos para decidir.** Con
-C1–C8 el consumidor ya no *compila ni enlaza* lo que no usa (110 → 19 módulos).
-Lo único que C9 añade es dejar de **descargar** el `go.sum` completo, a cambio de
-multiplicar el coste de release (un tag por módulo) y de exigir `go.work` +
-`replace` para el desarrollo local. La recomendación del plan era decidirlo con
-datos medidos; los datos están en la tabla de arriba.
+**1. La superficie antigua se borró.** `pkg/app`, `pkg/app/build` y
+`pkg/config/viper` desaparecen enteros, con sus tests. Era una decisión que
+merecía ser explícita y lo fue: la librería es de uso personal del dueño, no hay
+retro-compatibilidad que preservar, y mantener shims cuesta más que romper. Con
+ellos se fueron `pkg/utilities/telemetry` (fachada deprecada sobre
+`pkg/telemetry/otel`, ahora fusionada en el destino), el flag deprecado
+`WithResilience` del cliente REST y la exclusión `SA1019` del linter que existía
+solo para tolerarlos.
+
+**2. C9 se hizo, y lo que gana es la descarga, no el enlazado.** La huella por
+`go list -deps` **no cambia** con la división — ya era óptima tras C1–C8. Lo que
+cambia es el manifiesto que un consumidor arrastra:
+
+| | `go.mod` requires | `go.sum` líneas |
+|---|---:|---:|
+| Antes (módulo único) | 115 | 302 |
+| Núcleo | **55** | **134** |
+| `aws` | 95 | 217 |
+| `messaging` | 37 | 118 |
+| `http` | 30 | 76 |
+| `database/sql` | 16 | 43 |
+| `database/redis` | 31 | 84 |
+| `database/mongodb` | 37 | 112 |
+| `database/memcached` | 28 | 72 |
+| `preset/full` | 113 | 277 |
+
+Un servicio HTTP puro pasa de descargar 115 requires a 55. El coste es el que el
+plan anticipaba: un tag por módulo al publicar, y `go.work` + `replace` para el
+desarrollo local.
 
 ### Validación posterior (2026-08-17)
 
@@ -450,17 +485,87 @@ Fase A ──> release v0.2x publicable
    │
 Fase B ──> librería fiable (3 semanas acumuladas)
    │
-Fase C ──> v0.30.0, la librería modular (6 semanas más) ── C9 opcional
+Fase C ──> v0.30.0, la librería modular (6 semanas más) ── C9 ✅ hecho
    │
 Fase D ──> v1.0.0
 ```
 
-**Decisiones que hay que tomar antes de arrancar C:**
+**Decisiones que había que tomar antes de arrancar C — resueltas:**
 
-1. **¿C9 (multi-módulo) entra o no?** Con C1–C8 el consumidor ya solo paga lo que importa *en el binario*, pero sigue descargando el `go.sum` completo. Dividir módulos es lo único que reduce también la descarga; a cambio, multiplica el coste de release. Recomendación: hacer C1–C8, medir, y decidir C9 con datos.
-2. **¿`pkg/app` se mantiene como shim indefinidamente o se borra en `v0.30.0`?** El plan asume shim durante C3 y borrado en C4.
-3. **D2 (renombrado de paquetes) rompe todos los imports de los consumidores.** Debe ir en el mismo release que C4 o esperar a `v1.0.0`, no en un release intermedio.
+1. ~~¿C9 (multi-módulo) entra o no?~~ **Entró**, con los datos medidos que pedía la
+   recomendación: 9 módulos, el núcleo baja de 115 a 55 requires.
+2. ~~¿`pkg/app` se mantiene como shim indefinidamente o se borra?~~ **Borrado** en
+   `v0.30.0`, junto con `pkg/config/viper`. No hay shim.
+3. **D2 (renombrado de paquetes) rompe todos los imports de los consumidores.** Se
+   aprovechó `v0.30.0`, que ya era el release que los rompía: `pkg/app/router` →
+   `pkg/router` y `pkg/clients/rest` → `http/pkg/rest`.
 
 ## Seguimiento
 
 Este plan se ejecuta fase a fase. Cada fase cierra con su criterio de salida verificado en local **y** en CI antes de pasar a la siguiente.
+
+
+---
+
+## Pulido posterior a C9 (2026-08-17)
+
+Lista de mejoras aportada por el dueño tras el split, más la limpieza de código
+huérfano que el split dejó al descubierto.
+
+| # | Hallazgo | Resolución |
+|---|---|---|
+| 1 | `router.Run` se saltaba los shutdown hooks cuando fallaba `ListenAndServe` o `Shutdown` | Corregido. Ambos caminos ejecutan ahora `Shutdown` + hooks y agregan los errores con `errors.Join`. Era grave: `Engine.Close` está registrado **como hook**, así que los recursos se filtraban justo cuando algo ya había fallado |
+| 2 | El README documentaba `read_timeout: 10 # seconds`, que decodifica como **10 nanosegundos** | Corregido en el README, y además el decoder **rechaza** un número pelado en un campo `time.Duration` con un mensaje que muestra la forma válida. La documentación sola no arregla un footgun |
+| 3 | `InstanceNames` devolvía `nil` ante una sección malformada → cero providers en silencio | Devuelve `([]string, error)`. `WithProviderFunc` propaga el error, así que un YAML roto **falla el arranque** en vez de construir un servicio sin sus clientes |
+| 4 | Las claves de configuración desconocidas no se rechazaban | El decoder recoge `mapstructure.Metadata` y falla nombrando las claves sobrantes. Un `endpont:` ya no deja el campo a cero en silencio |
+| 5 | Los Providers guardan estado y podían reutilizarse entre engines | Reserva de un solo uso: pasar la misma instancia a dos engines es ahora un error explícito. `Close` la libera, así que el reuso secuencial sigue siendo válido |
+| 6 | El README promovía el builder legacy | Resuelto en C9 |
+| 7 | El builder legacy sobrescribía `ServiceRegistry` | Sin objeto: `pkg/app` borrado |
+| 8 | `docs/` sin commitear | Commiteado |
+| 9 | Cobertura de providers y benchmarks | Ver abajo |
+
+### Código huérfano eliminado
+
+El split dejó a la vista plumbing cuyo único consumidor era el ensamblado
+legacy. Verificado paquete a paquete (cero importadores en los 9 módulos):
+
+- `pkg/config/dynamic` (408 LOC) — servía a `WithDynamicConfig`, que ya no
+  existe; el motor no expone recarga en caliente
+- `pkg/core/registry` (130 LOC) — el singleton de factorías que el patrón
+  Provider reemplazó
+- `pkg/utilities/file_utils` (21 LOC) — helper del cargador viper borrado
+
+Se **conservan** `task_executor` y `logrusadapter`: no son plumbing interno sino
+utilidades públicas para el consumidor, aunque nada del repo las importe.
+
+### Defecto de diseño corregido de paso
+
+`engine.Deps.Logger` era una interfaz estrecha (`Info`/`Error`/`Debug`/`Warn`)
+que **los 16 providers casteaban inmediatamente** a `logger.Service`, cada uno
+con una rama de error inalcanzable. No desacoplaba nada: el core ya depende del
+paquete `logger` para `Config` y `NewService`. Se ensanchó a `logger.Service` y
+se eliminaron las 15 aserciones.
+
+### Cobertura y benchmarks
+
+| Paquete | Antes | Ahora |
+|---|---:|---:|
+| `pkg/engine` | 79,0 % | **89,1 %** |
+| providers aws | 0 % | **77,5 %** |
+| providers messaging | 0 % | **66,1 %** |
+| providers database/redis | 0 % | **64,7 %** |
+| providers database/mongodb | 0 % | **73,3 %** |
+| providers database/memcached | 0 % | **76,9 %** |
+| providers http | 0 % | **90,0 %** |
+
+`pkg/engine` vuelve a `CRITICAL_PKGS` (gate del 80 %), del que había quedado
+excluido por estar por debajo.
+
+Benchmarks nuevos en `pkg/engine/bench_test.go`, pensados para ser comparables
+en el tiempo: `BenchmarkNew` con 1/8/32 providers (mide si el registro es
+lineal), `BenchmarkGet` y `BenchmarkComponent` (camino caliente de resolución),
+`BenchmarkDecode` y `BenchmarkDecodeNamed` (coste por sección, que ahora incluye
+la validación de claves desconocidas).
+
+Referencia local (Apple Silicon): `Get` **17 ns/op, 0 allocs**;
+`New` con 32 providers **13,5 µs/op**.

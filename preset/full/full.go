@@ -8,18 +8,18 @@
 package full
 
 import (
+	awspreset "github.com/skolldire/go-engine/aws/preset"
+	"github.com/skolldire/go-engine/aws/provider/cognito"
+	"github.com/skolldire/go-engine/database/memcached/provider/memcached"
+	"github.com/skolldire/go-engine/database/mongodb/provider/mongodb"
+	"github.com/skolldire/go-engine/database/redis/provider/redis"
+	"github.com/skolldire/go-engine/http/provider/rest"
+	"github.com/skolldire/go-engine/messaging/provider/grpcclient"
+	"github.com/skolldire/go-engine/messaging/provider/grpcserver"
+	"github.com/skolldire/go-engine/messaging/provider/kafka"
+	"github.com/skolldire/go-engine/messaging/provider/rabbitmq"
 	"github.com/skolldire/go-engine/pkg/engine"
-	awspreset "github.com/skolldire/go-engine/preset/aws"
-	"github.com/skolldire/go-engine/provider/cognito"
-	"github.com/skolldire/go-engine/provider/grpcclient"
-	"github.com/skolldire/go-engine/provider/grpcserver"
-	"github.com/skolldire/go-engine/provider/kafka"
-	"github.com/skolldire/go-engine/provider/memcached"
-	"github.com/skolldire/go-engine/provider/mongodb"
 	"github.com/skolldire/go-engine/provider/otel"
-	"github.com/skolldire/go-engine/provider/rabbitmq"
-	"github.com/skolldire/go-engine/provider/redis"
-	"github.com/skolldire/go-engine/provider/rest"
 )
 
 // Options returns the options for an engine with the router, health probes and
@@ -35,42 +35,48 @@ func Options() []engine.Option {
 }
 
 // Providers returns one provider per component declared in cfg.
-func Providers(cfg *engine.Config) []engine.Provider {
-	out := awspreset.Providers(cfg)
+func Providers(cfg *engine.Config) ([]engine.Provider, error) {
+	out, err := awspreset.Providers(cfg)
+	if err != nil {
+		return nil, err
+	}
 
-	// Multi-instance families.
-	for _, name := range engine.InstanceNames(cfg.Section(redis.ConfigKey)) {
-		out = append(out, redis.New(name))
+	families := []struct {
+		key string
+		new func(string) engine.Provider
+	}{
+		{redis.ConfigKey, func(n string) engine.Provider { return redis.New(n) }},
+		{memcached.ConfigKey, func(n string) engine.Provider { return memcached.New(n) }},
+		{mongodb.ConfigKey, func(n string) engine.Provider { return mongodb.New(n) }},
+		{rabbitmq.ConfigKey, func(n string) engine.Provider { return rabbitmq.New(n) }},
+		{rest.ConfigKey, func(n string) engine.Provider { return rest.New(n) }},
+		{grpcclient.ConfigKey, func(n string) engine.Provider { return grpcclient.New(n) }},
 	}
-	for _, name := range engine.InstanceNames(cfg.Section(memcached.ConfigKey)) {
-		out = append(out, memcached.New(name))
-	}
-	for _, name := range engine.InstanceNames(cfg.Section(mongodb.ConfigKey)) {
-		out = append(out, mongodb.New(name))
-	}
-	for _, name := range engine.InstanceNames(cfg.Section(rabbitmq.ConfigKey)) {
-		out = append(out, rabbitmq.New(name))
-	}
-	for _, name := range engine.InstanceNames(cfg.Section(rest.ConfigKey)) {
-		out = append(out, rest.New(name))
-	}
-	for _, name := range engine.InstanceNames(cfg.Section(grpcclient.ConfigKey)) {
-		out = append(out, grpcclient.New(name))
+
+	for _, f := range families {
+		if err := engine.EachInstance(cfg, f.key, func(name string) {
+			out = append(out, f.new(name))
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	// Single-instance components: registered only when declared.
-	if cfg.Section(cognito.ConfigKey).Exists() {
-		out = append(out, cognito.New())
-	}
-	if cfg.Section(kafka.ConfigKey).Exists() {
-		out = append(out, kafka.New())
-	}
-	if cfg.Section(grpcserver.ConfigKey).Exists() {
-		out = append(out, grpcserver.New())
-	}
-	if cfg.Section(otel.ConfigKey).Exists() {
-		out = append(out, otel.New())
+	singles := []struct {
+		key string
+		new func() engine.Provider
+	}{
+		{cognito.ConfigKey, func() engine.Provider { return cognito.New() }},
+		{kafka.ConfigKey, func() engine.Provider { return kafka.New() }},
+		{grpcserver.ConfigKey, func() engine.Provider { return grpcserver.New() }},
+		{otel.ConfigKey, func() engine.Provider { return otel.New() }},
 	}
 
-	return out
+	for _, sgl := range singles {
+		if cfg.Section(sgl.key).Exists() {
+			out = append(out, sgl.new())
+		}
+	}
+
+	return out, nil
 }

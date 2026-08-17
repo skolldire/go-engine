@@ -28,7 +28,7 @@ pkg/integration/
 ```go
 import (
     "github.com/aws/aws-sdk-go-v2/config"
-    "github.com/skolldire/go-engine/pkg/integration/aws"
+    "github.com/skolldire/go-engine/aws/pkg/integration/aws"
     "github.com/skolldire/go-engine/pkg/integration/cloud"
 )
 ```
@@ -66,15 +66,15 @@ if err != nil {
 
 ```go
 import (
-    "github.com/skolldire/go-engine/pkg/integration/aws"
+    "github.com/skolldire/go-engine/aws/pkg/integration/aws"
     "github.com/skolldire/go-engine/pkg/integration/observability"
+    "github.com/skolldire/go-engine/pkg/telemetry/otel"
     "github.com/skolldire/go-engine/pkg/utilities/logger"
-    "github.com/skolldire/go-engine/pkg/utilities/telemetry"
 )
 
 // Crear cliente con observabilidad
 logger := logger.NewService(...)
-telemetry := telemetry.NewTelemetry(...)
+telemetry, _ := otel.NewTelemetry(ctx, otel.OTELConfig{ServiceName: "my-service", Enabled: true})
 metricsRecorder := observability.NewTelemetryMetricsRecorder(telemetry)
 
 client := aws.NewWithOptions(cfg, aws.WithObservability(
@@ -94,7 +94,7 @@ import (
     "encoding/json"
     "github.com/aws/aws-lambda-go/events"
     "github.com/skolldire/go-engine/pkg/integration/inbound"
-    "github.com/skolldire/go-engine/pkg/integration/aws"
+    "github.com/skolldire/go-engine/aws/pkg/integration/aws"
 )
 
 func HandleSQSEvent(ctx context.Context, event events.SQSEvent) error {

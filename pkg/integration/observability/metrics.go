@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
-	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
+	telemetry "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 

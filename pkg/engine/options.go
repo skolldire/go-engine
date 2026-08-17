@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 
-	"github.com/skolldire/go-engine/pkg/app/router"
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
+
 	"github.com/skolldire/go-engine/pkg/health"
+	"github.com/skolldire/go-engine/pkg/router"
 )
 
 // coreServices holds the services the core itself can build. Each is opt-in:
@@ -24,7 +26,7 @@ type builder struct {
 	configFiles []string
 	config      *Config
 
-	logger    Logger
+	logger    logger.Service
 	telemetry Telemetry
 
 	wantRouter bool
@@ -32,7 +34,7 @@ type builder struct {
 	healthCfg  *health.Config
 
 	providers     []Provider
-	providerFuncs []func(*Config) []Provider
+	providerFuncs []func(*Config) ([]Provider, error)
 	middlewares   []func(router.Service)
 }
 
@@ -60,7 +62,7 @@ func WithConfig(cfg *Config) Option {
 }
 
 // WithLogger overrides the logger built from the `log:` configuration section.
-func WithLogger(l Logger) Option {
+func WithLogger(l logger.Service) Option {
 	return func(b *builder) { b.logger = l }
 }
 
@@ -118,7 +120,10 @@ func WithProvider(providers ...Provider) Option {
 // configuration. It is how a preset turns "every SQS queue declared in the
 // YAML" into providers without the application naming each one, and without
 // the configuration being parsed twice.
-func WithProviderFunc(fn func(*Config) []Provider) Option {
+//
+// The function returns an error so a malformed section fails the build instead
+// of silently contributing no providers.
+func WithProviderFunc(fn func(*Config) ([]Provider, error)) Option {
 	return func(b *builder) {
 		if fn != nil {
 			b.providerFuncs = append(b.providerFuncs, fn)

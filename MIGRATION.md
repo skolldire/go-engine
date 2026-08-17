@@ -1,9 +1,95 @@
 # Migration Guide
 
-This guide lists the breaking changes introduced by the stabilisation work
-(phases 0–3 of `docs/plan-mejoras-go-engine.md`) and how to adapt.
+This guide lists the breaking changes and how to adapt.
 
-## Runtime correctness (phase 1)
+## `v0.30.0` — multi-module split and removal of `pkg/app`
+
+The library is no longer a single module, and the old builder is gone. This is
+the largest break so far, released without a deprecation window: nothing under
+`pkg/app` or `pkg/config/viper` still exists.
+
+### 1. Add the modules you actually use
+
+```bash
+go get github.com/skolldire/go-engine                    # core
+go get github.com/skolldire/go-engine/aws                # only if you use AWS
+go get github.com/skolldire/go-engine/database/redis     # only if you use Redis
+go get github.com/skolldire/go-engine/preset/full        # or the everything preset
+```
+
+A pure HTTP service now downloads 55 `require` lines instead of 115.
+
+### 2. Rewrite the import paths
+
+| Before | After |
+|---|---|
+| `pkg/app`, `pkg/app/build`, `pkg/config/viper` | removed — see step 3 |
+| `pkg/app/router` | `pkg/router` |
+| `pkg/clients/rest` | `http/pkg/rest` |
+| `pkg/utilities/telemetry` | `pkg/telemetry/otel` |
+| `provider/{sqs,sns,ses,s3,ssm,dynamo,cognito,awsbase}` | `aws/provider/…` |
+| `provider/{kafka,rabbitmq,grpcclient,grpcserver}` | `messaging/provider/…` |
+| `provider/rest` | `http/provider/rest` |
+| `provider/{redis,mongodb,memcached}` | `database/<engine>/provider/…` |
+| `preset/aws` | `aws/preset` |
+| `testutil.MockS3Client` / `MockSQSClient` | `aws/pkg/testutil` |
+| `testutil.MockRestClient` | `http/pkg/testutil` |
+| `testutil.MockRedisClient` | `database/redis/pkg/testutil` |
+
+`pkg/testutil` keeps `MockLogger` and the context helpers — everything that
+carries no adapter dependency.
+
+### 3. Replace the builder with `engine.New`
+
+```go
+// before
+eng, err := app.NewAppBuilder().WithContext(ctx).WithDynamicConfig().
+    WithInitialization().WithRouter().Build()
+
+// after
+eng, err := engine.New(ctx, presetfull.Options()...)
+```
+
+The full mapping, including the 39 removed getters and the YAML keys that
+changed meaning, is in [`docs/migration-engine.md`](docs/migration-engine.md).
+
+### 4. `rest.Config.WithResilience` and `rest.Config.Resilience` were removed
+
+The REST client composes retry and circuit breaking separately; a nil block
+means that decorator is not installed at all.
+
+```go
+// before
+rest.Config{BaseURL: url, WithResilience: true}
+
+// after
+rest.Config{
+    BaseURL:        url,
+    Retry:          &rest.RetryConfig{MaxRetries: 3},
+    CircuitBreaker: &circuit_breaker.Config{Name: "api"},
+}
+```
+
+Other clients (AWS, database, messaging) keep `WithResilience` — it is part of
+`client.BaseConfig` and unchanged.
+
+### 5. `telemetry.Config` was replaced by `otel.OTELConfig`
+
+`pkg/utilities/telemetry` was a facade over `pkg/telemetry/otel`; the two are now
+one package. `NewTelemetry`, `NewOperation`, `Metrics`, `Tracer` and `Telemetry`
+moved verbatim; the constructor takes `OTELConfig`, whose keys are
+`exporter_endpoint` and `sampling_rate` rather than `otel_endpoint` and
+`sample_rate`. `provider/otel` rejects a configuration file still using the old
+names rather than decoding them to empty values.
+
+`NewTelemetryFrom(provider, cfg)` is the form to use when the provider is owned
+by someone else: two providers mean two OTLP exporters, with whichever
+registered last silently discarding the other's spans.
+
+## Runtime correctness — stabilisation work
+
+The changes below were introduced by phases 0–3 of
+`docs/plan-mejoras-go-engine.md`.
 
 ### `client.Operation` now receives a context
 

@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/skolldire/go-engine/aws/provider/sqs"
+	"github.com/skolldire/go-engine/http/provider/rest"
 	"github.com/skolldire/go-engine/pkg/engine"
 	presetfull "github.com/skolldire/go-engine/preset/full"
-	"github.com/skolldire/go-engine/provider/rest"
-	"github.com/skolldire/go-engine/provider/sqs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

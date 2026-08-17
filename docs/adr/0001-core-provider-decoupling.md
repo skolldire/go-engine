@@ -1,6 +1,6 @@
 # ADR 0001 — Decoupling the core from provider imports
 
-- Status: Accepted (deferred to a dedicated milestone)
+- Status: Implemented in `v0.30.0` (2026-08-17)
 - Date: 2026-08-05
 
 ## Context
@@ -46,16 +46,20 @@ independently shippable and verifiable.
 
 ## Consequences
 
-- Importing `pkg/app` still pulls in all provider SDKs until the dedicated
-  milestone lands. Applications that need a minimal dependency graph should wait
-  for that milestone or import the individual adapter packages directly without
-  going through `pkg/app`.
-- The dedicated milestone will define: a typed adapter-registration API, generic
-  accessors (e.g. `app.Client[T](engine, name)`), and a config model where the
-  core does not import provider `Config` types. It will ship behind a major
-  version bump given the breaking surface.
+- The milestone landed in `v0.30.0`. `pkg/app` and `pkg/config/viper` were
+  removed rather than kept as shims; `pkg/engine` is the core, adapters register
+  through `engine.Provider`, and retrieval is generic (`engine.Get[T]`, or the
+  `From` helper each provider exposes).
+- The repository is now nine modules, one per adapter family, so the boundary is
+  enforced by the module graph and not only by convention: the core cannot
+  import an adapter without a `require` line appearing in its `go.mod`, which is
+  what `make lint-arch` reads.
 
 ## Follow-up
 
-Tracked as the remaining work of phase 3 in `docs/plan-mejoras-go-engine.md`
+Delivered as phase C (C1–C9) of `docs/plan-auditoria-2026-08.md`. The migration
+path is `docs/migration-engine.md`.
+
+Superseded note: previously tracked as the remaining work of phase 3 in
+`docs/plan-mejoras-go-engine.md`
 (items 1–2). This ADR will be updated to "Superseded" when that milestone lands.

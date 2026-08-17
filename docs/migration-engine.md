@@ -1,9 +1,9 @@
-# Migración: `pkg/app` → `pkg/engine`
+# Migración: `pkg/app` → `pkg/engine`, y el repositorio multi-módulo
 
 `pkg/engine` es el núcleo desacoplado introducido en la Fase C del
-[plan de auditoría](plan-auditoria-2026-08.md). `pkg/app` sigue funcionando y
-sigue estando testeado; esta guía existe para migrar cuando quieras, no porque
-algo se haya roto.
+[plan de auditoría](plan-auditoria-2026-08.md). En `v0.30.0` **`pkg/app` y
+`pkg/config/viper` se borraron**: no hay shim, no hay ventana de deprecación.
+Esta guía es el camino obligatorio, no una alternativa.
 
 ## Por qué
 
@@ -11,14 +11,56 @@ Medido con `go list -deps` sobre este checkout:
 
 | Punto de entrada | Módulos externos | Paquetes |
 |---|---:|---:|
-| `pkg/app` (antiguo) | **110** | **547** |
+| `pkg/app` (borrado) | **100** | **547** |
 | `pkg/engine` (núcleo) | **19** | **41** |
 | `preset/http` (servicio HTTP puro) | **19** | **41** |
-| `preset/aws` (solo AWS) | **28** | **177** |
-| `preset/full` (todo, equivalente a `pkg/app`) | 109 | 543 |
+| `aws/preset` (solo AWS) | **53** | **177** |
+| `preset/full` (todo, equivalente a `pkg/app`) | 98 | 543 |
 
 Un servicio HTTP que antes arrastraba el SDK completo de AWS, el driver de
-MongoDB, Kafka, RabbitMQ y una librería de códigos QR ahora resuelve 19 módulos.
+MongoDB, Kafka y RabbitMQ ahora resuelve 19 módulos.
+
+## El repositorio son ahora 9 módulos
+
+La división de módulos (C9) no cambia esa tabla — la huella de enlazado ya era
+óptima. Lo que cambia es lo que un consumidor **descarga**: su `go.mod` pasa de
+115 requires a los del módulo que realmente importa.
+
+| Módulo | Ruta de import | Qué contiene |
+|---|---|---|
+| núcleo | `github.com/skolldire/go-engine` | `pkg/engine`, `pkg/router`, `pkg/health`, `pkg/core`, `pkg/utilities`, `pkg/telemetry/otel`, `pkg/integration/{cloud,observability}`, `pkg/testutil`, `provider/otel`, `preset/http` |
+| aws | `github.com/skolldire/go-engine/aws` | clientes AWS, la fachada, sus providers y `aws/preset` |
+| messaging | `github.com/skolldire/go-engine/messaging` | Kafka, RabbitMQ, gRPC cliente/servidor y sus providers |
+| http | `github.com/skolldire/go-engine/http` | cliente REST (`http/pkg/rest`) y su provider |
+| database/sql | `github.com/skolldire/go-engine/database/sql` | GORM |
+| database/redis | `github.com/skolldire/go-engine/database/redis` | Redis y su provider |
+| database/mongodb | `github.com/skolldire/go-engine/database/mongodb` | MongoDB y su provider |
+| database/memcached | `github.com/skolldire/go-engine/database/memcached` | Memcached y su provider |
+| preset/full | `github.com/skolldire/go-engine/preset/full` | el preset que lo compone todo |
+
+Cada provider vive en el módulo de su familia. No es una preferencia estética:
+`provider/sqs` importa el núcleo *y* el adaptador AWS, así que dejarlo en la
+raíz habría creado un ciclo raíz → aws → raíz entre módulos.
+
+### Rutas de import que cambiaron
+
+| Antes | Ahora |
+|---|---|
+| `pkg/app`, `pkg/app/build`, `pkg/config/viper` | borrados |
+| `pkg/app/router` | `pkg/router` |
+| `pkg/clients/rest` | `http/pkg/rest` |
+| `pkg/utilities/telemetry` | `pkg/telemetry/otel` (fusionado) |
+| `provider/{sqs,sns,ses,s3,ssm,dynamo,cognito,awsbase}` | `aws/provider/…` |
+| `provider/{kafka,rabbitmq,grpcclient,grpcserver}` | `messaging/provider/…` |
+| `provider/rest` | `http/provider/rest` |
+| `provider/{redis,mongodb,memcached}` | `database/<engine>/provider/…` |
+| `preset/aws` | `aws/preset` |
+| `pkg/testutil` (mocks de adaptador) | `aws/pkg/testutil`, `http/pkg/testutil`, `database/redis/pkg/testutil` |
+
+`pkg/testutil` conserva solo lo que no arrastra ningún adaptador: `MockLogger` y
+los helpers de contexto. Un mock tiene que implementar la interfaz real, y esa
+interfaz traía el SDK: mantenerlos en el núcleo obligaba a todo consumidor a
+resolver el SDK de AWS solo para tener un logger de mentira.
 
 ## El cambio de forma
 
@@ -50,8 +92,8 @@ return eng.Run(ctx)
 ```go
 import (
     "github.com/skolldire/go-engine/pkg/engine"
-    "github.com/skolldire/go-engine/provider/redis"
-    "github.com/skolldire/go-engine/provider/sqs"
+    "github.com/skolldire/go-engine/aws/provider/sqs"
+    "github.com/skolldire/go-engine/database/redis/provider/redis"
 )
 
 eng, err := engine.New(ctx,
@@ -136,7 +178,7 @@ sqs_clients:
 
 ### 2. La sección `telemetry:` cambió de nombres
 
-`pkg/utilities/telemetry` usaba `otel_endpoint` y `sample_rate`;
+El paquete `pkg/utilities/telemetry` usaba `otel_endpoint` y `sample_rate`;
 `pkg/telemetry/otel` usa `exporter_endpoint` y `sampling_rate`. Decodificarlos
 en silencio dejaría el endpoint vacío y el muestreo a cero **mientras la
 telemetría se reporta como habilitada**, así que `provider/otel` **rechaza el
@@ -198,6 +240,22 @@ func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.D
 func (p *Provider) Close(ctx context.Context) error { return p.client.Close() }
 ```
 
-`make lint-arch` falla el build si algún fichero de `pkg/engine/**` importa un
-provider, un preset o un SDK de adaptador. Es lo que impide que el acoplamiento
-vuelva a crecer import a import.
+`make lint-arch` falla el build si el módulo núcleo resuelve un SDK de adaptador
+o un módulo de familia, o si algún fichero de `pkg/engine/**` importa un provider
+o un preset. Con la división en módulos la mayor parte de esa regla ya es
+estructural: el núcleo no puede importar un adaptador sin que aparezca un
+`require` en su `go.mod`, y eso es lo que `lint-arch` lee.
+
+## Desarrollo local
+
+El `go.work` de la raíz une los 9 módulos, de forma que un cambio en el núcleo
+es visible para todas las familias sin un tag por medio. Los `go.mod` llevan
+además `replace` a rutas relativas, para que cada módulo resuelva en local
+aunque se compile con `GOWORK=off`.
+
+```bash
+make test        # go test -race en cada módulo
+make lint        # golangci-lint en cada módulo, con la config de la raíz
+make lint-deps   # huella de dependencias externas, por módulo
+make tidy        # go mod tidy en cada módulo + go work sync
+```

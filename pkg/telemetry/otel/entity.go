@@ -12,8 +12,10 @@ import (
 
 // OTELConfig holds OpenTelemetry provider configuration.
 type OTELConfig struct {
-	ServiceName      string  `mapstructure:"service_name" json:"service_name"`
-	ServiceVersion   string  `mapstructure:"service_version" json:"service_version"`
+	ServiceName    string `mapstructure:"service_name" json:"service_name"`
+	ServiceVersion string `mapstructure:"service_version" json:"service_version"`
+	// Environment labels every metric and span produced through NewTelemetry.
+	Environment      string  `mapstructure:"environment" json:"environment"`
 	ExporterEndpoint string  `mapstructure:"exporter_endpoint" json:"exporter_endpoint"`
 	SamplingRate     float64 `mapstructure:"sampling_rate" json:"sampling_rate"`
 	Enabled          bool    `mapstructure:"enabled" json:"enabled"`

@@ -34,11 +34,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Run golangci-lint
+      # One job per module: golangci-lint resolves packages within a single
+      # module, so a matrix is what actually covers the repository.
+      - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
           # Pinned, not `latest`: a linter that changes under us turns CI into a
           # non-reproducible gate.
           version: v2.12.2
-          # Tests are linted too; excluding them hid real findings in test code.
+          install-mode: binary
           args: --timeout=10m ./...
+
+      - name: Lint every module
+        run: |
+          for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do
+            echo "==> lint $m"
+            # Tests are linted too; excluding them hid real findings in test code.
+            (cd "$m" && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci.yml" --timeout=10m ./...)
+          done

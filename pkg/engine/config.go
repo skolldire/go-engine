@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/health"
+	"github.com/skolldire/go-engine/pkg/router"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/spf13/viper"
 )

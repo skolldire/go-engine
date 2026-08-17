@@ -2,6 +2,26 @@
 
 `go-engine` follows [Semantic Versioning](https://semver.org/).
 
+## Modules
+
+The repository is a set of modules, released together under one tag:
+
+| Module path | Directory |
+|---|---|
+| `github.com/skolldire/go-engine` | `/` |
+| `github.com/skolldire/go-engine/aws` | `/aws` |
+| `github.com/skolldire/go-engine/messaging` | `/messaging` |
+| `github.com/skolldire/go-engine/http` | `/http` |
+| `github.com/skolldire/go-engine/database/sql` | `/database/sql` |
+| `github.com/skolldire/go-engine/database/redis` | `/database/redis` |
+| `github.com/skolldire/go-engine/database/mongodb` | `/database/mongodb` |
+| `github.com/skolldire/go-engine/database/memcached` | `/database/memcached` |
+| `github.com/skolldire/go-engine/preset/full` | `/preset/full` |
+
+Go requires a per-module tag (`aws/v0.30.0`, `database/redis/v0.30.0`, …) for
+every sub-module. They are cut from the same commit and carry the same version,
+so a sub-module never lags the core.
+
 ## Pre-`v1.0`
 
 While the module is on `0.x`, the public API is **not yet stable**. Minor
@@ -15,6 +35,10 @@ Pin an exact version if you need stability before `v1.0`:
 ```bash
 go get github.com/skolldire/go-engine@v0.20.0
 ```
+
+`v0.30.0` is the largest break so far: `pkg/app` and `pkg/config/viper` were
+removed outright, with no deprecation window, and the repository was split into
+the modules above. See [`MIGRATION.md`](MIGRATION.md).
 
 ## From `v1.0` onward
 
@@ -34,13 +58,14 @@ symbols keep working during that window.
 
 ## What counts as the public API
 
-- Exported identifiers under `pkg/`, `aws/`, `database/`, `messaging/`.
-- The YAML configuration schema consumed by `pkg/config/viper`.
+- Exported identifiers under `pkg/`, `aws/`, `database/`, `messaging/`, `http/`,
+  `provider/` and `preset/`.
+- The YAML configuration keys each provider declares through `ConfigKey()`.
 
 The following are **not** part of the compatibility guarantee and may change at
 any time:
 
-- Anything in `_test.go` files, `pkg/testutil`, and internal helpers.
+- Anything in `_test.go` files, any `testutil` package, and internal helpers.
 - Log message wording and unexported behaviour.
 - The exact error strings (use `errors.Is`/`errors.As` against exported error
   values, not string matching).

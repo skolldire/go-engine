@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/skolldire/go-engine/pkg/app/router"
 	"github.com/skolldire/go-engine/pkg/health"
+	"github.com/skolldire/go-engine/pkg/router"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
@@ -69,9 +69,8 @@ func New(ctx context.Context, opts ...Option) (*Engine, error) {
 		lifecycle: &lifecycle{},
 	}
 
-	// 4. Core services. Both need a logger.Service specifically, which the
-	//    caller-supplied Logger may not be, so resolve it once.
-	svc := asLoggerService(log, cfg.Log)
+	// 4. Core services.
+	svc := log
 
 	if b.wantHealth {
 		hc := cfg.Health
@@ -102,7 +101,11 @@ func New(ctx context.Context, opts ...Option) (*Engine, error) {
 
 	providers := b.providers
 	for _, fn := range b.providerFuncs {
-		providers = append(providers, fn(cfg)...)
+		discovered, err := fn(cfg)
+		if err != nil {
+			return nil, failNew(ctx, eng, fmt.Errorf("discovering providers: %w", err))
+		}
+		providers = append(providers, discovered...)
 	}
 
 	for _, p := range providers {
@@ -110,6 +113,16 @@ func New(ctx context.Context, opts ...Option) (*Engine, error) {
 			continue
 		}
 		name := p.Name()
+
+		// A Provider holds the component it built, so handing the same instance
+		// to two engines would have the second Init overwrite the first's
+		// client — and the first engine's Close would then release a resource
+		// it no longer owns. Claiming the provider makes the reuse an explicit
+		// error instead of a silent aliasing bug.
+		if err := claimProvider(p, name); err != nil {
+			return nil, failNew(ctx, eng, err)
+		}
+		eng.providers = append(eng.providers, p)
 		if _, exists := eng.Component(name); exists {
 			return nil, failNew(ctx, eng, fmt.Errorf("duplicate component name %q", name))
 		}
@@ -148,15 +161,6 @@ func New(ctx context.Context, opts ...Option) (*Engine, error) {
 	}
 
 	return eng, nil
-}
-
-// asLoggerService returns log as a logger.Service, building a fresh one when a
-// caller supplied a Logger that implements only the narrow core interface.
-func asLoggerService(log Logger, cfg logger.Config) logger.Service {
-	if svc, ok := log.(logger.Service); ok {
-		return svc
-	}
-	return logger.NewService(cfg, nil)
 }
 
 // failNew unwinds a partially built engine and returns the original error,

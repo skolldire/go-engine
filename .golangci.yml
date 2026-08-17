@@ -40,12 +40,6 @@ linters:
       - path: "_test\\.go"
         linters: [errorlint]
 
-      # pkg/app and its tests are the last consumers of the deprecated
-      # configuration loader; both are scheduled for removal together.
-      - path: "pkg/app/"
-        linters: [staticcheck]
-        text: "SA1019.*pkg/config/viper"
-
       # middleware.RealIP deprecation — removal requires infrastructure changes; tracked separately
       - linters: [staticcheck]
         text: "SA1019.*middleware\\.RealIP"

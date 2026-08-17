@@ -166,11 +166,11 @@ rawServer := grpc.NewServer(
         myLoggingInterceptor,
     ),
 )
-engine, _ := app.NewAppBuilder().
-    WithDynamicConfig().
-    WithCustomClient("grpc-server", rawServer).
-    WithRouter().
-    Build()
+eng, _ := engine.New(ctx, presethttp.Options()...)
+eng.RegisterCloser("grpc-server", func(context.Context) error {
+    rawServer.GracefulStop()
+    return nil
+})
 ```
 
 ### Reflection

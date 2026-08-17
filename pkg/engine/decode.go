@@ -43,15 +43,19 @@ func DecodeNamed[T any](raw RawConfig, instance string) (T, error) {
 // InstanceNames lists the instances declared in a multi-instance section. It
 // lets a preset register every client the file declares without the caller
 // naming them one by one.
-func InstanceNames(raw RawConfig) []string {
+//
+// A malformed section is an error, not an empty list. Returning nil silently
+// meant a typo in the YAML produced a service that started with none of its
+// clients and no indication why.
+func InstanceNames(raw RawConfig) ([]string, error) {
 	if !raw.Exists() {
-		return nil
+		return nil, nil
 	}
 	entries, err := namedEntries(raw.Raw())
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("section %q: %w", raw.Key(), err)
 	}
-	return sortedKeys(entries)
+	return sortedKeys(entries), nil
 }
 
 // namedEntries flattens the section into instance name -> raw config. Both the
@@ -89,4 +93,20 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sortStrings(keys)
 	return keys
+}
+
+// EachInstance calls add for every instance declared under key, reporting a
+// malformed section instead of skipping it.
+//
+// Presets use it so registering "every queue in the YAML" stays one line per
+// adapter rather than four lines of error plumbing repeated fifteen times.
+func EachInstance(cfg *Config, key string, add func(name string)) error {
+	names, err := InstanceNames(cfg.Section(key))
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		add(name)
+	}
+	return nil
 }

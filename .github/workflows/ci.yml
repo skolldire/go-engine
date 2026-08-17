@@ -23,16 +23,22 @@ jobs:
           go-version-file: go.mod
           check-latest: true
 
-      - name: Build
-        run: go build ./...
+      # go.work binds the modules together, so a change to the core is compiled
+      # against every family in the same run.
+      - name: Build every module
+        run: |
+          for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
 
       - name: Check architectural constraints
         run: make lint-arch
 
-      - name: Report core dependency footprint
+      - name: Report dependency footprint per module
         run: make lint-deps
 
-      - name: Run Tests with Race Detector and Coverage
+      - name: Run Tests with Race Detector
+        run: make test
+
+      - name: Coverage (core module)
         run: |
           go test -race -covermode=atomic -coverprofile=coverage.out ./...
           go tool cover -func=coverage.out
@@ -67,4 +73,8 @@ jobs:
           check-latest: true
 
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: |
+          for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do
+            echo "==> govulncheck $m"
+            (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@latest ./...)
+          done

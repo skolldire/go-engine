@@ -10,7 +10,11 @@
 // handing it to New via WithProvider.
 package engine
 
-import "context"
+import (
+	"context"
+
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
+)
 
 // RawConfig is a configuration section the core has not decoded and whose type
 // it does not know. Each Provider decodes its own section into its own type,
@@ -24,6 +28,8 @@ type RawConfig interface {
 	Raw() any
 	// Exists reports whether the section was present in the configuration file.
 	Exists() bool
+	// Key is the section name, so errors can name the offending YAML block.
+	Key() string
 }
 
 // Provider builds and owns the lifecycle of one component.
@@ -53,7 +59,12 @@ type Provider interface {
 // growing Deps is the first sign that the core is learning about adapters.
 type Deps struct {
 	// Logger is the engine logger. Never nil.
-	Logger Logger
+	//
+	// This is the full logger.Service, not a narrowed view. A narrow interface
+	// bought no decoupling — the core already depends on the logger package for
+	// Config and NewService — while forcing all sixteen providers to type-assert
+	// their way back to it, each with an error path that could never fire.
+	Logger logger.Service
 
 	// Telemetry records spans and metrics. Never nil; it is a no-op when the
 	// application configured no telemetry, so providers need no nil checks.
@@ -75,15 +86,6 @@ type Deps struct {
 	// build it through Resource so it is created at most once, even when
 	// several providers race. build is invoked at most once per key per engine.
 	Resource func(key string, build func() (any, error)) (any, error)
-}
-
-// Logger is the subset of logging the core and providers rely on. It matches
-// pkg/utilities/logger.Service so the existing logger satisfies it directly.
-type Logger interface {
-	Info(ctx context.Context, msg string, fields map[string]any)
-	Error(ctx context.Context, err error, fields map[string]any)
-	Debug(ctx context.Context, msg string, fields map[string]any)
-	Warn(ctx context.Context, msg string, fields map[string]any)
 }
 
 // Telemetry is the core's view of observability. It is intentionally narrower

@@ -8,6 +8,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- **`pkg/app` and `pkg/config/viper` (BREAKING)**: deleted outright, with no deprecation window. `app.NewAppBuilder()` and the 39 `Engine` getters are replaced by `engine.New(ctx, opts...)` and `engine.Get[T]` / the per-provider `From` helpers. `pkg/app/build` went with them (it was dead API).
+- **`pkg/utilities/telemetry` (BREAKING)**: the deprecated facade is merged into `pkg/telemetry/otel`. `Metrics`, `Tracer`, `Telemetry`, `NewTelemetry`, `NewOperation` moved verbatim; the constructor now takes `otel.OTELConfig` (keys `exporter_endpoint`/`sampling_rate`) instead of the old `telemetry.Config`. New `otel.NewTelemetryFrom(provider, cfg)` wraps a provider owned by someone else.
+- **`rest.Config.WithResilience` / `rest.Config.Resilience` (BREAKING)**: the deprecated flag and its `resolveResilience` shim are gone. Use the `Retry` and `CircuitBreaker` blocks; a nil block means that decorator is not installed. Other clients keep `WithResilience` — it belongs to `client.BaseConfig` and is unchanged.
+
+### Changed
+- **Multi-module repository (BREAKING — module layout)**: go-engine is split into nine modules, one per adapter family: the core at the root plus `aws`, `messaging`, `http`, `database/{sql,redis,mongodb,memcached}` and `preset/full`. A consumer downloads only what it imports — a pure HTTP service goes from 115 `require` lines to 55. `go.work` and relative `replace` directives cover local development; the release pipeline now pushes a directory-prefixed tag per sub-module.
+- **Import paths moved (BREAKING)**: `pkg/app/router` → `pkg/router` (it was core, not legacy); `pkg/clients/rest` → `http/pkg/rest`; `provider/*` → `<family>/provider/*`; `preset/aws` → `aws/preset`. `provider/otel` and `preset/http` stay in the core module.
+- **`pkg/testutil` split (BREAKING)**: it keeps `MockLogger` and the context helpers. The adapter mocks move to the module of the adapter they imitate — `aws/pkg/testutil` (S3, SQS), `http/pkg/testutil` (REST), `database/redis/pkg/testutil` (Redis). Keeping them in the core forced every consumer to resolve the AWS SDK just to get a logger double.
+- **`make lint-arch` is now structural**: it reads the core module's `go.mod` for adapter SDKs and family modules, rather than grepping for import strings. `make test`, `make lint`, `make lint-deps` and the new `make tidy` walk every module.
+
 ### Added
 - **Cognito group management** (`aws/pkg/clients/cognito`): `Service.AddUserToGroup(ctx, username, group)`, `RemoveUserFromGroup(ctx, username, group)` and `ListGroupsForUser(ctx, username)`. They map `AdminAddUserToGroup` / `AdminRemoveUserFromGroup` / `AdminListGroupsForUser` (paginated) and read `UserPoolID` from the client `Config`. Consumers no longer need a direct dependency on the AWS SDK to assign roles.
 - **S3 presigned uploads** (`aws/pkg/clients/s3`): `Service.GetPresignedPutURL(ctx, key, contentType, expiration)` — symmetric to `GetPresignedURL`; generates a presigned `PUT` URL for direct client→S3 uploads. `expiration=0` defaults to 15 minutes.

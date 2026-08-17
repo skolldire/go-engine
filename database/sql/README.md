@@ -33,15 +33,13 @@ client, err := gormsql.New(gormsql.Config{
     WithResilience:     false,
 }, dialector, log)
 
-engine, _ := app.NewAppBuilder().
-    WithDynamicConfig().
-    WithCustomClient("main-db", client).
-    WithRouter().
-    Build()
+// There is no gormsql provider: the dialector is a Go value, not something a
+// YAML file can name, so the application builds the connection and hands the
+// engine only its shutdown.
+eng, _ := engine.New(ctx, presethttp.Options()...)
+eng.RegisterCloser("main-db", func(ctx context.Context) error { return dbClient.Close() })
 
-// Retrieve:
-raw := engine.GetCustomClient("main-db")
-db, _ := client.SafeTypeAssert[*gormsql.DBClient](raw)
+db, err := engine.Get[*gormsql.DBClient](eng, "main-db")
 ```
 
 ---

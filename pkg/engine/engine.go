@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
 // Engine is the assembled application: core services plus whatever components
@@ -12,7 +14,7 @@ import (
 // allows an adapter to be added without touching this file.
 type Engine struct {
 	ctx context.Context
-	log Logger
+	log logger.Service
 
 	// components maps a provider Name to the value its Init returned.
 	componentsMu sync.RWMutex
@@ -21,6 +23,10 @@ type Engine struct {
 	// resources memoizes shared objects built on demand by providers.
 	resourcesMu sync.Mutex
 	resources   map[string]*resourceEntry
+
+	// providers are the claimed Provider values, released on Close so the same
+	// instance can be reused once this engine is done with it.
+	providers []Provider
 
 	core      *coreServices
 	lifecycle *lifecycle
@@ -46,7 +52,7 @@ type resourceEntry struct {
 func (e *Engine) Context() context.Context { return e.ctx }
 
 // Logger returns the engine logger. Never nil.
-func (e *Engine) Logger() Logger { return e.log }
+func (e *Engine) Logger() logger.Service { return e.log }
 
 // Close releases every component in LIFO order, bounded by ctx. Errors are
 // aggregated with errors.Join. It is idempotent.
@@ -54,7 +60,16 @@ func (e *Engine) Close(ctx context.Context) error {
 	if e.lifecycle == nil {
 		return nil
 	}
-	return e.lifecycle.close(ctx)
+	err := e.lifecycle.close(ctx)
+
+	// Release the single-use claim: after Close the engine owns nothing, so the
+	// provider instances may legitimately be handed to a new engine.
+	for _, p := range e.providers {
+		releaseProvider(p)
+	}
+	e.providers = nil
+
+	return err
 }
 
 // RegisterCloser records an extra resource to release at shutdown. Components

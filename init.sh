@@ -20,6 +20,12 @@ find . -type f -name "*.go" -exec sed -i '' "s|$OLD_MODULE_PATH|$NEW_MODULE_PATH
     find . -type f -name "*.go" -exec sed -i "s|$OLD_MODULE_PATH|$NEW_MODULE_PATH|g" {} \;
 echo "Actualización de rutas de importación completada."
 
-echo "Ejecutando 'go mod tidy' para limpiar y actualizar las dependencias..."
-go mod tidy
+# El repositorio son varios módulos: ordenarlos uno a uno y luego sincronizar el
+# workspace es lo unico que deja el checkout consistente.
+echo "Ejecutando 'go mod tidy' en cada módulo..."
+for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do
+    echo "  -> $m"
+    (cd "$m" && GOWORK=off go mod tidy)
+done
+go work sync
 echo "'go mod tidy' completado."

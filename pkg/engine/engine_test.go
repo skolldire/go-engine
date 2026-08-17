@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skolldire/go-engine/pkg/health"
+	"github.com/skolldire/go-engine/pkg/router"
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -311,7 +314,9 @@ func TestDecodeNamed(t *testing.T) {
 	_, err = DecodeNamed[fakeConfig](raw, "missing")
 	assert.ErrorContains(t, err, "not declared")
 
-	assert.Equal(t, []string{"billing", "orders"}, InstanceNames(raw))
+	names, err := InstanceNames(raw)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"billing", "orders"}, names)
 }
 
 func TestDecodeNamed_MissingSection(t *testing.T) {
@@ -471,4 +476,282 @@ func TestNew_FailedProviderIsItselfClosed(t *testing.T) {
 
 	require.Error(t, err)
 	assert.True(t, bad.closeCalled, "a provider that fails Init must still be closed")
+}
+
+// TestNew_ProviderCannotBeSharedBetweenEngines is the regression test for
+// Provider statefulness. A Provider stores the component it built so Close can
+// release it, so handing one instance to two engines had the second Init
+// overwrite the first's client — and the first engine's Close then released a
+// resource it no longer owned.
+func TestNew_ProviderCannotBeSharedBetweenEngines(t *testing.T) {
+	dir := writeConfig(t, "log:\n  level: error\n")
+
+	shared := &fakeProvider{name: "shared", configKey: "shared"}
+
+	first, err := New(context.Background(), WithConfigDir(dir), WithProvider(shared))
+	require.NoError(t, err)
+
+	_, err = New(context.Background(), WithConfigDir(dir), WithProvider(shared))
+	require.Error(t, err, "reusing a provider instance must be rejected")
+	assert.ErrorContains(t, err, "already used by another engine")
+
+	// After the first engine closes, the instance is free again.
+	require.NoError(t, first.Close(context.Background()))
+
+	third, err := New(context.Background(), WithConfigDir(dir), WithProvider(shared))
+	require.NoError(t, err, "a closed engine must release its providers")
+	t.Cleanup(func() { _ = third.Close(context.Background()) })
+}
+
+// TestDecode_RejectsUnknownKeys is the regression test for a typo in a
+// provider's section leaving the field at its zero value in silence.
+func TestDecode_RejectsUnknownKeys(t *testing.T) {
+	raw := NewRawConfig("widget", map[string]any{
+		"endpoint": "http://ok",
+		"endpont":  "typo",
+		"retires":  3,
+	})
+
+	var cfg fakeConfig
+	err := raw.Decode(&cfg)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "unknown configuration keys")
+	assert.ErrorContains(t, err, "endpont")
+	assert.ErrorContains(t, err, "retires")
+}
+
+func TestDecode_AcceptsKnownKeys(t *testing.T) {
+	raw := NewRawConfig("widget", map[string]any{"endpoint": "http://ok", "retries": 2})
+
+	var cfg fakeConfig
+	require.NoError(t, raw.Decode(&cfg))
+	assert.Equal(t, "http://ok", cfg.Endpoint)
+	assert.Equal(t, 2, cfg.Retries)
+}
+
+// TestInstanceNames_ReportsMalformedSection is the regression test for
+// InstanceNames returning nil on error: a malformed section produced a service
+// that started with none of its clients and no indication why.
+func TestInstanceNames_ReportsMalformedSection(t *testing.T) {
+	raw := NewRawConfig("sqs_clients", "this should have been a list")
+
+	names, err := InstanceNames(raw)
+
+	require.Error(t, err)
+	assert.Nil(t, names)
+	assert.ErrorContains(t, err, "sqs_clients")
+}
+
+func TestInstanceNames_AbsentSectionIsNotAnError(t *testing.T) {
+	names, err := InstanceNames(NewMissingRawConfig("sqs_clients"))
+	require.NoError(t, err)
+	assert.Empty(t, names)
+}
+
+// TestEachInstance_PropagatesTheError covers the helper the presets use.
+func TestEachInstance_PropagatesTheError(t *testing.T) {
+	cfg := &Config{Components: map[string]any{"sqs_clients": "malformed"}}
+
+	var seen []string
+	err := EachInstance(cfg, "sqs_clients", func(name string) { seen = append(seen, name) })
+
+	require.Error(t, err)
+	assert.Empty(t, seen, "no provider may be registered from a malformed section")
+}
+
+// TestDecoder_RejectsBareNumberDurations is the regression test for the footgun
+// the README documented incorrectly for months: with weakly typed input,
+// `read_timeout: 10` decodes as 10 nanoseconds, so the service starts looking
+// configured while every request times out instantly.
+func TestDecoder_RejectsBareNumberDurations(t *testing.T) {
+	type withDuration struct {
+		Timeout time.Duration `mapstructure:"timeout"`
+	}
+
+	for _, bare := range []any{10, 10.5, int64(10)} {
+		raw := NewRawConfig("thing", map[string]any{"timeout": bare})
+
+		var cfg withDuration
+		err := raw.Decode(&cfg)
+
+		require.Error(t, err, "value %v (%T) must be rejected", bare, bare)
+		assert.ErrorContains(t, err, "not a duration")
+		assert.ErrorContains(t, err, "10s", "the message must show the accepted form")
+	}
+}
+
+func TestDecoder_AcceptsDurationStrings(t *testing.T) {
+	type withDuration struct {
+		Timeout time.Duration `mapstructure:"timeout"`
+	}
+
+	for input, want := range map[string]time.Duration{
+		"10s":   10 * time.Second,
+		"500ms": 500 * time.Millisecond,
+		"1m30s": 90 * time.Second,
+	} {
+		raw := NewRawConfig("thing", map[string]any{"timeout": input})
+
+		var cfg withDuration
+		require.NoError(t, raw.Decode(&cfg), "input %q", input)
+		assert.Equal(t, want, cfg.Timeout)
+	}
+}
+
+// TestOptions_CoverTheDeclarativeSurface exercises the options an application
+// actually composes. They are one-liners, but an option that silently stops
+// applying is invisible until production, so each is asserted on its effect.
+func TestOptions_CoverTheDeclarativeSurface(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "base.yaml"),
+		[]byte("log:\n  level: info\nrouter:\n  port: \"8080\"\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "over.yaml"),
+		[]byte("log:\n  level: error\n"), 0o600))
+
+	t.Run("WithConfigFiles merges in order", func(t *testing.T) {
+		eng, err := New(context.Background(),
+			WithConfigDir(dir), WithConfigFiles("base", "over"))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = eng.Close(context.Background()) })
+		assert.Equal(t, "error", eng.Logger().GetLogLevel())
+	})
+
+	t.Run("WithConfig skips file loading", func(t *testing.T) {
+		eng, err := New(context.Background(), WithConfig(&Config{}))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = eng.Close(context.Background()) })
+		assert.NotNil(t, eng.Logger())
+	})
+
+	t.Run("WithLogger overrides the configured logger", func(t *testing.T) {
+		custom := logger.NewService(logger.Config{Level: "warn"}, nil)
+		eng, err := New(context.Background(), WithConfig(&Config{}), WithLogger(custom))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = eng.Close(context.Background()) })
+		assert.Same(t, custom, eng.Logger())
+	})
+
+	t.Run("WithMiddleware implies a router and runs", func(t *testing.T) {
+		var applied bool
+		eng, err := New(context.Background(), WithConfig(&Config{}),
+			WithMiddleware(func(router.Service) { applied = true }))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = eng.Close(context.Background()) })
+
+		assert.True(t, applied, "WithMiddleware must run the function")
+		assert.NotNil(t, eng.Router(), "and must imply WithRouter")
+	})
+
+	t.Run("WithHealthConfig wins over the file", func(t *testing.T) {
+		eng, err := New(context.Background(),
+			WithConfig(&Config{Health: health.Config{Timeout: time.Minute}}),
+			WithHealthConfig(health.Config{Timeout: 3 * time.Second}))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = eng.Close(context.Background()) })
+		assert.NotNil(t, eng.Health())
+	})
+
+	t.Run("Context is the one given to New", func(t *testing.T) {
+		type ctxKey struct{}
+		ctx := context.WithValue(context.Background(), ctxKey{}, "v")
+		eng, err := New(ctx, WithConfig(&Config{}))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = eng.Close(context.Background()) })
+		assert.Equal(t, "v", eng.Context().Value(ctxKey{}))
+	})
+}
+
+// TestMustGet_PanicsOnlyWhenTheComponentIsWrong covers the startup-time helper.
+func TestMustGet_PanicsOnlyWhenTheComponentIsWrong(t *testing.T) {
+	type widget struct{}
+	want := &widget{}
+
+	eng, err := New(context.Background(), WithConfig(&Config{}),
+		WithProvider(&fakeProvider{name: "w", configKey: "w", value: want}))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = eng.Close(context.Background()) })
+
+	assert.Same(t, want, MustGet[*widget](eng, "w"))
+	assert.Panics(t, func() { MustGet[*widget](eng, "missing") },
+		"a missing component at startup is a programming error, not a runtime condition")
+}
+
+// TestProviderHealthChecksReachTheHealthService closes the loop between a
+// provider contributing a check and /ready reporting it.
+func TestProviderHealthChecksReachTheHealthService(t *testing.T) {
+	failing := errors.New("dependency down")
+
+	p := &healthContributingProvider{err: failing}
+	eng, err := New(context.Background(), WithConfig(&Config{}), WithHealth(), WithProvider(p))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = eng.Close(context.Background()) })
+
+	require.NotNil(t, eng.Health())
+	assert.False(t, eng.Health().IsReady(context.Background()),
+		"a provider's failing check must make the engine not ready")
+}
+
+// TestHealthRegistrarIsANoopWithoutHealth: a provider must be able to register
+// a check unconditionally, even on an engine built without health.
+func TestHealthRegistrarIsANoopWithoutHealth(t *testing.T) {
+	p := &healthContributingProvider{}
+	assert.NotPanics(t, func() {
+		eng, err := New(context.Background(), WithConfig(&Config{}), WithProvider(p))
+		require.NoError(t, err)
+		_ = eng.Close(context.Background())
+	})
+}
+
+type healthContributingProvider struct{ err error }
+
+func (h *healthContributingProvider) Name() string      { return "dep" }
+func (h *healthContributingProvider) ConfigKey() string { return "dep" }
+func (h *healthContributingProvider) Init(_ context.Context, _ RawConfig, deps Deps) (any, error) {
+	deps.Health.RegisterCheck("dep", func(context.Context) error { return h.err })
+	return h, nil
+}
+func (h *healthContributingProvider) Close(context.Context) error { return nil }
+
+// TestNoopTelemetryIsInert guards the default handed to providers.
+func TestNoopTelemetryIsInert(t *testing.T) {
+	var n noopTelemetry
+	assert.NotPanics(t, func() {
+		n.Counter(context.Background(), "c", 1)
+		n.Histogram(context.Background(), "h", 1)
+	})
+	called := false
+	require.NoError(t, n.Span(context.Background(), "s", func(context.Context) error {
+		called = true
+		return nil
+	}))
+	assert.True(t, called, "a no-op span must still run the operation")
+}
+
+func TestDefaultConfigDir(t *testing.T) {
+	t.Run("CONF_DIR wins", func(t *testing.T) {
+		t.Setenv("CONF_DIR", "/custom")
+		assert.Equal(t, "/custom", defaultConfigDir())
+	})
+	t.Run("falls back to config", func(t *testing.T) {
+		t.Setenv("CONF_DIR", "")
+		assert.Equal(t, "config", defaultConfigDir())
+	})
+}
+
+func TestEachInstance_VisitsEveryDeclaredInstance(t *testing.T) {
+	cfg := &Config{Components: map[string]any{
+		"sqs_clients": []any{
+			map[string]any{"orders": map[string]any{}},
+			map[string]any{"billing": map[string]any{}},
+		},
+	}}
+
+	var seen []string
+	require.NoError(t, EachInstance(cfg, "sqs_clients", func(n string) { seen = append(seen, n) }))
+	assert.Equal(t, []string{"billing", "orders"}, seen)
+
+	seen = nil
+	require.NoError(t, EachInstance(cfg, "absent", func(n string) { seen = append(seen, n) }))
+	assert.Empty(t, seen)
 }

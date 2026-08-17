@@ -1,0 +1,18 @@
+go 1.25.0
+
+toolchain go1.26.5
+
+// The repository is a set of modules that are developed and released together.
+// The workspace is what makes a change to the core visible to every adapter
+// without a tagged release in between.
+use (
+	.
+	./aws
+	./database/memcached
+	./database/mongodb
+	./database/redis
+	./database/sql
+	./http
+	./messaging
+	./preset/full
+)

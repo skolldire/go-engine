@@ -33,7 +33,7 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Run Tests
-        run: go test ./... -v
+        run: make test
 
       - name: Get tag name
         id: tag
@@ -41,6 +41,18 @@ jobs:
           TAG_NAME=${GITHUB_REF#refs/tags/}
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "Creating release for tag: $TAG_NAME"
+
+      # Go resolves a sub-module only through a tag prefixed with its directory.
+      # Without this step `go get .../aws@vX.Y.Z` fails even though the code is
+      # in the release commit.
+      - name: Tag sub-modules
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for m in aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do
+            git tag -a "$m/${{ steps.tag.outputs.tag_name }}" -m "$m ${{ steps.tag.outputs.tag_name }}"
+          done
+          git push origin --tags
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

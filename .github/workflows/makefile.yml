@@ -27,5 +27,6 @@ jobs:
     - name: Run Makefile
       run: make all
 
-    - name: Build
-      run: go build ./...
+    - name: Build every module
+      run: |
+        for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
