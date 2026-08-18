@@ -22,6 +22,10 @@ var _ Provider = (*realProvider)(nil)
 type realProvider struct {
 	traceProvider  *sdktrace.TracerProvider
 	metricProvider *sdkmetric.MeterProvider
+
+	// ownsGlobals records whether this provider installed the process-wide
+	// OpenTelemetry state, so Shutdown knows whether to release the claim.
+	ownsGlobals bool
 }
 
 // NewProvider initializes a new OTel Provider from cfg.
@@ -90,6 +94,12 @@ func NewProvider(ctx context.Context, cfg OTELConfig) (Provider, error) {
 	// engine in the same binary would overwrite the first and its spans would
 	// disappear silently, which is why it can be skipped.
 	if !cfg.SkipGlobalProviders {
+		if err := claimGlobalProviders(cfg.ServiceName); err != nil {
+			_ = traceProvider.Shutdown(ctx)
+			_ = metricProvider.Shutdown(ctx)
+			return nil, err
+		}
+
 		otel.SetTracerProvider(traceProvider)
 		otel.SetMeterProvider(metricProvider)
 		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
@@ -101,6 +111,7 @@ func NewProvider(ctx context.Context, cfg OTELConfig) (Provider, error) {
 	return &realProvider{
 		traceProvider:  traceProvider,
 		metricProvider: metricProvider,
+		ownsGlobals:    !cfg.SkipGlobalProviders,
 	}, nil
 }
 
@@ -113,6 +124,12 @@ func (p *realProvider) Meter(name string) otelmetric.Meter {
 }
 
 func (p *realProvider) Shutdown(ctx context.Context) error {
+	// Give the process-wide claim back, so a provider that has been shut down
+	// does not lock the globals for the rest of the process's life.
+	if p.ownsGlobals {
+		releaseGlobalProviders()
+	}
+
 	// Shut down both providers even if the first fails, aggregating errors so a
 	// trace-shutdown failure does not abandon the metric provider.
 	var errs []error

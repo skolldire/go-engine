@@ -50,10 +50,33 @@ jobs:
       - name: Run Tests
         run: make test
 
-      - name: Get tag name
+      - name: Resolve the tag
         id: tag
         run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          set -euo pipefail
+
+          # GITHUB_REF only names a tag for the push trigger. Under
+          # workflow_dispatch it is the branch the workflow was launched from,
+          # so stripping refs/tags/ left the literal "refs/heads/main" and the
+          # manual path published a release for a tag that does not exist.
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG_NAME="${{ inputs.tag }}"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [ -z "$TAG_NAME" ] || [ "${TAG_NAME#refs/}" != "$TAG_NAME" ]; then
+            echo "::error::could not resolve a tag (got '$TAG_NAME')"
+            exit 1
+          fi
+
+          # A release must describe something that exists.
+          git fetch --tags --quiet
+          if ! git rev-parse "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            echo "::error::tag $TAG_NAME does not exist"
+            exit 1
+          fi
+
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "Creating release for tag: $TAG_NAME"
 

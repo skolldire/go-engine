@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"google.golang.org/grpc"
@@ -33,6 +34,14 @@ type Service interface {
 	// RPCs to complete before the listener is closed.
 	Start(ctx context.Context) error
 
+	// Address reports the address the listener bound, e.g. "[::]:50051".
+	// It is empty until Start has bound the port.
+	//
+	// It matters because Puerto may be 0, which asks the kernel for any free
+	// port: without this the caller has no way to learn which one it got, so a
+	// server configured that way could be started but never reached.
+	Address() string
+
 	// Stop drains the server, bounded by ctx: in-flight RPCs are allowed to
 	// finish, but a stuck one cannot hold shutdown open past the deadline.
 	// It returns ErrForcedShutdown when the deadline expired and connections
@@ -56,6 +65,10 @@ type Config struct {
 }
 
 type server struct {
+	// addr is written once by Start and read by Address, so it is guarded.
+	addrMu sync.RWMutex
+	addr   string
+
 	server  *grpc.Server
 	puerto  int
 	logger  logger.Service

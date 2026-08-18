@@ -171,3 +171,41 @@ func TestNewMiddleware_Enabled_WrapsHandler(t *testing.T) {
 	assert.True(t, called)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+// TestNewProvider_RefusesASecondGlobalInstall is the regression test for the
+// OpenTelemetry globals being documented but not protected.
+//
+// They are a process-wide resource with one owner. A second provider used to
+// overwrite the first silently, and the losing engine's spans disappeared with
+// nothing in the logs. Failing at construction puts the conflict where it can
+// be acted on.
+func TestNewProvider_RefusesASecondGlobalInstall(t *testing.T) {
+	ctx := context.Background()
+
+	first, err := NewProvider(ctx, OTELConfig{ServiceName: "first", Enabled: false})
+	require.NoError(t, err)
+
+	// A disabled provider installs nothing, so it must not take the claim.
+	second, err := NewProvider(ctx, OTELConfig{ServiceName: "second", Enabled: false})
+	require.NoError(t, err, "disabled providers touch no global state")
+
+	require.NoError(t, first.Shutdown(ctx))
+	require.NoError(t, second.Shutdown(ctx))
+}
+
+// TestGlobalClaim_IsExclusiveAndReleasable exercises the claim directly, since
+// installing real providers needs a collector.
+func TestGlobalClaim_IsExclusiveAndReleasable(t *testing.T) {
+	t.Cleanup(releaseGlobalProviders)
+
+	require.NoError(t, claimGlobalProviders("first"))
+
+	err := claimGlobalProviders("second")
+	require.Error(t, err, "the globals have one owner")
+	assert.ErrorContains(t, err, "first", "the message must name who holds them")
+	assert.ErrorContains(t, err, "skip_global_providers", "and say how to resolve it")
+
+	// A provider that shuts down must not lock the process out for good.
+	releaseGlobalProviders()
+	assert.NoError(t, claimGlobalProviders("third"))
+}

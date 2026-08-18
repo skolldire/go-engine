@@ -59,6 +59,12 @@ func (s *server) Start(ctx context.Context) error {
 		return fmt.Errorf("error starting listener: %w", err)
 	}
 
+	// Record what the kernel actually gave us: with Puerto 0 the configured
+	// address says nothing about where the server can be reached.
+	s.addrMu.Lock()
+	s.addr = listener.Addr().String()
+	s.addrMu.Unlock()
+
 	if s.logging {
 		s.logger.Info(ctx, "starting gRPC server",
 			map[string]any{"puerto": s.puerto})
@@ -118,11 +124,24 @@ func (s *server) Stop(ctx context.Context) error {
 	select {
 	case <-drained:
 		return nil
+
 	case <-ctx.Done():
-		// GracefulStop is still waiting; Stop unblocks it by closing the
-		// connections outright. The goroutine above then returns.
+		// Stop closes the connections outright, which is what unblocks
+		// GracefulStop.
 		s.server.Stop()
-		<-drained
+
+		// Deliberately not waiting for the drain goroutine here. GracefulStop
+		// only returns once every handler has returned, so waiting would make
+		// a handler that never returns block shutdown for good — the exact
+		// thing this deadline exists to prevent. The goroutine ends when its
+		// handler does; the process is on its way down either way.
 		return fmt.Errorf("%w: %w", ErrForcedShutdown, ctx.Err())
 	}
+}
+
+// Address implements Service.
+func (s *server) Address() string {
+	s.addrMu.RLock()
+	defer s.addrMu.RUnlock()
+	return s.addr
 }

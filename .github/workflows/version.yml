@@ -6,16 +6,9 @@ on:
   # breaking changes from fixes. Releases are now cut deliberately by running this
   # workflow manually. See docs/plan-mejoras-go-engine.md (Fase 0).
   workflow_dispatch:
-    inputs:
-      bump:
-        description: "Which part of the version to increment"
-        required: true
-        default: "minor"
-        type: choice
-        options:
-          - major
-          - minor
-          - patch
+    # No inputs: the version comes from what the modules declare, set by
+    # scripts/sync-module-versions.sh. An unread "bump" input suggested a
+    # choice that did not exist.
 
 concurrency:
   group: versioning-${{ github.ref }}
@@ -23,6 +16,10 @@ concurrency:
 
 permissions:
   contents: write
+
+env:
+  # Pinned, not @latest: a release gate that changes under us is not a gate.
+  GOVULNCHECK_VERSION: v1.1.4
 
 jobs:
   create-version:
@@ -77,6 +74,17 @@ jobs:
       # workflow that this push triggered, so between the two `go get
       # .../aws@vX.Y.Z` failed: the version existed for the root and for nothing
       # else. Consumers hit that window, not us.
+      # A tag is permanent: the module proxy caches it and re-tagging is not a
+      # fix. Everything that would make the release unusable is therefore
+      # checked before a single tag exists.
+      - name: Refuse to release from a branch other than the default
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_NAME" != "${{ github.event.repository.default_branch }}" ]; then
+            echo "::error::releases are cut from ${{ github.event.repository.default_branch }}, not $GITHUB_REF_NAME"
+            exit 1
+          fi
+
       - name: Preflight
         run: |
           set -euo pipefail
@@ -85,10 +93,23 @@ jobs:
           # Everything that would make the release unusable is checked before a
           # single tag exists, because a pushed tag is effectively permanent:
           # the module proxy caches it and re-tagging is not a fix.
-          make check-modules
+          # The same gates CI runs on a pull request. Running a subset here
+          # meant a release could publish code that would have failed review:
+          # lint, coverage and vulnerabilities were all unchecked.
+          make lint
           make lint-arch
+          make check-modules
           make test
+          make coverage-check
+          make example
           make smoke
+
+          # Never publish a version with a known reachable vulnerability.
+          for m in . aws messaging http database/sql database/redis \
+                   database/mongodb database/memcached preset/full; do
+            echo "==> govulncheck $m"
+            (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
+          done
 
           for m in "" aws messaging http database/sql database/redis \
                    database/mongodb database/memcached preset/full; do

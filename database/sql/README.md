@@ -34,48 +34,46 @@ one of them.
 
 ## Configuration
 
+The `sql_clients` section carries pool and behaviour settings; the DSN travels
+with the dialector, because no YAML file can name a Go value.
+
+```yaml
+sql_clients:
+  - main:
+      type: "postgres"
+      max_idle_connections: 10
+      max_open_connections: 100
+      conn_max_lifetime: 5m
+      enable_logging: true
+      log_level: "warn"
+      table_prefix: "app_"
+      auto_migrate: false
+```
+
 ```go
 import (
-    gormsql "github.com/skolldire/go-engine/database/sql/pkg/database/gormsql"
     "gorm.io/driver/postgres"
-    "gorm.io/gorm"
+
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "github.com/skolldire/go-engine/pkg/engine"
 )
 
-dialector := postgres.Open("host=localhost user=app password=secret dbname=mydb port=5432 sslmode=disable")
+dsn := "host=localhost user=app password=secret dbname=mydb port=5432 sslmode=disable"
 
-client, err := gormsql.New(gormsql.Config{
-    Type:               "postgres",
-    MaxIdleConnections: 10,
-    MaxOpenConnections: 100,
-    ConnMaxLifetime:    5 * time.Minute,
-    EnableLogging:      true,
-    LogLevel:           "warn",
-    TablePrefix:        "app_",
-    AutoMigrate:        false,
-    WithResilience:     false,
-}, dialector, log)
+eng, err := engine.New(ctx,
+    engine.WithHealth(),
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
+if err != nil {
+    return err
+}
 
-// The gormsql provider takes its driver as an argument rather than reading it
-// from configuration: GORM needs a gorm.Dialector, and resolving one from a
-// string such as "postgres" would mean importing the Postgres, MySQL, SQLite
-// and SQL Server dialects together, so every consumer would link all four to
-// use one.
-//
-//	import (
-//	    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
-//	    "gorm.io/driver/postgres"
-//	)
-//
-//	eng, err := engine.New(ctx,
-//	    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
-//	)
-//
-//	db, err := sqlprovider.From(eng, "main")
-eng, _ := engine.New(ctx, presethttp.Options()...)
-eng.RegisterCloser("main-db", func(ctx context.Context) error { return dbClient.Close() })
-
-db, err := engine.Get[*gormsql.DBClient](eng, "main-db")
+db, err := sqlprovider.From(eng, "main")
 ```
+
+The engine owns the connection: it is closed in LIFO order on shutdown and
+contributes a health check, so a database outage shows on `/ready` without the
+application wiring anything.
 
 ---
 

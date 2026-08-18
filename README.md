@@ -4,7 +4,15 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![CI](https://github.com/skolldire/go-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/skolldire/go-engine/actions/workflows/ci.yml)
 
-Go framework for enterprise microservices. Provides a fluent builder that wires AWS clients, databases, messaging, health checks, and observability into a single `*Engine` handle. Not a runnable binary — consumed via `go get`.
+Go framework for microservices. An application declares the components it wants
+as options to `engine.New`; the engine builds them from configuration, wires in
+health checks and observability, and releases them in reverse order on shutdown.
+
+The core knows no adapter. AWS, databases and messaging live in their own
+modules and register themselves through a `Provider` interface, so a service
+that only needs an HTTP router resolves 19 modules instead of 110.
+
+Not a runnable binary — consumed via `go get`.
 
 ---
 
@@ -132,8 +140,9 @@ log:
 
 router:
   port: "8080"
-  # Durations are Go duration strings. A bare number is nanoseconds:
-  # `read_timeout: 10` means 10ns, not 10 seconds.
+  # Durations must be Go duration strings. A bare number is rejected at
+  # startup: `read_timeout: 10` would mean 10 nanoseconds, so the engine
+  # refuses it rather than start a server that times out instantly.
   read_timeout: 10s
   write_timeout: 30s
   shutdown_timeout: 30s
