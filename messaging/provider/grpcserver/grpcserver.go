@@ -46,11 +46,13 @@ func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.D
 // Close implements engine.Provider. Stop is synchronous and lets in-flight RPCs
 // finish, so the engine's LIFO shutdown drains the server before releasing the
 // clients it depends on.
-func (p *Provider) Close(context.Context) error {
+func (p *Provider) Close(ctx context.Context) error {
 	if p.server == nil {
 		return nil
 	}
-	p.server.Stop()
+	// The engine closes under a deadline; passing it on is what stops a hung
+	// RPC from holding shutdown open indefinitely.
+	p.server.Stop(ctx)
 	return nil
 }
 

@@ -72,21 +72,52 @@ jobs:
           echo "new_version=$DECLARED" >> $GITHUB_OUTPUT
           echo "Releasing $DECLARED (previous root tag: $LATEST)"
 
-      - name: Create and push tag
+      # A release must publish every module's tag or none of them. Previously
+      # the root tag was pushed here and the sub-module tags in a second
+      # workflow that this push triggered, so between the two `go get
+      # .../aws@vX.Y.Z` failed: the version existed for the root and for nothing
+      # else. Consumers hit that window, not us.
+      - name: Preflight
         run: |
-          set -e -o pipefail
+          set -euo pipefail
           NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
-          
-          # Verify tag doesn't already exist
-          if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
-            echo "Tag $NEW_VERSION already exists, skipping..."
-            exit 0
-          fi
-          
-          # Create annotated tag
-          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
-          echo "Created tag: $NEW_VERSION"
-          
-          # Push tag (this will trigger the release workflow)
-          git push origin "$NEW_VERSION"
-          echo "Successfully pushed tag: $NEW_VERSION"
+
+          # Everything that would make the release unusable is checked before a
+          # single tag exists, because a pushed tag is effectively permanent:
+          # the module proxy caches it and re-tagging is not a fix.
+          make check-modules
+          make lint-arch
+          make test
+          make smoke
+
+          for m in "" aws messaging http database/sql database/redis \
+                   database/mongodb database/memcached preset/full; do
+            tag="${m:+$m/}$NEW_VERSION"
+            if git rev-parse "$tag" >/dev/null 2>&1; then
+              echo "::error::tag $tag already exists"
+              exit 1
+            fi
+          done
+
+      - name: Create and push every tag atomically
+        run: |
+          set -euo pipefail
+          NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          TAGS=()
+          for m in "" aws messaging http database/sql database/redis \
+                   database/mongodb database/memcached preset/full; do
+            # Go resolves a sub-module only through a tag prefixed with its
+            # directory, so each module needs its own.
+            tag="${m:+$m/}$NEW_VERSION"
+            git tag -a "$tag" -m "${m:-go-engine} $NEW_VERSION"
+            TAGS+=("$tag")
+          done
+
+          # --atomic makes the remote accept all of them or none: a partial
+          # push is what created the broken window in the first place.
+          git push --atomic origin "${TAGS[@]}"
+          echo "Published ${#TAGS[@]} tags for $NEW_VERSION"

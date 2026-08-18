@@ -8,6 +8,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -101,7 +102,7 @@ func TestServer_Start(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop the server
-	srv.Stop()
+	srv.Stop(context.Background())
 }
 
 func TestServer_Start_WithLogging(t *testing.T) {
@@ -122,7 +123,7 @@ func TestServer_Start_WithLogging(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
-	srv.Stop()
+	srv.Stop(context.Background())
 	log.AssertExpectations(t)
 }
 
@@ -165,7 +166,7 @@ func TestServer_Stop(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop should not panic
-	srv.Stop()
+	srv.Stop(context.Background())
 	time.Sleep(100 * time.Millisecond)
 }
 
@@ -188,7 +189,7 @@ func TestServer_Stop_WithLogging(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	srv.Stop()
+	srv.Stop(context.Background())
 	log.AssertExpectations(t)
 }
 
@@ -202,7 +203,7 @@ func TestServer_Stop_WithoutStart(t *testing.T) {
 	srv := NewServer(context.Background(), cfg, log)
 
 	// Stop should not panic even if server wasn't started
-	srv.Stop()
+	srv.Stop(context.Background())
 }
 
 func TestServer_MultipleStops(t *testing.T) {
@@ -223,9 +224,9 @@ func TestServer_MultipleStops(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Multiple stops should not panic
-	srv.Stop()
-	srv.Stop()
-	srv.Stop()
+	srv.Stop(context.Background())
+	srv.Stop(context.Background())
+	srv.Stop(context.Background())
 }
 
 func TestServer_RegisterService_Multiple(t *testing.T) {
@@ -250,3 +251,51 @@ func TestServer_RegisterService_Multiple(t *testing.T) {
 
 	assert.Equal(t, 2, count)
 }
+
+// TestStop_IsBoundedByContext is the regression test for Stop calling
+// GracefulStop with no deadline of its own.
+//
+// GracefulStop waits for in-flight RPCs indefinitely, so a single stuck stream
+// held the engine's entire shutdown open and the process had to be killed. The
+// engine closes under a deadline; Stop must respect it.
+func TestStop_IsBoundedByContext(t *testing.T) {
+	// A silent logger, not the testify mock: the mock captures arguments and
+	// reflects over them, which races with the server goroutine logging during
+	// shutdown. This test is about Stop's deadline, not about what was logged.
+	srv := NewServer(context.Background(), Config{Puerto: 0}, silentLogger{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, srv.Start(ctx))
+
+	cancel()
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer stopCancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		srv.Stop(stopCtx)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Stop must return once its context expires, not wait for the RPC")
+	}
+}
+
+// silentLogger discards everything and captures nothing, so it is safe to share
+// with a goroutine.
+type silentLogger struct{}
+
+func (silentLogger) Debug(context.Context, string, map[string]any)     {}
+func (silentLogger) Info(context.Context, string, map[string]any)      {}
+func (silentLogger) Warn(context.Context, string, map[string]any)      {}
+func (silentLogger) Error(context.Context, error, map[string]any)      {}
+func (silentLogger) FatalError(context.Context, error, map[string]any) {}
+func (silentLogger) WrapError(err error, _ string) error               { return err }
+func (s silentLogger) WithField(string, any) logger.Service            { return s }
+func (s silentLogger) WithFields(map[string]any) logger.Service        { return s }
+func (silentLogger) GetLogLevel() string                               { return "info" }
+func (silentLogger) SetLogLevel(string) error                          { return nil }

@@ -1,7 +1,157 @@
 version: 2
+
+# Every Go module needs its own entry: Dependabot does not discover the modules
+# in a multi-module repository, so a single "/" entry left nine of them — every
+# adapter family — receiving no updates at all, including security ones.
+#
+# Keep this list in step with go.work.
 updates:
   - package-ecosystem: "gomod"
     directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/aws"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/messaging"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/http"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/database/sql"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/database/redis"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/database/mongodb"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/database/memcached"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/preset/full"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
+    directory: "/example"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10

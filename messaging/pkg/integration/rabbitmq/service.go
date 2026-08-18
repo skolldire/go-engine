@@ -90,16 +90,6 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 	}
 
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if c.IsLoggingEnabled() {
-					c.GetLogger().Error(ctx, fmt.Errorf("panic in consume handler: %v", r), map[string]any{
-						"queue": queue,
-					})
-				}
-			}
-		}()
-
 		for {
 			select {
 			case <-ctx.Done():
@@ -121,7 +111,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 
 				// Handle Ack/Nack manually when autoAck is false
 				if !autoAck {
-					err := handler(delivery)
+					err := c.safeHandle(ctx, queue, delivery, handler)
 					if err != nil {
 						// Handler returned error, Nack the message
 						if nackErr := delivery.Nack(false, true); nackErr != nil {
@@ -213,4 +203,34 @@ func (c *RabbitMQClient) Close() error {
 
 func (c *RabbitMQClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
+}
+
+// safeHandle runs the caller's handler and converts a panic into an error.
+//
+// The recover used to sit on the consumer goroutine, outside the delivery loop,
+// so a single panicking handler unwound the whole goroutine: the consumer
+// stopped reading the queue for good and the message was neither acked nor
+// nacked. Containing the panic per delivery means one bad message is nacked and
+// requeued while the consumer keeps running.
+//
+// The recover must be in the same goroutine that calls the handler; a recover
+// in a parent cannot catch a panic raised in a child.
+func (c *RabbitMQClient) safeHandle(
+	ctx context.Context,
+	queue string,
+	delivery amqp.Delivery,
+	handler func(amqp.Delivery) error,
+) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%w: %v", ErrHandlerPanic, r)
+			if c.IsLoggingEnabled() {
+				c.GetLogger().Error(ctx, err, map[string]any{
+					"queue": queue,
+				})
+			}
+		}
+	}()
+
+	return handler(delivery)
 }

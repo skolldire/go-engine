@@ -28,9 +28,10 @@ type Service interface {
 	// RPCs to complete before the listener is closed.
 	Start(ctx context.Context) error
 
-	// Stop immediately triggers GracefulStop on the underlying *grpc.Server.
+	// Stop drains the server, bounded by ctx: in-flight RPCs are allowed to
+	// finish, but a stuck one cannot hold shutdown open past the deadline.
 	// It is safe to call multiple times and safe to call if Start was never called.
-	Stop()
+	Stop(ctx context.Context)
 }
 
 // Config holds the configuration for the gRPC server.

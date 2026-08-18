@@ -15,6 +15,10 @@ const (
 )
 
 var (
+	// ErrHandlerPanic wraps a panic raised by a consumer handler, so a caller
+	// can tell it apart from an error the handler returned deliberately.
+	ErrHandlerPanic = errors.New("panic in consume handler")
+
 	ErrConnection    = errors.New("rabbitmq connection error")
 	ErrInvalidInput  = errors.New("invalid input")
 	ErrPublishFailed = errors.New("error publishing message")

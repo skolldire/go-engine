@@ -33,9 +33,22 @@ client, err := gormsql.New(gormsql.Config{
     WithResilience:     false,
 }, dialector, log)
 
-// There is no gormsql provider: the dialector is a Go value, not something a
-// YAML file can name, so the application builds the connection and hands the
-// engine only its shutdown.
+// The gormsql provider takes its driver as an argument rather than reading it
+// from configuration: GORM needs a gorm.Dialector, and resolving one from a
+// string such as "postgres" would mean importing the Postgres, MySQL, SQLite
+// and SQL Server dialects together, so every consumer would link all four to
+// use one.
+//
+//	import (
+//	    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+//	    "gorm.io/driver/postgres"
+//	)
+//
+//	eng, err := engine.New(ctx,
+//	    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+//	)
+//
+//	db, err := sqlprovider.From(eng, "main")
 eng, _ := engine.New(ctx, presethttp.Options()...)
 eng.RegisterCloser("main-db", func(ctx context.Context) error { return dbClient.Close() })
 

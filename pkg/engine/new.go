@@ -142,6 +142,13 @@ func (b *builder) buildProviders(
 		if p == nil {
 			continue
 		}
+
+		// Validate the shape before touching the provider: calling Name on a
+		// nil pointer inside a non-nil interface panics.
+		if err := requirePointerProvider(p); err != nil {
+			return failNew(ctx, eng, err)
+		}
+
 		name := p.Name()
 
 		if _, exists := eng.Component(name); exists {

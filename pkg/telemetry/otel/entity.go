@@ -25,6 +25,18 @@ type OTELConfig struct {
 	// Headers are added to every OTLP export request, e.g. an API key/token for
 	// a hosted collector.
 	Headers map[string]string `mapstructure:"headers" json:"headers"`
+
+	// SkipGlobalProviders leaves the process-wide OpenTelemetry providers
+	// alone.
+	//
+	// By default the provider registers itself globally, which is what most
+	// applications want: instrumentation libraries emit through
+	// otel.GetTracerProvider() and would otherwise be silently dropped.
+	//
+	// The registration is process-wide, though, so two engines in one binary
+	// overwrite each other and the loser's spans vanish with no error. Set this
+	// on every engine but the one that owns the global state.
+	SkipGlobalProviders bool `mapstructure:"skip_global_providers" json:"skip_global_providers"`
 }
 
 // Provider exposes the TracerProvider and MeterProvider for the application.

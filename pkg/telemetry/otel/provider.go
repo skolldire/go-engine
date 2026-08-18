@@ -85,12 +85,18 @@ func NewProvider(ctx context.Context, cfg OTELConfig) (Provider, error) {
 		sdkmetric.WithResource(res),
 	)
 
-	otel.SetTracerProvider(traceProvider)
-	otel.SetMeterProvider(metricProvider)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
+	// Registering globally is what lets third-party instrumentation emit through
+	// this provider, so it is the default. It is process-wide, though: a second
+	// engine in the same binary would overwrite the first and its spans would
+	// disappear silently, which is why it can be skipped.
+	if !cfg.SkipGlobalProviders {
+		otel.SetTracerProvider(traceProvider)
+		otel.SetMeterProvider(metricProvider)
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		))
+	}
 
 	return &realProvider{
 		traceProvider:  traceProvider,

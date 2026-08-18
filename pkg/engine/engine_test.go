@@ -757,30 +757,6 @@ func TestEachInstance_VisitsEveryDeclaredInstance(t *testing.T) {
 	assert.Empty(t, seen)
 }
 
-// uncomparableProvider is a legal Provider that cannot be used as a map key: a
-// struct value carrying a slice. Nearly every real provider is a pointer, but
-// nothing in the interface forbids this shape.
-type uncomparableProvider struct{ tags []string }
-
-func (u uncomparableProvider) Name() string      { return "uncomparable" }
-func (u uncomparableProvider) ConfigKey() string { return "uncomparable" }
-func (u uncomparableProvider) Init(context.Context, RawConfig, Deps) (any, error) {
-	return u, nil
-}
-func (u uncomparableProvider) Close(context.Context) error { return nil }
-
-// TestNew_AcceptsUncomparableProvider is the regression test for the single-use
-// claim panicking with "hash of unhashable type". Guarding a legal provider
-// shape must never crash the application at startup.
-func TestNew_AcceptsUncomparableProvider(t *testing.T) {
-	assert.NotPanics(t, func() {
-		eng, err := New(context.Background(), WithConfig(&Config{}),
-			WithProvider(uncomparableProvider{tags: []string{"a"}}))
-		require.NoError(t, err)
-		require.NoError(t, eng.Close(context.Background()))
-	})
-}
-
 // TestClose_IsSafeUnderConcurrency covers the release loop: lifecycle.close is
 // idempotent on its own, but clearing e.providers was unguarded, so two
 // concurrent Close calls could double-release or read a torn slice.
@@ -916,25 +892,6 @@ func TestClose_ConcurrentCallersWaitForTheFirst(t *testing.T) {
 	assert.Equal(t, int32(4), returned.Load())
 }
 
-// TestClaim_ValueProvidersCannotAlias documents why the single-use check tracks
-// pointers only. A value provider is copied into the interface, so two engines
-// each get their own — there is no shared state to corrupt, and keying a map by
-// its value would report reuse for two independently built, equal providers.
-func TestClaim_ValueProvidersCannotAlias(t *testing.T) {
-	type valueProvider = fakeValueProvider
-
-	first, err := New(context.Background(), WithConfig(&Config{}),
-		WithProvider(valueProvider{id: "a"}))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = first.Close(context.Background()) })
-
-	// An equal-but-independent provider must not be mistaken for reuse.
-	second, err := New(context.Background(), WithConfig(&Config{}),
-		WithProvider(valueProvider{id: "a"}))
-	require.NoError(t, err, "two independent value providers are not reuse")
-	t.Cleanup(func() { _ = second.Close(context.Background()) })
-}
-
 type fakeValueProvider struct{ id string }
 
 func (v fakeValueProvider) Name() string      { return "value:" + v.id }
@@ -984,4 +941,62 @@ feature_flags:
 	}
 	require.NoError(t, cfg.Section("feature_flags").Decode(&flags))
 	assert.True(t, flags.Beta)
+}
+
+// sharedStateProvider is a value provider holding a pointer. Copying it copies
+// the pointer, so every copy shares the same underlying state — which is why
+// value providers cannot be made safe by copying alone.
+type sharedStateProvider struct{ generation *int }
+
+func (s sharedStateProvider) Name() string      { return "shared" }
+func (s sharedStateProvider) ConfigKey() string { return "shared" }
+func (s sharedStateProvider) Init(context.Context, RawConfig, Deps) (any, error) {
+	*s.generation++
+	return *s.generation, nil
+}
+func (s sharedStateProvider) Close(context.Context) error {
+	*s.generation = -1
+	return nil
+}
+
+// TestNew_RejectsValueProviders is the regression test for the hole in the
+// single-use claim.
+//
+// The claim originally skipped non-pointer providers on the reasoning that a
+// value is copied per engine and therefore cannot alias. That reasoning was
+// wrong: a value provider holding a pointer, slice or map shares that state
+// with every copy. Reproduced before this check existed — closing the first
+// engine acted on the generation the second had created.
+func TestNew_RejectsValueProviders(t *testing.T) {
+	gen := 0
+
+	_, err := New(context.Background(), WithConfig(&Config{}),
+		WithProvider(sharedStateProvider{generation: &gen}))
+
+	require.Error(t, err, "a value provider must be rejected, not silently aliased")
+	assert.ErrorContains(t, err, "not a pointer")
+	assert.ErrorContains(t, err, "shared with every other engine",
+		"the message must explain the hazard, not just the rule")
+	assert.Zero(t, gen, "a rejected provider must never be initialised")
+}
+
+// TestNew_RejectsValueProvidersEvenWithoutSharedState: the rule is on the shape,
+// not on whether this particular value happens to hold a pointer. Init on a
+// value receiver discards whatever it stores, so Close would see nothing.
+func TestNew_RejectsValueProvidersEvenWithoutSharedState(t *testing.T) {
+	_, err := New(context.Background(), WithConfig(&Config{}),
+		WithProvider(fakeValueProvider{id: "a"}))
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not a pointer")
+}
+
+// TestNew_RejectsNilProvider covers the other invalid shape.
+func TestNew_RejectsNilProvider(t *testing.T) {
+	var typed *fakeProvider // nil pointer inside a non-nil interface
+
+	_, err := New(context.Background(), WithConfig(&Config{}), WithProvider(typed))
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "nil")
 }

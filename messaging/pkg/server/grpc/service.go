@@ -83,14 +83,39 @@ func (s *server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop calls GracefulStop on the server synchronously.
-// In-flight RPCs are allowed to complete before the method returns.
+// Stop drains the server, bounded by ctx.
+//
+// GracefulStop waits for in-flight RPCs with no deadline of its own, so a
+// single stuck stream blocks shutdown forever. That matters because the engine
+// closes its components under a deadline: without a bound here, one hung RPC
+// held up the entire shutdown and the process had to be killed.
+//
+// When ctx expires the server is stopped forcefully, which closes open
+// connections. Losing an RPC that was already past its deadline is preferable
+// to never shutting down.
+//
 // Safe to call without a prior Start and safe to call multiple times.
-func (s *server) Stop() {
-	if s.server != nil {
-		if s.logging {
-			s.logger.Info(context.Background(), "stopping gRPC server", nil)
-		}
+func (s *server) Stop(ctx context.Context) {
+	if s.server == nil {
+		return
+	}
+
+	if s.logging {
+		s.logger.Info(context.WithoutCancel(ctx), "stopping gRPC server", nil)
+	}
+
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
 		s.server.GracefulStop()
+	}()
+
+	select {
+	case <-drained:
+	case <-ctx.Done():
+		// GracefulStop is still waiting; Stop unblocks it by closing the
+		// connections outright. The goroutine above then returns.
+		s.server.Stop()
+		<-drained
 	}
 }
