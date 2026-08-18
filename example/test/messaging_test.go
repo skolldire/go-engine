@@ -5,6 +5,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"testing"
@@ -129,7 +130,7 @@ func TestEngine_Kafka(t *testing.T) {
 	requireDocker(t)
 
 	ctx := ctxWithTimeout(t, 8*time.Minute)
-	broker, _ := startKafka(t)
+	broker := startKafka(t)
 
 	const topic = "e2e-events"
 
@@ -176,14 +177,26 @@ kafka:
 		})
 	}()
 
-	// Let the group be assigned the partition; a message published before that
-	// lands with nobody reading it.
-	time.Sleep(10 * time.Second)
+	// Republish until the consumer group has actually been assigned the
+	// partition, rather than sleeping a fixed guess: a message published before
+	// the assignment lands with nobody reading it, and how long that takes
+	// varies with the broker's mood.
+	publishing, stopPublishing := context.WithCancel(ctx)
+	defer stopPublishing()
 
-	require.NoError(t, client.Publish(ctx, kafka.Message{
-		Key:   []byte("order-1"),
-		Value: []byte(`{"order":1}`),
-	}))
+	go func() {
+		for {
+			select {
+			case <-publishing.Done():
+				return
+			case <-time.After(2 * time.Second):
+				_ = client.Publish(publishing, kafka.Message{
+					Key:   []byte("order-1"),
+					Value: []byte(`{"order":1}`),
+				})
+			}
+		}
+	}()
 
 	deadline := time.After(90 * time.Second)
 	for {
@@ -195,6 +208,8 @@ kafka:
 
 			assert.Equal(t, []byte("order-1"), msg.Key, "the key must survive the round trip")
 			assert.Equal(t, topic, msg.Topic)
+
+			stopPublishing()
 
 			// Cancelling the context must end Subscribe cleanly rather than
 			// surfacing the cancellation as a failure.
@@ -255,7 +270,9 @@ grpc_client:
       timeout: 2s
 `)
 
-	eng := newEngine(t, dir, engine.WithProvider(
+	// This test forces a drain on purpose, so Close reports it. That is the
+	// behaviour under test, not a shutdown failure.
+	eng := newEngineWithShutdown(t, dir, false, engine.WithProvider(
 		grpcsrvprovider.New(),
 		grpcprovider.New("auth"),
 	))
@@ -356,13 +373,15 @@ func serverAddress(t *testing.T, srv grpcsrv.Service) string {
 // startKafka boots a single-broker Kafka and returns the address the host can
 // dial.
 //
-// The advertised listener must name the port the host will use, so the mapping
-// is fixed rather than random: a broker advertising a port testcontainers did
-// not map is reachable for the initial connection and for nothing else.
-func startKafka(t *testing.T) (string, func()) {
+// The advertised listener must name the port the host will actually use, and
+// Kafka needs it at startup — a broker advertising a port testcontainers did not
+// map is reachable for the initial connection and for nothing else. Rather than
+// hard-code a port, which collides with anything already using it, a free one is
+// reserved from the OS and handed to both sides.
+func startKafka(t *testing.T) string {
 	t.Helper()
 
-	const hostPortNum = "39092"
+	hostPortNum := freePort(t)
 
 	ctx := ctxWithTimeout(t, 8*time.Minute)
 
@@ -392,5 +411,23 @@ func startKafka(t *testing.T) (string, func()) {
 	require.NoError(t, err)
 	terminate(t, container)
 
-	return "localhost:" + hostPortNum, func() {}
+	return "localhost:" + hostPortNum
+}
+
+// freePort reserves an ephemeral port and releases it, so the caller can hand
+// the number to something that must be told its port up front.
+//
+// There is an unavoidable race between releasing and rebinding; it is far
+// narrower than the certainty of a collision on a hard-coded port.
+func freePort(t *testing.T) string {
+	t.Helper()
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	_, port, err := net.SplitHostPort(lis.Addr().String())
+	require.NoError(t, err)
+	require.NoError(t, lis.Close())
+
+	return port
 }

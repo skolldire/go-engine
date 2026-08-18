@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -330,4 +331,48 @@ func TestStop_ReportsAForcedDrain(t *testing.T) {
 			assert.ErrorIs(t, err, ErrForcedShutdown)
 		}
 	})
+}
+
+// TestStop_IsSerialisedAcrossPaths pins the guarantee the interface promises.
+//
+// Two shutdown paths exist — the explicit Stop and the one a cancelled Start
+// context triggers — and both used to open their own GracefulStop goroutine.
+// The underlying implementation tolerated that, so the tests passed, but the
+// safety was borrowed rather than ours. Now every path funnels through one
+// drain and every caller observes the same result.
+func TestStop_IsSerialisedAcrossPaths(t *testing.T) {
+	srv := NewServer(context.Background(), Config{Puerto: 0}, silentLogger{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, srv.Start(ctx))
+
+	// Cancelling Start begins one drain; the explicit calls below must join it
+	// rather than start their own.
+	cancel()
+
+	var wg sync.WaitGroup
+	results := make([]error, 8)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = srv.Stop(context.Background())
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 1; i < len(results); i++ {
+		assert.Equal(t, results[0], results[i],
+			"every caller must observe the same shutdown outcome")
+	}
+}
+
+// TestStop_RepeatedCallsAreSafe covers the documented contract directly.
+func TestStop_RepeatedCallsAreSafe(t *testing.T) {
+	srv := NewServer(context.Background(), Config{Puerto: 0}, silentLogger{})
+
+	first := srv.Stop(context.Background())
+	second := srv.Stop(context.Background())
+
+	assert.Equal(t, first, second, "a repeated Stop must be a no-op with the same result")
 }

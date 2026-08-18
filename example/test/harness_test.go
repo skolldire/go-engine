@@ -122,6 +122,21 @@ func writeConfig(t *testing.T, body string) string {
 // shutdown, failing the test if anything is left open.
 func newEngine(t *testing.T, configDir string, opts ...engine.Option) *engine.Engine {
 	t.Helper()
+	return newEngineWithShutdown(t, configDir, true, opts...)
+}
+
+// newEngineWithShutdown is newEngine with control over the shutdown assertion.
+//
+// A test that deliberately forces a drain — cutting an in-flight RPC short, for
+// instance — makes Close report that forcing, correctly. Asserting a clean
+// shutdown there would be asserting the opposite of what the test set up.
+func newEngineWithShutdown(
+	t *testing.T,
+	configDir string,
+	requireCleanShutdown bool,
+	opts ...engine.Option,
+) *engine.Engine {
+	t.Helper()
 
 	all := append([]engine.Option{engine.WithConfigDir(configDir)}, opts...)
 
@@ -131,7 +146,14 @@ func newEngine(t *testing.T, configDir string, opts ...engine.Option) *engine.En
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		require.NoError(t, eng.Close(ctx), "shutdown must release every component cleanly")
+
+		err := eng.Close(ctx)
+		if requireCleanShutdown {
+			require.NoError(t, err, "shutdown must release every component cleanly")
+			return
+		}
+		// Still must not hang or panic; the error itself is expected.
+		t.Logf("shutdown reported: %v", err)
 	})
 
 	return eng

@@ -10,7 +10,7 @@ health checks and observability, and releases them in reverse order on shutdown.
 
 The core knows no adapter. AWS, databases and messaging live in their own
 modules and register themselves through a `Provider` interface, so a service
-that only needs an HTTP router resolves 19 modules instead of 110.
+that only needs an HTTP router links 19 external modules instead of 110.
 
 Not a runnable binary — consumed via `go get`.
 
@@ -19,9 +19,14 @@ Not a runnable binary — consumed via `go get`.
 ## Modules
 
 `go-engine` is a **set of Go modules**, one per adapter family. A consumer
-downloads the core plus only the families it imports: an HTTP-only service
-resolves 13 external modules instead of the 53 the single-module layout forced
-on everyone.
+downloads the core plus only the families it imports, so an HTTP-only service
+never fetches the AWS SDK, a Mongo driver or a Kafka client.
+
+Both figures above are reproducible rather than illustrative:
+
+```bash
+make lint-deps   # external modules the core links
+```
 
 | Module | Import path | Contains |
 |---|---|---|

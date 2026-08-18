@@ -11,7 +11,7 @@ on:
 env:
   # Pinned, not @latest: a scanner that changes under us turns a release gate
   # into a non-reproducible one, and a new advisory can fail an unrelated PR.
-  GOVULNCHECK_VERSION: v1.1.4
+  GOVULNCHECK_VERSION: v1.7.0
 
 jobs:
   test:

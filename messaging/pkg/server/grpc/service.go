@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 
@@ -18,15 +19,20 @@ import (
 // grpc.NewServer options before calling NewServer, or registered on the
 // underlying *grpc.Server after construction via RegisterService.
 //
-// To add interceptors, use the AppBuilder pattern:
+// Register your service implementations after the engine has built the server:
 //
-//	// in the service's main.go, after Build():
-//	engine.GrpcServer.RegisterService(func(s *grpc.Server) {
-//	    // s is already created; interceptors must be set at grpc.NewServer time.
+//	eng, err := engine.New(ctx, engine.WithProvider(grpcserver.New()))
+//	srv, err := grpcserver.From(eng)
+//
+//	srv.RegisterService(func(s *grpc.Server) {
+//	    pb.RegisterOrdersServer(s, ordersImpl)
 //	})
 //
-// For interceptors, construct the server manually using google.golang.org/grpc
-// directly and register it with AppBuilder.WithCustomClient.
+// Interceptors are the one thing that cannot be added this way: gRPC fixes them
+// at grpc.NewServer time, before this constructor returns. A service that needs
+// them builds its own *grpc.Server and registers it as a custom component:
+//
+//	engine.Get[*grpc.Server](eng, "my-grpc-server")
 func NewServer(ctx context.Context, cfg Config, log logger.Service) Service {
 	grpcServer := grpc.NewServer()
 
@@ -77,7 +83,10 @@ func (s *server) Start(ctx context.Context) error {
 	}
 
 	go func() {
-		if err := s.server.Serve(listener); err != nil {
+		// Serve returns ErrServerStopped after Stop or GracefulStop, which is
+		// the normal end of a shutdown rather than a failure. Logging it as an
+		// error made every clean shutdown look like an incident.
+		if err := s.server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			s.logger.Error(ctx, fmt.Errorf("gRPC server error: %w", err), nil)
 		}
 	}()
@@ -127,6 +136,15 @@ func (s *server) Stop(ctx context.Context) error {
 		return nil
 	}
 
+	// Once, with a shared result: a second caller waits for the first and gets
+	// the same answer instead of starting a competing drain.
+	s.stopOnce.Do(func() { s.stopErr = s.drain(ctx) })
+
+	return s.stopErr
+}
+
+// drain performs the single shutdown, bounded by ctx.
+func (s *server) drain(ctx context.Context) error {
 	if s.logging {
 		s.logger.Info(context.WithoutCancel(ctx), "stopping gRPC server", nil)
 	}

@@ -86,4 +86,12 @@ type server struct {
 	logger          logger.Service
 	logging         bool
 	shutdownTimeout time.Duration
+
+	// stopOnce serialises every shutdown path — the explicit Stop and the one
+	// the cancelled Start context triggers — so the two cannot run concurrently
+	// and every caller observes the same outcome. The interface promises Stop is
+	// safe to call repeatedly; this is what makes that guarantee ours rather
+	// than a property of the gRPC implementation we happen to rely on.
+	stopOnce sync.Once
+	stopErr  error
 }

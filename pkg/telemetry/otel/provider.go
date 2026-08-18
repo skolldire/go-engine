@@ -10,12 +10,14 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelmetric "go.opentelemetry.io/otel/metric"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 var _ Provider = (*realProvider)(nil)
@@ -132,7 +134,23 @@ func (p *realProvider) Meter(name string) otelmetric.Meter {
 func (p *realProvider) Shutdown(ctx context.Context) error {
 	// Give the claim back once, and only if we still hold it: a repeated
 	// Shutdown must not free the globals a later provider has taken.
-	p.shutdownOnce.Do(func() { releaseGlobalProviders(p.globals) })
+	p.shutdownOnce.Do(func() {
+		// Point the globals at no-op providers before releasing the claim.
+		// Releasing alone left them referencing the SDK that is about to be
+		// shut down, so instrumentation kept recording into a dead pipeline
+		// until some later provider happened to replace them — spans that go
+		// nowhere and are never reported as lost.
+		//
+		// The propagator is deliberately left in place: it carries no
+		// resources, and clearing it would break context propagation for code
+		// that still runs during shutdown.
+		if restoreGlobalProviders(p.globals) {
+			otel.SetTracerProvider(tracenoop.NewTracerProvider())
+			otel.SetMeterProvider(metricnoop.NewMeterProvider())
+		}
+
+		releaseGlobalProviders(p.globals)
+	})
 
 	// Shut down both providers even if the first fails, aggregating errors so a
 	// trace-shutdown failure does not abandon the metric provider.

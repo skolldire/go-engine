@@ -19,7 +19,7 @@ permissions:
 
 env:
   # Pinned, not @latest: a release gate that changes under us is not a gate.
-  GOVULNCHECK_VERSION: v1.1.4
+  GOVULNCHECK_VERSION: v1.7.0
 
 jobs:
   create-version:
@@ -45,10 +45,10 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.12.2
-          # The action lints on its own by default; here it is only needed to
-          # put the binary on PATH for `make lint`, which walks every module.
-          install-mode: binary
-          args: --help
+          # Only the binary is wanted here: `make lint` walks every module
+          # itself. install-only says that outright, where "args: --help" was a
+          # trick that depended on the action's default behaviour not changing.
+          install-only: true
 
       - name: Get latest root tag
         id: get_tag

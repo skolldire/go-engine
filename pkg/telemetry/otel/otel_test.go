@@ -3,9 +3,13 @@ package otel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"go.opentelemetry.io/otel"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -257,4 +261,66 @@ func TestProvider_ShutdownIsIdempotentForTheClaim(t *testing.T) {
 
 	_, err = claimGlobalProviders("C")
 	assert.Error(t, err, "B must still hold the globals after A shut down twice")
+}
+
+// TestShutdown_LeavesGlobalsInert observes the globals after shutdown, which is
+// what the previous version of this lifecycle never checked.
+//
+// Releasing the claim alone left otel.GetTracerProvider() pointing at the SDK
+// that had just been shut down: instrumentation kept recording into a dead
+// pipeline until some later provider happened to replace it, and nothing
+// reported the spans as lost.
+func TestShutdown_LeavesGlobalsInert(t *testing.T) {
+	ctx := context.Background()
+
+	claim, err := claimGlobalProviders("owner")
+	require.NoError(t, err)
+
+	// Stand in for a live SDK provider: what matters is that Shutdown replaces
+	// whatever the globals point at.
+	otel.SetTracerProvider(sdktrace.NewTracerProvider())
+
+	before := otel.GetTracerProvider()
+	require.IsType(t, &sdktrace.TracerProvider{}, before, "the SDK provider is installed")
+
+	p := &realProvider{globals: claim}
+	require.NoError(t, p.Shutdown(ctx))
+
+	after := otel.GetTracerProvider()
+	assert.NotEqual(t, fmt.Sprintf("%T", before), fmt.Sprintf("%T", after),
+		"the globals must not keep pointing at a provider that has been shut down")
+	assert.IsType(t, tracenoop.NewTracerProvider(), after,
+		"they must be left inert rather than dangling")
+
+	// A no-op tracer still hands back a usable span, so instrumentation running
+	// during shutdown does not panic.
+	_, span := after.Tracer("t").Start(ctx, "after-shutdown")
+	assert.NotNil(t, span)
+	span.End()
+}
+
+// TestShutdown_DoesNotResetASuccessorsGlobals is the other half: a late
+// Shutdown must not install no-op providers over a provider that took over.
+func TestShutdown_DoesNotResetASuccessorsGlobals(t *testing.T) {
+	ctx := context.Background()
+
+	a, err := claimGlobalProviders("A")
+	require.NoError(t, err)
+
+	p := &realProvider{globals: a}
+	require.NoError(t, p.Shutdown(ctx))
+
+	b, err := claimGlobalProviders("B")
+	require.NoError(t, err)
+	t.Cleanup(func() { releaseGlobalProviders(b) })
+
+	// B installs its own provider.
+	successor := sdktrace.NewTracerProvider()
+	otel.SetTracerProvider(successor)
+
+	// A shuts down again. Its claim is stale, so it must touch nothing.
+	require.NoError(t, p.Shutdown(ctx))
+
+	assert.IsType(t, &sdktrace.TracerProvider{}, otel.GetTracerProvider(),
+		"a stale Shutdown must not replace the successor's globals with no-ops")
 }

@@ -30,11 +30,15 @@ Thank you for your interest in improving **go-engine**. This guide covers everyt
 
 **Requirements:**
 
-| Tool | Minimum version |
+| Tool | Version |
 |---|---|
-| Go | 1.21 (see `go.mod`) |
+| Go | whatever `go.mod` declares — currently 1.26.6, and it is a hard floor |
 | Make | any |
-| golangci-lint | v1.57+ |
+| golangci-lint | v2.12.2, pinned in `.github/workflows/lint.yml` |
+
+The Go version is not a suggestion: every module sets it as the `go` directive,
+so an older toolchain refuses to build. It is kept on a patched release
+deliberately — see [COMPATIBILITY.md](../COMPATIBILITY.md#go-version-policy).
 
 ```bash
 # Clone

@@ -79,3 +79,19 @@ func releaseGlobalProviders(c globalClaim) {
 	globalToken = 0
 	globalOwner = ""
 }
+
+// restoreGlobalProviders reports whether this claim is still the holder, and so
+// whether it is this provider's business to reset the globals.
+//
+// Checking before writing is what stops a late Shutdown from installing no-op
+// providers over a successor that is exporting perfectly well.
+func restoreGlobalProviders(c globalClaim) bool {
+	if !c.held() {
+		return false
+	}
+
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	return globalTaken && globalToken == c.token
+}
