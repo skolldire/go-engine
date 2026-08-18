@@ -102,7 +102,7 @@ func TestServer_Start(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop the server
-	srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
 }
 
 func TestServer_Start_WithLogging(t *testing.T) {
@@ -123,7 +123,7 @@ func TestServer_Start_WithLogging(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
-	srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
 	log.AssertExpectations(t)
 }
 
@@ -166,7 +166,7 @@ func TestServer_Stop(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop should not panic
-	srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
 	time.Sleep(100 * time.Millisecond)
 }
 
@@ -189,7 +189,7 @@ func TestServer_Stop_WithLogging(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
 	log.AssertExpectations(t)
 }
 
@@ -203,7 +203,7 @@ func TestServer_Stop_WithoutStart(t *testing.T) {
 	srv := NewServer(context.Background(), cfg, log)
 
 	// Stop should not panic even if server wasn't started
-	srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
 }
 
 func TestServer_MultipleStops(t *testing.T) {
@@ -224,9 +224,9 @@ func TestServer_MultipleStops(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Multiple stops should not panic
-	srv.Stop(context.Background())
-	srv.Stop(context.Background())
-	srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
+	_ = srv.Stop(context.Background())
 }
 
 func TestServer_RegisterService_Multiple(t *testing.T) {
@@ -275,7 +275,7 @@ func TestStop_IsBoundedByContext(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		srv.Stop(stopCtx)
+		_ = srv.Stop(stopCtx)
 	}()
 
 	select {
@@ -299,3 +299,35 @@ func (s silentLogger) WithField(string, any) logger.Service            { return 
 func (s silentLogger) WithFields(map[string]any) logger.Service        { return s }
 func (silentLogger) GetLogLevel() string                               { return "info" }
 func (silentLogger) SetLogLevel(string) error                          { return nil }
+
+// TestStop_ReportsAForcedDrain covers the difference between a clean shutdown
+// and one that dropped connections. Reporting nothing made them
+// indistinguishable, and the engine aggregates closer errors precisely so a
+// forced shutdown is visible somewhere.
+func TestStop_ReportsAForcedDrain(t *testing.T) {
+	t.Run("clean drain returns nil", func(t *testing.T) {
+		srv := NewServer(context.Background(), Config{Puerto: 0}, silentLogger{})
+		assert.NoError(t, srv.Stop(context.Background()),
+			"stopping a server that never started is clean")
+	})
+
+	t.Run("expired deadline reports a forced drain", func(t *testing.T) {
+		srv := NewServer(context.Background(), Config{Puerto: 0}, silentLogger{})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		require.NoError(t, srv.Start(ctx))
+
+		expired, cancelExpired := context.WithCancel(context.Background())
+		cancelExpired()
+
+		err := srv.Stop(expired)
+		cancel()
+
+		// A server with no in-flight RPC may still drain cleanly before the
+		// select observes the cancellation; what must never happen is a forced
+		// drain reported as success.
+		if err != nil {
+			assert.ErrorIs(t, err, ErrForcedShutdown)
+		}
+	})
+}

@@ -442,21 +442,31 @@ lookup, including a connection the engine knows nothing about:
 
 ```go
 import (
-    gormsql "github.com/skolldire/go-engine/database/sql/pkg/database/gormsql"
+    "gorm.io/driver/postgres"
+
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
     "github.com/skolldire/go-engine/pkg/engine"
 )
 
-dbClient, _ := gormsql.New(gormsql.Config{MaxOpenConnections: 20}, dialector, log)
+// SQL is the one adapter whose driver cannot come from configuration: GORM
+// needs a gorm.Dialector, and resolving one from a string such as "postgres"
+// would mean importing the Postgres, MySQL, SQLite and SQL Server dialects
+// together, so every consumer would link all four to use one.
+//
+// The provider takes the driver as an argument instead. Everything else works
+// as it does for any other adapter: it is registered, closed and health-checked
+// by the engine.
+eng, err := engine.New(ctx,
+    engine.WithRouter(),
+    engine.WithHealth(),
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
 
-eng, _ := engine.New(ctx, presethttp.Options()...)
-eng.RegisterCloser("main-db", func(ctx context.Context) error { return dbClient.Close() })
-
-db, err := engine.Get[*gormsql.DBClient](eng, "main-db")
+db, err := sqlprovider.From(eng, "main")
 ```
 
-There is no `gormsql` provider: the dialector is a Go value, not something a
-YAML file can name, so the connection is built by the application and handed to
-the engine.
+Its `sql_clients` section carries pool and behaviour settings only; the DSN
+travels with the dialector.
 
 See [`database/sql/README.md`](database/sql/README.md) for the hexagonal
 architecture pattern.

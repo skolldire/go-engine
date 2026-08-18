@@ -51,9 +51,9 @@ func (p *Provider) Close(ctx context.Context) error {
 		return nil
 	}
 	// The engine closes under a deadline; passing it on is what stops a hung
-	// RPC from holding shutdown open indefinitely.
-	p.server.Stop(ctx)
-	return nil
+	// RPC from holding shutdown open indefinitely. A forced drain is returned
+	// rather than swallowed, so it surfaces in the aggregated shutdown error.
+	return p.server.Stop(ctx)
 }
 
 // From retrieves the gRPC server.

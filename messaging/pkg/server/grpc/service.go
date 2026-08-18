@@ -94,10 +94,15 @@ func (s *server) Start(ctx context.Context) error {
 // connections. Losing an RPC that was already past its deadline is preferable
 // to never shutting down.
 //
+// It returns an error when the drain had to be forced, so the caller can tell a
+// clean shutdown from one that dropped connections. Reporting nothing made the
+// two indistinguishable, and the engine aggregates closer errors precisely so a
+// forced shutdown shows up somewhere.
+//
 // Safe to call without a prior Start and safe to call multiple times.
-func (s *server) Stop(ctx context.Context) {
+func (s *server) Stop(ctx context.Context) error {
 	if s.server == nil {
-		return
+		return nil
 	}
 
 	if s.logging {
@@ -112,10 +117,12 @@ func (s *server) Stop(ctx context.Context) {
 
 	select {
 	case <-drained:
+		return nil
 	case <-ctx.Done():
 		// GracefulStop is still waiting; Stop unblocks it by closing the
 		// connections outright. The goroutine above then returns.
 		s.server.Stop()
 		<-drained
+		return fmt.Errorf("%w: %w", ErrForcedShutdown, ctx.Err())
 	}
 }

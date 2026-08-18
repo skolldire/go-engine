@@ -3,10 +3,32 @@
 GORM wrapper (`gormsql.DBClient`) for go-engine. Exposes a method-level API that hides GORM from the domain layer.
 
 ```bash
-go get github.com/skolldire/go-engine
+go get github.com/skolldire/go-engine/database/sql
 ```
 
-**Important:** `DBClient` is NOT auto-initialized by the engine. Build the GORM connection yourself and inject it via `WithCustomClient`.
+The engine builds and owns the connection through `provider/sql`, like any
+other adapter — it is registered, closed on shutdown and health-checked. What
+differs is the driver: GORM needs a `gorm.Dialector`, which no YAML file can
+name, so the caller passes it in.
+
+```go
+import (
+    "gorm.io/driver/postgres"
+
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "github.com/skolldire/go-engine/pkg/engine"
+)
+
+eng, err := engine.New(ctx,
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
+
+db, err := sqlprovider.From(eng, "main")
+```
+
+Importing only the dialect you use is the point: resolving it from a string
+would make every consumer link Postgres, MySQL, SQLite and SQL Server to use
+one of them.
 
 ---
 

@@ -41,25 +41,45 @@ Thank you for your interest in improving **go-engine**. This guide covers everyt
 git clone https://github.com/skolldire/go-engine.git
 cd go-engine
 
-# Initialize (downloads tools and verifies setup)
-make init
-
-# Run all tests
+# Everything a change must pass before it is pushed:
+# lint, architecture, module versions, tests, and the example service.
 make all
-
-# Or manually
-go test ./... -v
 ```
+
+There is deliberately no setup step. `go.work` binds the modules together, so a
+clone builds as it is.
 
 ### Sub-modules
 
-The repository has multiple Go modules. If your change touches `aws/`, `messaging/`, or `database/*`, enter the corresponding directory:
+The repository is ten Go modules. `make all` walks every one of them, so it is
+what to run before pushing. To work on a single family:
 
 ```bash
 cd aws && go test ./...
-cd messaging && go test ./...
 cd database/redis && go test ./...
 ```
+
+### The gates, and what each is for
+
+| Command | Catches |
+|---|---|
+| `make lint-arch` | the core importing an adapter, which is what the whole split exists to prevent |
+| `make check-modules` | a module requiring a version a consumer cannot resolve — invisible locally, because `go.work` satisfies it |
+| `make smoke` | the published import graph failing outside the repo |
+| `make example` | a change that compiles but makes an application awkward to build |
+| `make coverage-check` | critical packages dropping below 80% |
+
+### End-to-end tests
+
+The example service has a suite that runs against real backing services in
+containers, managed by testcontainers:
+
+```bash
+make example-e2e     # needs a running Docker daemon
+```
+
+Without Docker the suite skips rather than fails, so `go test ./...` stays green
+on a machine without it.
 
 ---
 

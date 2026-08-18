@@ -139,8 +139,11 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 						}
 					}
 				} else {
-					// autoAck is true, RabbitMQ handles Ack automatically
-					if err := handler(delivery); err != nil {
+					// autoAck is true, RabbitMQ handles Ack automatically.
+					// The panic containment applies here too: the broker having
+					// already acked the message does not make a panicking
+					// handler any less fatal to the consumer goroutine.
+					if err := c.safeHandle(ctx, queue, delivery, handler); err != nil {
 						if c.IsLoggingEnabled() {
 							c.GetLogger().Error(ctx, err, map[string]any{
 								"queue": queue,

@@ -97,3 +97,36 @@ Raising the floor is treated as a breaking change and is recorded in
 `scripts/smoke-external-consumer.sh` builds an external consumer with
 `GOTOOLCHAIN` pinned to exactly this floor, so the promise is tested rather than
 assumed.
+
+
+## OpenTelemetry global providers
+
+`pkg/telemetry/otel` registers itself as the process-wide OpenTelemetry provider
+by default, and that default will not change: instrumentation libraries emit
+through `otel.GetTracerProvider()`, so an engine that did not register would
+silently drop every span produced outside the application's own code.
+
+The registration is process-wide, which makes it a shared resource with one
+owner. The policy:
+
+- **One engine per process** — the normal case. Leave the default; the engine
+  owns the global state.
+- **Several engines in one process** — set `skip_global_providers: true` on
+  every engine except the one that should own it. Without that, the last engine
+  to start silently overwrites the others and their spans disappear with no
+  error.
+- **Library or test code that must not touch process state** — set it to true
+  unconditionally. Each engine's own telemetry keeps working; only the global
+  registration is skipped.
+
+```yaml
+telemetry:
+  service_name: "my-service"
+  exporter_endpoint: "localhost:4317"
+  enabled: true
+  skip_global_providers: false   # default; set true for secondary engines
+```
+
+The engine never inspects existing global state to decide, because "was one
+already set" cannot distinguish a previous engine from the application's own
+deliberate setup.

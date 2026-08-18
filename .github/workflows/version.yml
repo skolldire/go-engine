@@ -121,3 +121,37 @@ jobs:
           # push is what created the broken window in the first place.
           git push --atomic origin "${TAGS[@]}"
           echo "Published ${#TAGS[@]} tags for $NEW_VERSION"
+
+      # The release is created here, in the same job, rather than by a workflow
+      # listening for the tag push. That listener could never fire:
+      #
+      #   - GitHub does not trigger workflows from events created with the
+      #     default GITHUB_TOKEN, to stop workflows looping.
+      #   - It also creates no tag events at all when more than three tags are
+      #     pushed at once, and a release publishes nine.
+      #
+      # Either one alone would have been enough to leave every release tagged
+      # but never published. Doing it inline removes the cross-workflow event
+      # dependency instead of working around it.
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.next_version.outputs.new_version }}
+          name: Release ${{ steps.next_version.outputs.new_version }}
+          body: |
+            ## Release ${{ steps.next_version.outputs.new_version }}
+
+            Every module is tagged at this version:
+            `go-engine`, `aws`, `messaging`, `http`,
+            `database/{sql,redis,mongodb,memcached}` and `preset/full`.
+
+            ```bash
+            go get github.com/skolldire/go-engine@${{ steps.next_version.outputs.new_version }}
+            go get github.com/skolldire/go-engine/aws@${{ steps.next_version.outputs.new_version }}
+            ```
+
+            See the commit history and MIGRATION.md for details.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

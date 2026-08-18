@@ -1,9 +1,21 @@
 name: CD Pipeline
 
+# This is the manual path only: a tag pushed by a person fires it, which is
+# useful for re-publishing a release. The automated path does not rely on it,
+# because a workflow cannot trigger another one through the default
+# GITHUB_TOKEN, and pushing more than three tags at once produces no tag event
+# either — version.yml therefore creates its own release inline.
+#
+# softprops/action-gh-release is idempotent, so the two paths cannot collide.
 on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish a release for"
+        required: true
 
 permissions:
   contents: write

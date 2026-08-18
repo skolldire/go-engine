@@ -2,10 +2,15 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"google.golang.org/grpc"
 )
+
+// ErrForcedShutdown reports that the drain deadline expired and in-flight RPCs
+// were dropped, as opposed to a clean shutdown.
+var ErrForcedShutdown = errors.New("gRPC server shutdown was forced")
 
 // Service is the public interface for the go-engine gRPC server.
 type Service interface {
@@ -30,8 +35,10 @@ type Service interface {
 
 	// Stop drains the server, bounded by ctx: in-flight RPCs are allowed to
 	// finish, but a stuck one cannot hold shutdown open past the deadline.
+	// It returns ErrForcedShutdown when the deadline expired and connections
+	// had to be dropped.
 	// It is safe to call multiple times and safe to call if Start was never called.
-	Stop(ctx context.Context)
+	Stop(ctx context.Context) error
 }
 
 // Config holds the configuration for the gRPC server.
