@@ -11,7 +11,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(cfg Config, log logger.Service) (Service, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
 	if len(cfg.Servers) == 0 {
 		return nil, ErrConnection
 	}
@@ -43,7 +43,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		prefix:     cfg.Prefix,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	if err := c.Ping(ctx); err != nil {

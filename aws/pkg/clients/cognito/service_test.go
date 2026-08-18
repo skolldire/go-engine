@@ -55,7 +55,7 @@ func TestNewClient(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -73,7 +73,7 @@ func TestNewClient_WithSecret(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -94,7 +94,7 @@ func TestNewClient_WithLogging(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -121,7 +121,7 @@ func TestNewClient_WithResilience(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -170,7 +170,7 @@ func TestNewClient_InvalidConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			log := &mockLogger{}
-			client, err := NewClient(tt.cfg, log)
+			client, err := NewClient(context.Background(), tt.cfg, log)
 			assert.Error(t, err)
 			assert.Nil(t, client)
 		})
@@ -186,7 +186,7 @@ func TestClient_RegisterUser_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -243,7 +243,7 @@ func TestClient_Authenticate_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -283,7 +283,7 @@ func TestClient_ConfirmSignUp_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -323,7 +323,7 @@ func TestClient_RespondToMFAChallenge_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -384,7 +384,7 @@ func TestClient_ValidateToken_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -424,7 +424,7 @@ func TestClient_GetUserByAccessToken_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -443,7 +443,7 @@ func TestClient_RefreshToken_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -463,7 +463,7 @@ func TestClient_ForgotPassword_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -483,7 +483,7 @@ func TestClient_ConfirmForgotPassword_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()

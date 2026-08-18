@@ -50,7 +50,7 @@ func (p *Provider) ConfigKey() string { return ConfigKey }
 
 // Init implements engine.Provider. It also contributes a health check, so a
 // database outage surfaces on /ready without the application wiring anything.
-func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
+func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
 	if p.dialector == nil {
 		return nil, fmt.Errorf("sql:%s: no driver given; pass one such as postgres.Open(dsn)", p.instance)
 	}
@@ -60,7 +60,7 @@ func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Dep
 		return nil, err
 	}
 
-	client, err := gormsql.New(cfg, p.dialector, deps.Logger)
+	client, err := gormsql.New(ctx, cfg, p.dialector, deps.Logger)
 	if err != nil {
 		return nil, err
 	}

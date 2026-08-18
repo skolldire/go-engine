@@ -13,7 +13,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
 )
 
-func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, log logger.Service) Service {
 	sesClient := ses.NewFromConfig(acf, func(o *ses.Options) {
 		if cfg.Region != "" {
 			o.Region = cfg.Region

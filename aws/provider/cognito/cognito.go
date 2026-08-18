@@ -30,7 +30,7 @@ func (p *Provider) Name() string { return "cognito" }
 func (p *Provider) ConfigKey() string { return ConfigKey }
 
 // Init implements engine.Provider.
-func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
+func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
 	if !raw.Exists() {
 		return nil, fmt.Errorf("no %q section declared", ConfigKey)
 	}
@@ -40,7 +40,7 @@ func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Dep
 		return nil, err
 	}
 
-	client, err := awscognito.NewClient(cfg, deps.Logger)
+	client, err := awscognito.NewClient(ctx, cfg, deps.Logger)
 	if err != nil {
 		return nil, err
 	}

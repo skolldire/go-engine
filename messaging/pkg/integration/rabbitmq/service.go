@@ -10,7 +10,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(cfg Config, log logger.Service) (Service, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
 	if cfg.URL == "" {
 		return nil, fmt.Errorf("%w: URL is required", ErrConnection)
 	}

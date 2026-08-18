@@ -15,6 +15,7 @@ import (
 type Engine struct {
 	ctx context.Context
 	log logger.Service
+	cfg *Config
 
 	// components maps a provider Name to the value its Init returned.
 	componentsMu sync.RWMutex
@@ -28,10 +29,10 @@ type Engine struct {
 	// instance can be reused once this engine is done with it.
 	providers []Provider
 
-	// closeOnce guards the provider release: lifecycle.close is already
-	// idempotent, but the release loop reads and clears e.providers, so two
-	// concurrent Close calls could double-release or observe a torn slice.
+	// closeOnce serialises the whole shutdown, so a concurrent Close waits for
+	// the first to finish rather than observing a half-released engine.
 	closeOnce sync.Once
+	closeErr  error
 
 	core      *coreServices
 	lifecycle *lifecycle
@@ -56,6 +57,13 @@ type resourceEntry struct {
 // Context returns the context the engine was built with.
 func (e *Engine) Context() context.Context { return e.ctx }
 
+// Config returns the configuration the engine was built from.
+//
+// Applications need it to reach sections no provider owns — feature flags, a
+// business rule, a section they decode themselves — without loading and parsing
+// the file a second time. Never nil.
+func (e *Engine) Config() *Config { return e.cfg }
+
 // Logger returns the engine logger. Never nil.
 func (e *Engine) Logger() logger.Service { return e.log }
 
@@ -65,19 +73,25 @@ func (e *Engine) Close(ctx context.Context) error {
 	if e.lifecycle == nil {
 		return nil
 	}
-	err := e.lifecycle.close(ctx)
 
-	// Release the single-use claim exactly once: after Close the engine owns
-	// nothing, so the provider instances may legitimately be handed to a new
-	// engine. Concurrent Close calls must not double-release.
+	// The whole shutdown runs under the Once, not just the release. sync.Once
+	// blocks later callers until the first has finished, which is the property
+	// that matters here: lifecycle.close marks itself closed *before* running
+	// the closers, so a second Close used to return immediately and free the
+	// provider claims while the first was still inside a provider's Close — and
+	// a new engine could take ownership of a resource still being released.
 	e.closeOnce.Do(func() {
+		e.closeErr = e.lifecycle.close(ctx)
+
+		// After the closers have actually finished, the engine owns nothing, so
+		// the provider instances may legitimately be handed to a new engine.
 		for _, p := range e.providers {
 			releaseProvider(p)
 		}
 		e.providers = nil
 	})
 
-	return err
+	return e.closeErr
 }
 
 // RegisterCloser records an extra resource to release at shutdown. Components

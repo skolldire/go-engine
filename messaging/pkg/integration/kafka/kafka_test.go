@@ -380,7 +380,7 @@ func TestHeadersToMap_NonEmpty(t *testing.T) {
 
 func TestNewClient_And_Close(t *testing.T) {
 	cfg := testConfig()
-	c, err := NewClient(cfg, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), cfg, &testutil.MockLogger{})
 	assert.NoError(t, err)
 	assert.NotNil(t, c)
 	// kafka.Writer and kafka.Reader connect lazily; Close is safe without a broker.
@@ -389,7 +389,7 @@ func TestNewClient_And_Close(t *testing.T) {
 
 func TestClient_Ping_NoConnection(t *testing.T) {
 	cfg := testConfig()
-	c, err := NewClient(cfg, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), cfg, &testutil.MockLogger{})
 	assert.NoError(t, err)
 	// No broker running → Ping must return an error.
 	err = c.Ping(context.Background())

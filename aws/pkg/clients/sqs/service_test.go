@@ -56,7 +56,7 @@ func TestNewClient(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	assert.NotNil(t, client)
 	assert.IsType(t, &Cliente{}, client)
@@ -73,7 +73,7 @@ func TestNewClient_WithEndpoint(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	assert.NotNil(t, client)
 	// Constructing a client emits nothing: a library must not write log lines
@@ -100,7 +100,7 @@ func TestNewClient_WithResilience(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	assert.NotNil(t, client)
 	cliente := client.(*Cliente)
@@ -114,7 +114,7 @@ func TestCliente_SendMessage_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.SendMessage(ctx, "", "message", nil)
@@ -131,7 +131,7 @@ func TestCliente_SendJSON_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.SendJSON(ctx, "", map[string]string{"key": "value"}, nil)
@@ -148,7 +148,7 @@ func TestCliente_ReceiveMessages_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.ReceiveMessages(ctx, "", 10, 0)
@@ -164,7 +164,7 @@ func TestCliente_ReceiveMessages_DefaultMaxMessages(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	// This will fail without a real AWS connection, but tests the default logic
@@ -180,7 +180,7 @@ func TestCliente_DeleteMessage_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	err := client.DeleteMessage(ctx, "", "receipt-handle")
@@ -197,7 +197,7 @@ func TestCliente_CreateQueue_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.CreateQueue(ctx, "", nil)
@@ -213,7 +213,7 @@ func TestCliente_CreateQueue_WithAttributes(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	attributes := map[string]string{
@@ -230,7 +230,7 @@ func TestCliente_DeleteQueue_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	err := client.DeleteQueue(ctx, "")
@@ -243,7 +243,7 @@ func TestCliente_GetURLQueue_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.GetURLQueue(ctx, "")
@@ -259,7 +259,7 @@ func TestCliente_ListQueue(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	// This will fail without a real AWS connection
@@ -277,7 +277,7 @@ func TestCliente_ListQueue_WithPrefix(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.ListQueue(ctx, "test-prefix")
@@ -292,7 +292,7 @@ func TestCliente_EnableLogging(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 	cliente := client.(*Cliente)
 
 	assert.False(t, cliente.IsLoggingEnabled())
@@ -308,7 +308,7 @@ func TestCliente_SendJSON_ValidJSON(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	message := map[string]any{
@@ -331,7 +331,7 @@ func TestCliente_SendJSON_WithAttributes(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	message := map[string]string{"key": "value"}
@@ -352,7 +352,7 @@ func TestCliente_EnsureContextWithTimeout(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 	cliente := client.(*Cliente)
 
 	ctx := context.Background()
@@ -367,7 +367,7 @@ func TestCliente_EnsureContextWithTimeout_WithDeadline(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 	cliente := client.(*Cliente)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

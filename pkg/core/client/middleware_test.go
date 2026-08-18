@@ -139,13 +139,8 @@ func TestBaseClient_UseComposesConcerns(t *testing.T) {
 	rec := &fakeRecorder{}
 	tr := &fakeTracer{}
 
-	bc := NewBaseClientWithMiddleware(
-		BaseConfig{Timeout: time.Second},
-		&mockLogger{},
-		"Redis",
-		WithMetrics(rec),
-		WithTracing(tr),
-	)
+	bc := NewBaseClientWithName(BaseConfig{Timeout: time.Second}, &mockLogger{}, "Redis")
+	bc.Use(WithMetrics(rec), WithTracing(tr))
 
 	res, err := bc.Execute(context.Background(), "GET", okOp)
 

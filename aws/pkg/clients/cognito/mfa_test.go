@@ -16,7 +16,7 @@ func TestClient_AssociateSoftwareToken_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -52,7 +52,7 @@ func TestClient_VerifySoftwareToken_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -100,7 +100,7 @@ func TestClient_SetUserMFAPreference_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -136,7 +136,7 @@ func TestClient_GetUserMFAStatus_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -172,7 +172,7 @@ func TestClient_SetUserMFAPreference_Combinations(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()

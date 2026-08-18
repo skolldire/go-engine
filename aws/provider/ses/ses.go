@@ -5,8 +5,6 @@
 package ses
 
 import (
-	"context"
-
 	awsses "github.com/skolldire/go-engine/aws/pkg/clients/ses"
 	"github.com/skolldire/go-engine/aws/provider/awsbase"
 	"github.com/skolldire/go-engine/pkg/engine"
@@ -15,50 +13,19 @@ import (
 // ConfigKey is the configuration section this provider consumes.
 const ConfigKey = "ses_clients"
 
-// Provider builds one named SES client.
-type Provider struct {
-	instance string
-	client   awsses.Service
-}
+// componentPrefix namespaces this adapter's components, e.g. "ses:orders".
+const componentPrefix = "ses"
 
-var _ engine.Provider = (*Provider)(nil)
+// Provider builds one named SES client. The behaviour is shared with every
+// other AWS adapter, so it lives in awsbase rather than being copied here.
+type Provider = awsbase.Provider[awsses.Config, awsses.Service]
 
 // New returns a provider for the SES client declared under instance.
 func New(instance string) *Provider {
-	return &Provider{instance: instance}
-}
-
-// Name implements engine.Provider.
-func (p *Provider) Name() string { return "ses:" + p.instance }
-
-// ConfigKey implements engine.Provider.
-func (p *Provider) ConfigKey() string { return ConfigKey }
-
-// Init implements engine.Provider.
-func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
-	cfg, err := engine.DecodeNamed[awsses.Config](raw, p.instance)
-	if err != nil {
-		return nil, err
-	}
-
-	awsCfg, err := awsbase.Config(ctx, deps)
-	if err != nil {
-		return nil, err
-	}
-
-	p.client = awsses.NewClient(awsCfg, cfg, deps.Logger)
-
-	return p.client, nil
-}
-
-// Close implements engine.Provider.
-func (p *Provider) Close(context.Context) error {
-	// This client owns no connection of its own; the AWS SDK transport is
-	// shared and released with the process.
-	return nil
+	return awsbase.NewProvider(componentPrefix, ConfigKey, instance, awsses.NewClient)
 }
 
 // From retrieves the SES client registered under instance.
 func From(e *engine.Engine, instance string) (awsses.Service, error) {
-	return engine.Get[awsses.Service](e, "ses:"+instance)
+	return engine.Get[awsses.Service](e, componentPrefix+":"+instance)
 }

@@ -17,7 +17,7 @@ import (
 // New opens a GORM connection using the caller-supplied dialector.
 // The caller is responsible for importing the appropriate driver and building
 // the dialector (e.g. postgres.Open(dsn), mysql.Open(dsn)).
-func New(cfg Config, dialector gorm.Dialector, log logger.Service) (*DBClient, error) {
+func New(ctx context.Context, cfg Config, dialector gorm.Dialector, log logger.Service) (*DBClient, error) {
 	gormConfig := &gorm.Config{}
 
 	if cfg.TablePrefix != "" {
@@ -103,7 +103,11 @@ func (dbc *DBClient) First(ctx context.Context, dest any, conditions ...any) err
 		return nil, dbc.db.WithContext(ctx).First(dest, conditions...).Error
 	})
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return ErrNotFound
+		// Wrap rather than replace: callers matching this package's ErrNotFound
+		// keep working, and a caller that already imports gorm can still match
+		// gorm.ErrRecordNotFound. Returning a bare sentinel with an identical
+		// message broke the chain for the second group with no way to tell.
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
 	return err
 }

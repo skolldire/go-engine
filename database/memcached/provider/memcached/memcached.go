@@ -34,13 +34,13 @@ func (p *Provider) Name() string { return "memcached:" + p.instance }
 func (p *Provider) ConfigKey() string { return ConfigKey }
 
 // Init implements engine.Provider.
-func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
+func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
 	cfg, err := engine.DecodeNamed[gomemcached.Config](raw, p.instance)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := gomemcached.NewClient(cfg, deps.Logger)
+	client, err := gomemcached.NewClient(ctx, cfg, deps.Logger)
 	if err != nil {
 		return nil, err
 	}

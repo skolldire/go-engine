@@ -5,8 +5,6 @@
 package s3
 
 import (
-	"context"
-
 	awss3 "github.com/skolldire/go-engine/aws/pkg/clients/s3"
 	"github.com/skolldire/go-engine/aws/provider/awsbase"
 	"github.com/skolldire/go-engine/pkg/engine"
@@ -15,50 +13,19 @@ import (
 // ConfigKey is the configuration section this provider consumes.
 const ConfigKey = "s3_clients"
 
-// Provider builds one named S3 client.
-type Provider struct {
-	instance string
-	client   awss3.Service
-}
+// componentPrefix namespaces this adapter's components, e.g. "s3:orders".
+const componentPrefix = "s3"
 
-var _ engine.Provider = (*Provider)(nil)
+// Provider builds one named S3 client. The behaviour is shared with every
+// other AWS adapter, so it lives in awsbase rather than being copied here.
+type Provider = awsbase.Provider[awss3.Config, awss3.Service]
 
 // New returns a provider for the S3 client declared under instance.
 func New(instance string) *Provider {
-	return &Provider{instance: instance}
-}
-
-// Name implements engine.Provider.
-func (p *Provider) Name() string { return "s3:" + p.instance }
-
-// ConfigKey implements engine.Provider.
-func (p *Provider) ConfigKey() string { return ConfigKey }
-
-// Init implements engine.Provider.
-func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
-	cfg, err := engine.DecodeNamed[awss3.Config](raw, p.instance)
-	if err != nil {
-		return nil, err
-	}
-
-	awsCfg, err := awsbase.Config(ctx, deps)
-	if err != nil {
-		return nil, err
-	}
-
-	p.client = awss3.NewClient(awsCfg, cfg, deps.Logger)
-
-	return p.client, nil
-}
-
-// Close implements engine.Provider.
-func (p *Provider) Close(context.Context) error {
-	// This client owns no connection of its own; the AWS SDK transport is
-	// shared and released with the process.
-	return nil
+	return awsbase.NewProvider(componentPrefix, ConfigKey, instance, awss3.NewClient)
 }
 
 // From retrieves the S3 client registered under instance.
 func From(e *engine.Engine, instance string) (awss3.Service, error) {
-	return engine.Get[awss3.Service](e, "s3:"+instance)
+	return engine.Get[awss3.Service](e, componentPrefix+":"+instance)
 }

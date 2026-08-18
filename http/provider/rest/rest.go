@@ -34,13 +34,13 @@ func (p *Provider) Name() string { return "rest:" + p.instance }
 func (p *Provider) ConfigKey() string { return ConfigKey }
 
 // Init implements engine.Provider.
-func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
+func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
 	cfg, err := engine.DecodeNamed[gorest.Config](raw, p.instance)
 	if err != nil {
 		return nil, err
 	}
 
-	p.client = gorest.NewClient(cfg, deps.Logger)
+	p.client = gorest.NewClient(ctx, cfg, deps.Logger)
 
 	return p.client, nil
 }

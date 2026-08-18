@@ -41,7 +41,7 @@ func fastRetry() *RetryConfig {
 func TestResponseTravelsWithTheError(t *testing.T) {
 	srv, _ := statusServer(t, http.StatusConflict)
 
-	c := NewClient(Config{BaseURL: srv.URL}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), Config{BaseURL: srv.URL}, &testutil.MockLogger{})
 	resp, err := c.Get(context.Background(), "/x", nil)
 
 	require.Error(t, err)
@@ -67,7 +67,7 @@ func TestBuilderIsExposed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := NewClient(Config{BaseURL: srv.URL}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), Config{BaseURL: srv.URL}, &testutil.MockLogger{})
 
 	resp, err := c.R(context.Background()).
 		SetPathParam("id", "42").
@@ -87,7 +87,7 @@ func TestBuilderIsExposed(t *testing.T) {
 func TestNoRetryBlockMeansNoRetries(t *testing.T) {
 	srv, calls := statusServer(t, http.StatusServiceUnavailable)
 
-	c := NewClient(Config{BaseURL: srv.URL}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), Config{BaseURL: srv.URL}, &testutil.MockLogger{})
 	_, err := c.Get(context.Background(), "/x", nil)
 
 	require.Error(t, err)
@@ -97,7 +97,7 @@ func TestNoRetryBlockMeansNoRetries(t *testing.T) {
 func TestRetryReplaysIdempotentOnTransientStatus(t *testing.T) {
 	srv, calls := statusServer(t, http.StatusServiceUnavailable)
 
-	c := NewClient(Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
 	_, err := c.Get(context.Background(), "/x", nil)
 
 	require.Error(t, err)
@@ -109,7 +109,7 @@ func TestRetryReplaysIdempotentOnTransientStatus(t *testing.T) {
 func TestRetryRefusesNonIdempotent(t *testing.T) {
 	srv, calls := statusServer(t, http.StatusServiceUnavailable)
 
-	c := NewClient(Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
 	_, err := c.Post(context.Background(), "/x", map[string]int{"a": 1}, nil)
 
 	require.Error(t, err)
@@ -121,7 +121,7 @@ func TestRetryNonIdempotentOptIn(t *testing.T) {
 
 	cfg := fastRetry()
 	cfg.RetryNonIdempotent = true
-	c := NewClient(Config{BaseURL: srv.URL, Retry: cfg}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), Config{BaseURL: srv.URL, Retry: cfg}, &testutil.MockLogger{})
 
 	_, err := c.Post(context.Background(), "/x", map[string]int{"a": 1}, nil)
 	require.Error(t, err)
@@ -141,7 +141,7 @@ func TestRetryIgnoresPermanentStatuses(t *testing.T) {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			srv, calls := statusServer(t, status)
 
-			c := NewClient(Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
+			c := NewClient(context.Background(), Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
 			_, err := c.Get(context.Background(), "/x", nil)
 
 			require.Error(t, err)
@@ -153,7 +153,7 @@ func TestRetryIgnoresPermanentStatuses(t *testing.T) {
 func TestRetryStopsAtFirstSuccess(t *testing.T) {
 	srv, calls := statusServer(t, http.StatusServiceUnavailable, http.StatusOK)
 
-	c := NewClient(Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), Config{BaseURL: srv.URL, Retry: fastRetry()}, &testutil.MockLogger{})
 	resp, err := c.Get(context.Background(), "/x", nil)
 
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestRetryStopsAtFirstSuccess(t *testing.T) {
 func TestBreakerOpensAndShortCircuitsRetries(t *testing.T) {
 	srv, calls := statusServer(t, http.StatusServiceUnavailable)
 
-	c := NewClient(Config{
+	c := NewClient(context.Background(), Config{
 		BaseURL: srv.URL,
 		Retry:   &RetryConfig{MaxRetries: 10, WaitTime: time.Millisecond, MaxWaitTime: 2 * time.Millisecond},
 		CircuitBreaker: &circuit_breaker.Config{
@@ -196,7 +196,7 @@ func TestBreakerOpensAndShortCircuitsRetries(t *testing.T) {
 func TestBreakerIgnoresClientErrors(t *testing.T) {
 	srv, calls := statusServer(t, http.StatusNotFound)
 
-	c := NewClient(Config{
+	c := NewClient(context.Background(), Config{
 		BaseURL: srv.URL,
 		CircuitBreaker: &circuit_breaker.Config{
 			Name:             "test-404",
@@ -236,7 +236,7 @@ func TestRetryAfterHeaderIsHonoured(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			c := NewClient(Config{BaseURL: srv.URL}, &testutil.MockLogger{})
+			c := NewClient(context.Background(), Config{BaseURL: srv.URL}, &testutil.MockLogger{})
 			r, _ := c.Get(context.Background(), "/x", nil)
 			require.NotNil(t, r)
 

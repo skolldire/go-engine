@@ -12,12 +12,12 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func NewClient(cfg Config, log logger.Service) (Service, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
 	timeout := cfg.TimeOut
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	creds, err := buildTransportCredentials(cfg.TLS)

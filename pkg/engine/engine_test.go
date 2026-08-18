@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -825,4 +826,162 @@ func TestClose_ReleasesProvidersExactlyOnce(t *testing.T) {
 
 	_, err = New(context.Background(), WithConfig(&Config{}), WithProvider(shared))
 	assert.Error(t, err, "the second engine still owns the provider")
+}
+
+// blockingCloseProvider lets a test hold Close open to observe what the engine
+// exposes while shutdown is still in flight.
+type blockingCloseProvider struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newBlockingCloseProvider() *blockingCloseProvider {
+	return &blockingCloseProvider{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (b *blockingCloseProvider) Name() string      { return "blocking" }
+func (b *blockingCloseProvider) ConfigKey() string { return "blocking" }
+func (b *blockingCloseProvider) Init(context.Context, RawConfig, Deps) (any, error) {
+	return b, nil
+}
+func (b *blockingCloseProvider) Close(context.Context) error {
+	b.once.Do(func() { close(b.entered) })
+	<-b.release
+	return nil
+}
+
+// TestClose_DoesNotReleaseProvidersWhileClosing is the regression test for a
+// provider becoming reusable before its own Close had returned.
+//
+// lifecycle.close marks itself closed before running the closers, so a second
+// Close returned immediately and freed the claims while the first was still
+// inside a provider's Close — letting a new engine take ownership of a resource
+// that was still being released.
+func TestClose_DoesNotReleaseProvidersWhileClosing(t *testing.T) {
+	p := newBlockingCloseProvider()
+
+	eng, err := New(context.Background(), WithConfig(&Config{}), WithProvider(p))
+	require.NoError(t, err)
+
+	closed := make(chan error, 1)
+	go func() { closed <- eng.Close(context.Background()) }()
+
+	<-p.entered // the first Close is now inside the provider's Close
+
+	_, err = New(context.Background(), WithConfig(&Config{}), WithProvider(p))
+	assert.Error(t, err,
+		"the provider is still being released; it must not be reclaimable yet")
+
+	close(p.release)
+	require.NoError(t, <-closed)
+
+	// Once the close has genuinely finished, the instance is free again.
+	reused, err := New(context.Background(), WithConfig(&Config{}), WithProvider(p))
+	require.NoError(t, err)
+	require.NoError(t, reused.Close(context.Background()))
+}
+
+// TestClose_ConcurrentCallersWaitForTheFirst pins the other half: Close is not
+// merely idempotent, it is synchronous for every caller. A caller that returns
+// early would be told shutdown finished while resources were still open.
+func TestClose_ConcurrentCallersWaitForTheFirst(t *testing.T) {
+	p := newBlockingCloseProvider()
+
+	eng, err := New(context.Background(), WithConfig(&Config{}), WithProvider(p))
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	var returned atomic.Int32
+
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = eng.Close(context.Background())
+			returned.Add(1)
+		}()
+	}
+
+	<-p.entered
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, int32(0), returned.Load(),
+		"no caller may report a finished shutdown while a closer is still running")
+
+	close(p.release)
+	wg.Wait()
+	assert.Equal(t, int32(4), returned.Load())
+}
+
+// TestClaim_ValueProvidersCannotAlias documents why the single-use check tracks
+// pointers only. A value provider is copied into the interface, so two engines
+// each get their own — there is no shared state to corrupt, and keying a map by
+// its value would report reuse for two independently built, equal providers.
+func TestClaim_ValueProvidersCannotAlias(t *testing.T) {
+	type valueProvider = fakeValueProvider
+
+	first, err := New(context.Background(), WithConfig(&Config{}),
+		WithProvider(valueProvider{id: "a"}))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = first.Close(context.Background()) })
+
+	// An equal-but-independent provider must not be mistaken for reuse.
+	second, err := New(context.Background(), WithConfig(&Config{}),
+		WithProvider(valueProvider{id: "a"}))
+	require.NoError(t, err, "two independent value providers are not reuse")
+	t.Cleanup(func() { _ = second.Close(context.Background()) })
+}
+
+type fakeValueProvider struct{ id string }
+
+func (v fakeValueProvider) Name() string      { return "value:" + v.id }
+func (v fakeValueProvider) ConfigKey() string { return "value" }
+func (v fakeValueProvider) Init(context.Context, RawConfig, Deps) (any, error) {
+	return v, nil
+}
+func (v fakeValueProvider) Close(context.Context) error { return nil }
+
+// TestClaim_PointerProvidersAreTracked is the case the check exists for.
+func TestClaim_PointerProvidersAreTracked(t *testing.T) {
+	shared := &fakeProvider{name: "ptr", configKey: "ptr"}
+
+	first, err := New(context.Background(), WithConfig(&Config{}), WithProvider(shared))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = first.Close(context.Background()) })
+
+	_, err = New(context.Background(), WithConfig(&Config{}), WithProvider(shared))
+	assert.ErrorContains(t, err, "already used by another engine")
+}
+
+// TestEngine_ConfigIsReachable covers the accessor an application needs to read
+// sections no provider owns, without parsing the file a second time.
+func TestEngine_ConfigIsReachable(t *testing.T) {
+	dir := writeConfig(t, `
+log:
+  level: error
+router:
+  port: "9090"
+feature_flags:
+  beta: true
+`)
+
+	eng, err := New(context.Background(), WithConfigDir(dir))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = eng.Close(context.Background()) })
+
+	cfg := eng.Config()
+	require.NotNil(t, cfg, "Config is never nil")
+
+	assert.Equal(t, "9090", cfg.Router.Port, "typed core sections are readable")
+	assert.True(t, cfg.Section("feature_flags").Exists(),
+		"a section the core does not own must still be reachable by the application")
+
+	var flags struct {
+		Beta bool `mapstructure:"beta"`
+	}
+	require.NoError(t, cfg.Section("feature_flags").Decode(&flags))
+	assert.True(t, flags.Beta)
 }

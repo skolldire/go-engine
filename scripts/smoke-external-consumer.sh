@@ -23,7 +23,8 @@ trap 'rm -rf "$WORK"' EXIT
 cd "$WORK"
 cat > main.go <<'GO'
 // Imports one package from every module, so a broken require in any of them
-// fails the build.
+// fails the build. Every entry in the module list below must appear here:
+// declaring a module without importing it compiles nothing from it.
 package main
 
 import (
@@ -31,6 +32,7 @@ import (
 	_ "github.com/skolldire/go-engine/database/memcached/provider/memcached"
 	_ "github.com/skolldire/go-engine/database/mongodb/provider/mongodb"
 	_ "github.com/skolldire/go-engine/database/redis/provider/redis"
+	_ "github.com/skolldire/go-engine/database/sql/provider/sql"
 	_ "github.com/skolldire/go-engine/http/provider/rest"
 	_ "github.com/skolldire/go-engine/messaging/provider/kafka"
 	_ "github.com/skolldire/go-engine/pkg/engine"
@@ -76,6 +78,17 @@ else
         echo "require ${entry%%:*} $VERSION" >> go.mod
     done
 fi
+
+# Guard against the failure this script just had: a module listed but never
+# imported contributes nothing, so a broken require inside it goes unnoticed.
+for entry in $MODULES; do
+    mod="${entry%%:*}"
+    if ! grep -q "\"$mod" main.go; then
+        echo "ERROR: module $mod is listed but no package from it is imported;" >&2
+        echo "       add an import to main.go or the smoke test proves nothing about it." >&2
+        exit 1
+    fi
+done
 
 export GOWORK=off
 export GOTOOLCHAIN="go$GO_FLOOR"

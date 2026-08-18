@@ -121,14 +121,6 @@ func NewBaseClientWithName(config BaseConfig, log logger.Service, serviceName st
 	return bc
 }
 
-// NewBaseClientWithMiddleware builds a client with an explicit chain, bypassing
-// the one derived from BaseConfig.
-func NewBaseClientWithMiddleware(config BaseConfig, log logger.Service, serviceName string, mw ...Middleware) *BaseClient {
-	bc := NewBaseClientWithName(config, log, serviceName)
-	bc.Use(mw...)
-	return bc
-}
-
 // Execute runs op under a timeout-bounded context, optionally logging start/end
 // and wrapping op with the resilience layer when configured.
 //

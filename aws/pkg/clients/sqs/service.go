@@ -12,7 +12,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(acf aws.Config, cfg Config, l logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, l logger.Service) Service {
 	sqsClient := sqs.NewFromConfig(acf, func(o *sqs.Options) {
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)

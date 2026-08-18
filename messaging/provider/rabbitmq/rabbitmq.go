@@ -34,13 +34,13 @@ func (p *Provider) Name() string { return "rabbitmq:" + p.instance }
 func (p *Provider) ConfigKey() string { return ConfigKey }
 
 // Init implements engine.Provider.
-func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
+func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
 	cfg, err := engine.DecodeNamed[gorabbit.Config](raw, p.instance)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := gorabbit.NewClient(cfg, deps.Logger)
+	client, err := gorabbit.NewClient(ctx, cfg, deps.Logger)
 	if err != nil {
 		return nil, err
 	}

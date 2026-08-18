@@ -61,7 +61,7 @@ func TestNewClient_DoesNotBlockOnIdleConnection(t *testing.T) {
 	target := startServer(t)
 
 	start := time.Now()
-	c, err := NewClient(Config{
+	c, err := NewClient(context.Background(), Config{
 		Target:  target,
 		TimeOut: 3 * time.Second,
 	}, &testutil.MockLogger{})
@@ -82,7 +82,7 @@ func TestNewClient_DoesNotBlockOnIdleConnection(t *testing.T) {
 func TestNewClient_WaitForReadyReachesReady(t *testing.T) {
 	target := startServer(t)
 
-	c, err := NewClient(Config{
+	c, err := NewClient(context.Background(), Config{
 		Target:       target,
 		WaitForReady: true,
 		TimeOut:      5 * time.Second,
@@ -100,7 +100,7 @@ func TestNewClient_WaitForReadyReachesReady(t *testing.T) {
 func TestNewClient_WaitForReadyUnreachableTargetFails(t *testing.T) {
 	target := freePort(t)
 
-	c, err := NewClient(Config{
+	c, err := NewClient(context.Background(), Config{
 		Target:       target,
 		WaitForReady: true,
 		TimeOut:      2 * time.Second,
@@ -117,7 +117,7 @@ func TestNewClient_LazyConnectionToUnreachableTargetSucceeds(t *testing.T) {
 	target := freePort(t)
 
 	start := time.Now()
-	c, err := NewClient(Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestNewClient_LazyConnectionToUnreachableTargetSucceeds(t *testing.T) {
 func TestWithLogging_NoDataRace(t *testing.T) {
 	target := startServer(t)
 
-	c, err := NewClient(Config{
+	c, err := NewClient(context.Background(), Config{
 		Target:        target,
 		EnableLogging: true,
 		TimeOut:       3 * time.Second,
@@ -163,7 +163,7 @@ func TestWithLogging_NoDataRace(t *testing.T) {
 
 func TestClient_WithMetadataAndHeaders(t *testing.T) {
 	target := startServer(t)
-	c, err := NewClient(Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 
@@ -184,7 +184,7 @@ func TestClient_WithMetadataAndHeaders(t *testing.T) {
 
 func TestClient_GetConnection(t *testing.T) {
 	target := startServer(t)
-	c, err := NewClient(Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 
@@ -194,7 +194,7 @@ func TestClient_GetConnection(t *testing.T) {
 
 func TestClient_InvokeRPCPropagatesResultAndError(t *testing.T) {
 	target := startServer(t)
-	c, err := NewClient(Config{
+	c, err := NewClient(context.Background(), Config{
 		Target:        target,
 		EnableLogging: true,
 		TimeOut:       3 * time.Second,
@@ -221,7 +221,7 @@ func TestClient_InvokeRPCPropagatesResultAndError(t *testing.T) {
 
 func TestClient_InvokeRPCWithResilience(t *testing.T) {
 	target := startServer(t)
-	c, err := NewClient(Config{
+	c, err := NewClient(context.Background(), Config{
 		Target:         target,
 		WithResilience: true,
 		EnableLogging:  true,
@@ -251,7 +251,7 @@ func TestIsUsable(t *testing.T) {
 
 func TestNewClient_DefaultsTimeout(t *testing.T) {
 	target := startServer(t)
-	c, err := NewClient(Config{Target: target}, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), Config{Target: target}, &testutil.MockLogger{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 	assert.NotNil(t, c)
@@ -268,7 +268,7 @@ func TestNewClient_DefaultsTimeout(t *testing.T) {
 func TestInvokeRPC_NudgesAnIdleConnection(t *testing.T) {
 	target := startServer(t)
 
-	c, err := NewClient(Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), Config{Target: target, TimeOut: 3 * time.Second}, &testutil.MockLogger{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 
@@ -289,7 +289,7 @@ func TestInvokeRPC_NudgesAnIdleConnection(t *testing.T) {
 func TestInvokeRPC_UnreachableTargetStillReturns(t *testing.T) {
 	target := freePort(t)
 
-	c, err := NewClient(Config{Target: target, TimeOut: 2 * time.Second}, &testutil.MockLogger{})
+	c, err := NewClient(context.Background(), Config{Target: target, TimeOut: 2 * time.Second}, &testutil.MockLogger{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 

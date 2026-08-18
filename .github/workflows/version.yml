@@ -46,53 +46,31 @@ jobs:
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "Latest root tag: $LATEST_TAG"
 
-      - name: Calculate next version
+      - name: Resolve the release version
         id: next_version
         run: |
-          LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
-          
-          # Remove 'v' prefix if present
-          VERSION=${LATEST_TAG#v}
-          
-          # Normalize version: ensure we have MAJOR.MINOR.PATCH format
-          # Handle cases like "1", "1.0", "1.0.0"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          
-          # Set defaults for missing segments
-          MAJOR=${MAJOR:-0}
-          MINOR=${MINOR:-0}
-          PATCH=${PATCH:-0}
-          
-          # Validate that MAJOR is a number
-          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]]; then
-            echo "Error: Invalid major version: $MAJOR"
+          # The version comes from what the modules declare, not from bumping
+          # the last tag. Those two disagreed: the modules required v0.30.0
+          # while this workflow computed v0.21.0 from the newest root tag, so a
+          # release would publish a tag no module referenced.
+          #
+          # scripts/sync-module-versions.sh sets the declared version; this job
+          # only publishes it.
+          DECLARED=$(grep -hoE 'github\.com/skolldire/go-engine v[0-9]+\.[0-9]+\.[0-9]+' aws/go.mod | head -n1 | awk '{print $2}')
+
+          if [ -z "$DECLARED" ]; then
+            echo "::error::no intra-repository version found in aws/go.mod"
             exit 1
           fi
-          if ! [[ "$MINOR" =~ ^[0-9]+$ ]]; then
-            MINOR=0
-          fi
-          if ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
-            PATCH=0
-          fi
-          
-          # Increment the segment selected when dispatching the workflow.
-          case "${{ github.event.inputs.bump }}" in
-            major)
-              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            patch)
-              PATCH=$((PATCH + 1)) ;;
-            *)
-              MINOR=$((MINOR + 1)); PATCH=0 ;;
-          esac
 
-          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "New version: $NEW_VERSION"
+          LATEST="${{ steps.get_tag.outputs.latest_tag }}"
+          if [ "$DECLARED" = "$LATEST" ]; then
+            echo "::error::modules already declare the released version $LATEST"
+            exit 1
+          fi
 
-      - name: Configure git user
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "new_version=$DECLARED" >> $GITHUB_OUTPUT
+          echo "Releasing $DECLARED (previous root tag: $LATEST)"
 
       - name: Create and push tag
         run: |

@@ -52,7 +52,7 @@ type Client struct {
 
 // NewClient crea una nueva instancia del cliente Cognito
 // CRÍTICO: Manejo seguro del secret - se copia a campo privado y se limpia de Config
-func NewClient(cfg Config, log logger.Service) (Service, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, fmt.Errorf("invalid cognito config: %w", err)
 	}
@@ -60,7 +60,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 	clientSecret := cfg.ClientSecret
 	cfg.ClientSecret = ""
 
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
+	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.Region),
 	)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (*RedisClient, error) {
 	timeoutDuration := cfg.Timeout
 	if timeoutDuration == 0 {
 		timeoutDuration = DefaultTimeout
@@ -63,7 +63,7 @@ func NewClient(cfg Config, log logger.Service) (*RedisClient, error) {
 		}, log, "Redis"),
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+	ctx, cancel := context.WithTimeout(ctx, timeoutDuration)
 	defer cancel()
 
 	if err := rc.Ping(ctx); err != nil {

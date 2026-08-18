@@ -13,27 +13,33 @@ import (
 // rather than documenting the rule and hoping.
 var claimed sync.Map // map[Provider]string
 
-// claimable reports whether p can be used as a map key.
+// claimable reports whether p is a provider the single-use check applies to.
 //
-// A Provider is free to be a struct value containing a slice or a map, which is
-// perfectly legal Go and satisfies the interface — but is not hashable, and
-// using it as a sync.Map key panics with "hash of unhashable type". Guarding
-// here trades a crash for a lost check on a rare shape: nearly every provider
-// is a pointer, which is always comparable.
+// Only pointers are tracked, and that is not a limitation — it is the exact set
+// of providers that can alias:
+//
+//   - A pointer provider is shared. Two engines Init-ing it would have the
+//     second overwrite the first's stored client, and the first engine's Close
+//     would then release a resource it no longer owns. This is the hazard.
+//   - A value provider is copied into the interface, so each engine gets its
+//     own. It cannot alias, and keying a map by its value would instead produce
+//     false positives: two independently constructed but equal providers would
+//     look like reuse.
+//   - A value provider carrying a slice or map is not even hashable, and using
+//     it as a sync.Map key panics with "hash of unhashable type".
+//
+// So tracking pointers covers every case that needs covering, and skips the
+// cases where tracking would be wrong or fatal.
 func claimable(p Provider) bool {
 	v := reflect.ValueOf(p)
-	if !v.IsValid() {
-		return false
-	}
-	return v.Type().Comparable()
+	return v.IsValid() && v.Kind() == reflect.Pointer
 }
 
 // claimProvider binds p to an engine, failing if it is already bound.
 func claimProvider(p Provider, name string) error {
 	if !claimable(p) {
-		// Not hashable: skip the single-use check rather than crash. Such a
-		// provider carries the same reuse hazard, so it should still be
-		// constructed fresh per engine.
+		// A non-pointer provider is copied per engine, so there is nothing to
+		// alias and nothing to claim.
 		return nil
 	}
 	if prev, loaded := claimed.LoadOrStore(p, name); loaded {

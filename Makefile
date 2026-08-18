@@ -13,12 +13,11 @@ MODULES := . aws messaging http \
 FAMILY_MODULES := aws messaging http \
     database/sql database/redis database/mongodb database/memcached
 
-.PHONY: all init clean test lint lint-arch lint-deps tidy
+.PHONY: all clean test lint lint-arch lint-deps tidy check-modules smoke example example-e2e
 
-all: init test
+## all: the checks a change must pass before it is pushed
+all: lint lint-arch check-modules test example
 
-init:
-	@chmod +x init.sh && ./init.sh
 
 clean:
 	@for m in $(MODULES); do (cd $$m && go clean -testcache); done
@@ -139,6 +138,16 @@ check-modules:
 ##        make smoke VERSION=v0.30.0   (published tags, end to end)
 smoke:
 	@./scripts/smoke-external-consumer.sh $(VERSION)
+
+## example: builds and tests the example service, the check that the library
+## is still usable when someone actually implements it
+example:
+	@echo "==> example service"
+	@cd example && go build ./... && go test ./... -count=1
+
+## example-e2e: the same, plus the container suite (needs Docker)
+example-e2e:
+	@cd example && go test -tags e2e ./... -count=1 -v
 
 lint-arch:
 	@echo "==> Checking architectural constraints..."

@@ -19,13 +19,14 @@ func (dc *DynamoClient) TableName(name string) string {
 	return fmt.Sprintf("%s-%s", dc.tablePrefix, name)
 }
 
-func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, log logger.Service) Service {
+	// Construction emits no log line: a library must not write entries the
+	// application did not ask for, and these were the last two that did. They
+	// also used a fabricated context.Background() while the constructor had a
+	// real one, which is exactly the defect the ctx propagation removed.
 	client := dynamodb.NewFromConfig(acf, func(o *dynamodb.Options) {
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
-			log.Debug(context.Background(), "connecting to external endpoint", map[string]any{"endpoint": cfg.Endpoint})
-		} else {
-			log.Debug(context.Background(), "connecting to AWS", nil)
 		}
 	})
 

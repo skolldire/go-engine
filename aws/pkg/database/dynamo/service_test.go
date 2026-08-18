@@ -1,6 +1,7 @@
 package dynamo
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestNewClient_NotNil(t *testing.T) {
-	c := NewClient(aws.Config{Region: "us-east-1"}, Config{}, &testutil.MockLogger{})
+	c := NewClient(context.Background(), aws.Config{Region: "us-east-1"}, Config{}, &testutil.MockLogger{})
 	require.NotNil(t, c)
 }
 

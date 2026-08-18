@@ -32,13 +32,13 @@ func (p *Provider) ConfigKey() string { return ConfigKey }
 
 // Init implements engine.Provider. It also contributes a health check, so a
 // Redis outage surfaces on /ready without the application wiring anything.
-func (p *Provider) Init(_ context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
+func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.Deps) (any, error) {
 	cfg, err := engine.DecodeNamed[goredis.Config](raw, p.instance)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := goredis.NewClient(cfg, deps.Logger)
+	client, err := goredis.NewClient(ctx, cfg, deps.Logger)
 	if err != nil {
 		return nil, err
 	}

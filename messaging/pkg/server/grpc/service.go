@@ -27,7 +27,7 @@ import (
 //
 // For interceptors, construct the server manually using google.golang.org/grpc
 // directly and register it with AppBuilder.WithCustomClient.
-func NewServer(cfg Config, log logger.Service) Service {
+func NewServer(ctx context.Context, cfg Config, log logger.Service) Service {
 	grpcServer := grpc.NewServer()
 
 	reflection.Register(grpcServer)

@@ -16,7 +16,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, log logger.Service) Service {
 	s3Client := s3.NewFromConfig(acf, func(o *s3.Options) {
 		if cfg.Region != "" {
 			o.Region = cfg.Region

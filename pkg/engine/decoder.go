@@ -39,7 +39,7 @@ func newDecoderWithMetadata(result any, md *mapstructure.Metadata) (*mapstructur
 			// this hook they fail to decode as int.
 			mapstructure.StringToTimeDurationHookFunc(),
 			mapstructure.StringToSliceHookFunc(","),
-			EnvVarDecodeHook(),
+			envVarDecodeHook(),
 		),
 		MatchName: matchName,
 	})

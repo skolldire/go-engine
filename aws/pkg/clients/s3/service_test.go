@@ -179,7 +179,7 @@ func sampleObjects(n int) []types.Object {
 func TestNewClient(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{Region: "us-east-1", Bucket: "test-bucket"}
-	c := NewClient(acf, cfg, &mockLogger{})
+	c := NewClient(context.Background(), acf, cfg, &mockLogger{})
 	assert.NotNil(t, c)
 	assert.IsType(t, &S3Client{}, c)
 }
@@ -187,7 +187,7 @@ func TestNewClient(t *testing.T) {
 func TestNewClient_DefaultTimeout(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{Region: "us-east-1", Bucket: "test-bucket", Timeout: 0}
-	c := NewClient(acf, cfg, &mockLogger{})
+	c := NewClient(context.Background(), acf, cfg, &mockLogger{})
 	assert.NotNil(t, c)
 	s3c := c.(*S3Client)
 	assert.NotNil(t, s3c.s3Client)
@@ -198,7 +198,7 @@ func TestNewClient_WithLogging(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{Region: "us-east-1", Bucket: "test-bucket", EnableLogging: true}
 	log := &mockLogger{}
-	c := NewClient(acf, cfg, log)
+	c := NewClient(context.Background(), acf, cfg, log)
 	assert.NotNil(t, c)
 	// Constructing a client emits nothing: operations are logged, construction
 	// is not. A library must not write log lines the application did not ask for.
@@ -216,7 +216,7 @@ func TestNewClient_WithResilience(t *testing.T) {
 			CircuitBreakerConfig: &circuit_breaker.Config{Name: "test-cb"},
 		},
 	}
-	c := NewClient(acf, cfg, &mockLogger{})
+	c := NewClient(context.Background(), acf, cfg, &mockLogger{})
 	assert.NotNil(t, c)
 	s3c := c.(*S3Client)
 	assert.NotNil(t, s3c.s3Client)

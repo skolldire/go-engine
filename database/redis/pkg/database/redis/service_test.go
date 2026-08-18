@@ -99,7 +99,7 @@ func TestNewClient_DefaultValues(t *testing.T) {
 
 	// The reserved port has no listener, so the Ping in NewClient must fail.
 	// require stops the test here to avoid dereferencing a nil error below.
-	_, err := NewClient(cfg, log)
+	_, err := NewClient(context.Background(), cfg, log)
 	require.Error(t, err)
 	// And we can verify the config is processed correctly
 	assert.Contains(t, err.Error(), "connection")
@@ -114,7 +114,7 @@ func TestNewClient_WithPassword(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	_, err := NewClient(cfg, log)
+	_, err := NewClient(context.Background(), cfg, log)
 	require.Error(t, err)
 }
 
@@ -127,7 +127,7 @@ func TestNewClient_WithPrefix(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	_, err := NewClient(cfg, log)
+	_, err := NewClient(context.Background(), cfg, log)
 	require.Error(t, err)
 }
 
@@ -154,7 +154,7 @@ func TestNewClient_WithResilience(t *testing.T) {
 	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 	// The reserved port has no listener, so the connection must fail.
-	_, err := NewClient(cfg, log)
+	_, err := NewClient(context.Background(), cfg, log)
 	require.Error(t, err)
 }
 
@@ -622,4 +622,27 @@ func TestRedisClient_Get_WithKeyNotFoundError(t *testing.T) {
 	assert.Error(t, err)
 	// In a real scenario with redis.Nil, it should return ErrKeyNotFound
 	// but without connection, we get connection error
+}
+
+// TestNewClient_HonoursACancelledContext is the regression test for the
+// constructor fabricating its own context.Background().
+//
+// It meant a cancelled startup — a Ctrl-C, or a deadline on the whole boot
+// sequence — could not stop the initial ping, and there was nothing to
+// correlate a startup failure with. The context now comes from wherever the
+// application initialises its infrastructure.
+func TestNewClient_HonoursACancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	_, err := NewClient(ctx, Config{
+		Host:    "192.0.2.1", // reserved, non-routable: would otherwise hang
+		Port:    6379,
+		Timeout: 30 * time.Second,
+	}, &mockLogger{})
+
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), 5*time.Second,
+		"a cancelled context must abort the connection attempt, not wait for the timeout")
 }

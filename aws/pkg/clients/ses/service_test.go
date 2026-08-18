@@ -11,7 +11,7 @@ import (
 )
 
 func newTestClient() Service {
-	return NewClient(aws.Config{Region: "us-east-1"}, Config{}, &testutil.MockLogger{})
+	return NewClient(context.Background(), aws.Config{Region: "us-east-1"}, Config{}, &testutil.MockLogger{})
 }
 
 func TestNewClient_NotNil(t *testing.T) {

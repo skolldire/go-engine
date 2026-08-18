@@ -37,7 +37,7 @@ func integrationConfig(t *testing.T) Config {
 
 func TestIntegration_SetGetDelete(t *testing.T) {
 	cfg := integrationConfig(t)
-	client, err := NewClient(cfg, &mockLogger{})
+	client, err := NewClient(context.Background(), cfg, &mockLogger{})
 	require.NoError(t, err, "a real Redis must be reachable for integration tests")
 	t.Cleanup(func() { _ = client.Close() })
 

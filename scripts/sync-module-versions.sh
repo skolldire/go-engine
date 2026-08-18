@@ -18,7 +18,8 @@ fi
 
 cd "$(dirname "$0")/.."
 
-for dir in $(find . -name go.mod -not -path './.git/*' -exec dirname {} \; | sort); do
+# e2e is never published, so its requires stay on replace directives.
+for dir in $(find . -name go.mod -not -path './.git/*' -not -path './example/*' -exec dirname {} \; | sort); do
     gomod="$dir/go.mod"
     if grep -qE '^[[:space:]]+github\.com/skolldire/go-engine(/[a-z/]+)? v' "$gomod"; then
         perl -pi -e "s{^(\\s+github\\.com/skolldire/go-engine(?:/[a-z/]+)?) v\\S+}{\$1 $VERSION}" "$gomod"

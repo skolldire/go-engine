@@ -20,7 +20,9 @@ PLACEHOLDER='v0.0.0-00010101000000-000000000000'
 FAILED=0
 declare -a VERSIONS=()
 
-for gomod in $(find . -name go.mod -not -path './.git/*' | sort); do
+# e2e is a test harness, never tagged and never installed by anyone, so it is
+# free to resolve its siblings through replace directives.
+for gomod in $(find . -name go.mod -not -path './.git/*' -not -path './example/*' | sort); do
     while read -r mod version; do
         [[ -z "${version:-}" ]] && continue
 
@@ -50,10 +52,27 @@ if [[ "$UNIQUE" -gt 1 ]]; then
     FAILED=1
 fi
 
+# The declared version is what will be tagged, so it must be ahead of what is
+# already released. Without this, the modules can say v0.30.0 while the version
+# workflow computes v0.21.0 from the last root tag, and the release publishes a
+# tag no module requires.
+DECLARED=$(printf '%s\n' "${VERSIONS[@]:-}" | sort -u | head -n 1)
+LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname 2>/dev/null | head -n 1)
+
+if [[ -n "${DECLARED:-}" && -n "${LATEST:-}" ]]; then
+    NEWEST=$(printf '%s\n%s\n' "$DECLARED" "$LATEST" | sort -V | tail -n 1)
+    if [[ "$DECLARED" == "$LATEST" || "$NEWEST" != "$DECLARED" ]]; then
+        echo "VIOLATION: modules declare $DECLARED but $LATEST is already tagged"
+        echo "  the release must publish a version newer than the last one;"
+        echo "  run scripts/sync-module-versions.sh with the version you intend to tag"
+        FAILED=1
+    fi
+fi
+
 if [[ "$FAILED" -ne 0 ]]; then
     echo ""
     echo "FAIL: module versions would break an external consumer"
     exit 1
 fi
 
-echo "==> OK: all intra-repository requires name a single resolvable release"
+echo "==> OK: modules declare ${DECLARED:-a single version}, ahead of ${LATEST:-no tag}"

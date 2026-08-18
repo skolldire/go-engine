@@ -14,7 +14,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
 )
 
-func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, log logger.Service) Service {
 	snsClient := sns.NewFromConfig(acf, func(o *sns.Options) {
 		if cfg.BaseEndpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.BaseEndpoint)

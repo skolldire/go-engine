@@ -1,0 +1,60 @@
+# Configuration for the example service.
+#
+# The engine loads this with Viper and splits it in two: the sections it owns
+# (router, log, health) are decoded into typed structs, and everything else is
+# carried through untouched for each provider to decode. That is what lets a new
+# adapter be added without the core learning about it.
+#
+# Durations are Go duration strings. A bare number would mean nanoseconds, and
+# the engine rejects it rather than starting a server that times out instantly.
+
+log:
+  level: "info"
+  format: "json"
+
+router:
+  port: "8080"
+  read_timeout: 10s
+  write_timeout: 30s
+  shutdown_timeout: 15s
+  enable_cors: true
+  cors_config:
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE"]
+    allow_headers: ["Content-Type", "Authorization"]
+
+health:
+  timeout: 5s
+
+# --- adapters ---------------------------------------------------------------
+# Each block below is consumed by one provider. Registering the provider is what
+# builds the client; a section with no provider registered builds nothing.
+
+redis_clients:
+  - cache:
+      host: "${REDIS_HOST:-localhost}"
+      port: 6379
+      prefix: "example"
+      timeout: 10s
+
+sql_clients:
+  - main:
+      type: "postgres"
+      max_open_connections: 10
+      max_idle_connections: 5
+      conn_max_lifetime: 5m
+
+rest:
+  - catalog:
+      base_url: "${CATALOG_URL:-http://localhost:9090}"
+      timeout: 5s
+      enable_logging: true
+      retry:
+        max_retries: 3
+        wait_time: 100ms
+        max_wait_time: 2s
+      circuit_breaker:
+        name: "catalog"
+        request_threshold: 5
+        interval: 60s
+        timeout: 30s

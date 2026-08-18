@@ -11,6 +11,7 @@ use (
 	./database/mongodb
 	./database/redis
 	./database/sql
+	./example
 	./http
 	./messaging
 	./preset/full

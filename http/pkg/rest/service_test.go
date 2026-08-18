@@ -44,7 +44,7 @@ func TestNewClient(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 
 	assert.NotNil(t, client)
 	assert.IsType(t, &restClient{}, client)
@@ -58,7 +58,7 @@ func TestNewClient_DefaultTimeout(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 
 	assert.NotNil(t, client)
 	restClient := client.(*restClient)
@@ -81,7 +81,7 @@ func TestNewClient_WithRetryAndBreaker(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 
 	assert.NotNil(t, client)
 }
@@ -94,7 +94,7 @@ func TestRestClient_WithLogging(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	client.WithLogging(true)
 
 	restClient := client.(*restClient)
@@ -117,7 +117,7 @@ func TestRestClient_Get(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	restClient := client.(*restClient)
 
 	// Mock HTTP server would be needed for full integration test
@@ -139,7 +139,7 @@ func TestRestClient_Post(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	restClient := client.(*restClient)
 
 	ctx := context.Background()
@@ -159,7 +159,7 @@ func TestRestClient_Put(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	restClient := client.(*restClient)
 
 	ctx := context.Background()
@@ -178,7 +178,7 @@ func TestRestClient_Patch(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	restClient := client.(*restClient)
 
 	ctx := context.Background()
@@ -197,7 +197,7 @@ func TestRestClient_Delete(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	restClient := client.(*restClient)
 
 	ctx := context.Background()
@@ -217,7 +217,7 @@ func TestRestClient_ProcessRequest_Error(t *testing.T) {
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	restClient := client.(*restClient)
 
 	ctx := context.Background()
@@ -242,7 +242,7 @@ func TestRestClient_ProcessRequest_InvalidResponse(t *testing.T) {
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	client := NewClient(cfg, log)
+	client := NewClient(context.Background(), cfg, log)
 	restClient := client.(*restClient)
 
 	ctx := context.Background()

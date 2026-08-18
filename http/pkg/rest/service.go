@@ -10,7 +10,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) Service {
 	timeout := cfg.TimeOut
 	if timeout == 0 {
 		timeout = DefaultTimeout

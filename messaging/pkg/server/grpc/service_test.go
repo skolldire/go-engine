@@ -41,7 +41,7 @@ func TestNewServer(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	server := NewServer(cfg, log)
+	server := NewServer(context.Background(), cfg, log)
 
 	assert.NotNil(t, server)
 	// Verify that server implements the Service interface
@@ -56,7 +56,7 @@ func TestNewServer_WithLogging(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	assert.NotNil(t, srv)
 	// Verify that srv implements the Service interface
@@ -71,7 +71,7 @@ func TestServer_RegisterService(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	registered := false
 	registerFunc := func(s *grpc.Server) {
@@ -89,7 +89,7 @@ func TestServer_Start(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -113,7 +113,7 @@ func TestServer_Start_WithLogging(t *testing.T) {
 	log.On("Info", mock.Anything, "starting gRPC server", mock.Anything).Return()
 	log.On("Info", mock.Anything, "stopping gRPC server", mock.Anything).Return()
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -133,7 +133,7 @@ func TestServer_Start_WithContextCancellation(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	server := NewServer(cfg, log)
+	server := NewServer(context.Background(), cfg, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -154,7 +154,7 @@ func TestServer_Stop(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -178,7 +178,7 @@ func TestServer_Stop_WithLogging(t *testing.T) {
 	log.On("Info", mock.Anything, "starting gRPC server", mock.Anything).Return()
 	log.On("Info", mock.Anything, "stopping gRPC server", mock.Anything).Return()
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -199,7 +199,7 @@ func TestServer_Stop_WithoutStart(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	// Stop should not panic even if server wasn't started
 	srv.Stop()
@@ -212,7 +212,7 @@ func TestServer_MultipleStops(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -235,7 +235,7 @@ func TestServer_RegisterService_Multiple(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	srv := NewServer(cfg, log)
+	srv := NewServer(context.Background(), cfg, log)
 
 	count := 0
 	registerFunc1 := func(s *grpc.Server) {

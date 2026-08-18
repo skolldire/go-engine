@@ -46,6 +46,12 @@ jobs:
       - name: Smoke test an external consumer
         run: make smoke
 
+      # The example service is a real consumer of the library. A change that
+      # passes every unit test can still make an application impossible to
+      # build; this is where that shows up.
+      - name: Build and test the example service
+        run: make example
+
       - name: Report dependency footprint per module
         run: make lint-deps
 

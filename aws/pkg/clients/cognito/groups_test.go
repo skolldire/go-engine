@@ -60,7 +60,7 @@ func newGroupsTestClient(t *testing.T) Service {
 		ClientID:      "test-client-id",
 		EnableLogging: false,
 	}
-	client, err := NewClient(cfg, &mockLogger{})
+	client, err := NewClient(context.Background(), cfg, &mockLogger{})
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	return client
