@@ -7,6 +7,7 @@ require github.com/testcontainers/testcontainers-go v0.34.0
 require (
 	github.com/docker/go-connections v0.5.0
 	github.com/rabbitmq/amqp091-go v1.11.0
+	github.com/segmentio/kafka-go v0.4.51
 	github.com/skolldire/go-engine v0.30.0
 	github.com/skolldire/go-engine/aws v0.0.0-00010101000000-000000000000
 	github.com/skolldire/go-engine/database/memcached v0.0.0-00010101000000-000000000000
@@ -55,7 +56,6 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect
-	github.com/segmentio/kafka-go v0.4.51 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect

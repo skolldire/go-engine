@@ -196,16 +196,65 @@ func TestNewProvider_RefusesASecondGlobalInstall(t *testing.T) {
 // TestGlobalClaim_IsExclusiveAndReleasable exercises the claim directly, since
 // installing real providers needs a collector.
 func TestGlobalClaim_IsExclusiveAndReleasable(t *testing.T) {
-	t.Cleanup(releaseGlobalProviders)
+	first, err := claimGlobalProviders("first")
+	require.NoError(t, err)
+	t.Cleanup(func() { releaseGlobalProviders(first) })
 
-	require.NoError(t, claimGlobalProviders("first"))
-
-	err := claimGlobalProviders("second")
+	_, err = claimGlobalProviders("second")
 	require.Error(t, err, "the globals have one owner")
 	assert.ErrorContains(t, err, "first", "the message must name who holds them")
 	assert.ErrorContains(t, err, "skip_global_providers", "and say how to resolve it")
 
 	// A provider that shuts down must not lock the process out for good.
-	releaseGlobalProviders()
-	assert.NoError(t, claimGlobalProviders("third"))
+	releaseGlobalProviders(first)
+
+	third, err := claimGlobalProviders("third")
+	require.NoError(t, err)
+	releaseGlobalProviders(third)
+}
+
+// TestGlobalClaim_ReleaseIsScopedToItsOwner is the regression test for a
+// repeated Shutdown freeing someone else's claim.
+//
+// Ownership was a boolean, so shutting A down twice released the globals B had
+// taken in between: B kept exporting while the process believed the slot was
+// free, and a third provider could install over it.
+func TestGlobalClaim_ReleaseIsScopedToItsOwner(t *testing.T) {
+	a, err := claimGlobalProviders("A")
+	require.NoError(t, err)
+
+	releaseGlobalProviders(a) // A shuts down
+
+	b, err := claimGlobalProviders("B")
+	require.NoError(t, err, "the globals are free again")
+	t.Cleanup(func() { releaseGlobalProviders(b) })
+
+	// A shuts down a second time. Its claim is stale and must do nothing.
+	releaseGlobalProviders(a)
+
+	_, err = claimGlobalProviders("C")
+	require.Error(t, err, "B still owns the globals; a stale release must not free them")
+	assert.ErrorContains(t, err, "B")
+}
+
+// TestProvider_ShutdownIsIdempotentForTheClaim covers the same guarantee
+// through the public API.
+func TestProvider_ShutdownIsIdempotentForTheClaim(t *testing.T) {
+	ctx := context.Background()
+
+	a, err := claimGlobalProviders("A")
+	require.NoError(t, err)
+
+	p := &realProvider{globals: a}
+	require.NoError(t, p.Shutdown(ctx))
+
+	b, err := claimGlobalProviders("B")
+	require.NoError(t, err)
+	t.Cleanup(func() { releaseGlobalProviders(b) })
+
+	// A second Shutdown on the same provider must not disturb B.
+	require.NoError(t, p.Shutdown(ctx))
+
+	_, err = claimGlobalProviders("C")
+	assert.Error(t, err, "B must still hold the globals after A shut down twice")
 }

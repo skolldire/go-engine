@@ -25,8 +25,15 @@ jobs:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout the released code
         uses: actions/checkout@v4
+        with:
+          # Check out what is being released, not the ref the workflow was
+          # launched from. Under workflow_dispatch those differ, so the tests
+          # and the README that ended up in the release came from the branch
+          # rather than from the tag being published.
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5

@@ -32,11 +32,17 @@ func NewServer(ctx context.Context, cfg Config, log logger.Service) Service {
 
 	reflection.Register(grpcServer)
 
+	shutdownTimeout := cfg.ShutdownTimeout
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = DefaultShutdownTimeout
+	}
+
 	return &server{
-		server:  grpcServer,
-		puerto:  cfg.Puerto,
-		logger:  log,
-		logging: cfg.EnableLogging,
+		server:          grpcServer,
+		puerto:          cfg.Puerto,
+		logger:          log,
+		logging:         cfg.EnableLogging,
+		shutdownTimeout: shutdownTimeout,
 	}
 }
 
@@ -78,12 +84,22 @@ func (s *server) Start(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		if s.logging {
-			// ctx is already done here, so use a detached copy that keeps its
-			// values (trace IDs, request scope) for the shutdown log line.
-			s.logger.Info(context.WithoutCancel(ctx), "stopping gRPC server", nil)
+
+		// Reuse the bounded Stop rather than calling GracefulStop directly.
+		// This path had the very defect Stop was written to remove: a stuck RPC
+		// left this goroutine waiting for the life of the process, and the
+		// explicit shutdown path being correct did not help an application that
+		// only cancels its context.
+		//
+		// The context is detached from the cancelled one so the drain gets its
+		// full window instead of expiring immediately.
+		shutdownCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx), s.shutdownTimeout)
+		defer cancel()
+
+		if err := s.Stop(shutdownCtx); err != nil && s.logging {
+			s.logger.Error(context.WithoutCancel(ctx), err, nil)
 		}
-		s.server.GracefulStop()
 	}()
 
 	return nil

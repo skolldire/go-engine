@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -23,9 +24,11 @@ type realProvider struct {
 	traceProvider  *sdktrace.TracerProvider
 	metricProvider *sdkmetric.MeterProvider
 
-	// ownsGlobals records whether this provider installed the process-wide
-	// OpenTelemetry state, so Shutdown knows whether to release the claim.
-	ownsGlobals bool
+	// globals is the claim on the process-wide OpenTelemetry state, empty when
+	// this provider did not install it. Shutdown returns it exactly once, and
+	// only if it is still the holder.
+	globals      globalClaim
+	shutdownOnce sync.Once
 }
 
 // NewProvider initializes a new OTel Provider from cfg.
@@ -93,8 +96,11 @@ func NewProvider(ctx context.Context, cfg OTELConfig) (Provider, error) {
 	// this provider, so it is the default. It is process-wide, though: a second
 	// engine in the same binary would overwrite the first and its spans would
 	// disappear silently, which is why it can be skipped.
+	var claim globalClaim
 	if !cfg.SkipGlobalProviders {
-		if err := claimGlobalProviders(cfg.ServiceName); err != nil {
+		var err error
+		claim, err = claimGlobalProviders(cfg.ServiceName)
+		if err != nil {
 			_ = traceProvider.Shutdown(ctx)
 			_ = metricProvider.Shutdown(ctx)
 			return nil, err
@@ -111,7 +117,7 @@ func NewProvider(ctx context.Context, cfg OTELConfig) (Provider, error) {
 	return &realProvider{
 		traceProvider:  traceProvider,
 		metricProvider: metricProvider,
-		ownsGlobals:    !cfg.SkipGlobalProviders,
+		globals:        claim,
 	}, nil
 }
 
@@ -124,20 +130,24 @@ func (p *realProvider) Meter(name string) otelmetric.Meter {
 }
 
 func (p *realProvider) Shutdown(ctx context.Context) error {
-	// Give the process-wide claim back, so a provider that has been shut down
-	// does not lock the globals for the rest of the process's life.
-	if p.ownsGlobals {
-		releaseGlobalProviders()
-	}
+	// Give the claim back once, and only if we still hold it: a repeated
+	// Shutdown must not free the globals a later provider has taken.
+	p.shutdownOnce.Do(func() { releaseGlobalProviders(p.globals) })
 
 	// Shut down both providers even if the first fails, aggregating errors so a
 	// trace-shutdown failure does not abandon the metric provider.
+	// Guarded because the struct is constructible without them, and a Shutdown
+	// that panics is worse than one that has nothing to do.
 	var errs []error
-	if err := p.traceProvider.Shutdown(ctx); err != nil {
-		errs = append(errs, fmt.Errorf("shutdown trace provider: %w", err))
+	if p.traceProvider != nil {
+		if err := p.traceProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("shutdown trace provider: %w", err))
+		}
 	}
-	if err := p.metricProvider.Shutdown(ctx); err != nil {
-		errs = append(errs, fmt.Errorf("shutdown metric provider: %w", err))
+	if p.metricProvider != nil {
+		if err := p.metricProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("shutdown metric provider: %w", err))
+		}
 	}
 	return errors.Join(errs...)
 }

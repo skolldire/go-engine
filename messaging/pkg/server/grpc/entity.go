@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"google.golang.org/grpc"
@@ -12,6 +13,9 @@ import (
 // ErrForcedShutdown reports that the drain deadline expired and in-flight RPCs
 // were dropped, as opposed to a clean shutdown.
 var ErrForcedShutdown = errors.New("gRPC server shutdown was forced")
+
+// DefaultShutdownTimeout bounds a drain that was not given one.
+const DefaultShutdownTimeout = 30 * time.Second
 
 // Service is the public interface for the go-engine gRPC server.
 type Service interface {
@@ -62,6 +66,14 @@ type Config struct {
 	// EnableLogging controls whether the server emits Info log entries on
 	// start and stop events.
 	EnableLogging bool `mapstructure:"enable_logging" json:"enable_logging"`
+
+	// ShutdownTimeout bounds the drain started when the context passed to Start
+	// is cancelled. Defaults to DefaultShutdownTimeout.
+	//
+	// It exists because GracefulStop waits for in-flight RPCs with no deadline
+	// of its own: a single stuck stream would otherwise leave that goroutine
+	// waiting for the life of the process.
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout" json:"shutdown_timeout"`
 }
 
 type server struct {
@@ -69,8 +81,9 @@ type server struct {
 	addrMu sync.RWMutex
 	addr   string
 
-	server  *grpc.Server
-	puerto  int
-	logger  logger.Service
-	logging bool
+	server          *grpc.Server
+	puerto          int
+	logger          logger.Service
+	logging         bool
+	shutdownTimeout time.Duration
 }

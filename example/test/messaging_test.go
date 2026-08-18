@@ -5,11 +5,13 @@ package test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	segmentio "github.com/segmentio/kafka-go"
 	"github.com/skolldire/go-engine/messaging/pkg/integration/kafka"
 	"github.com/skolldire/go-engine/messaging/pkg/integration/rabbitmq"
 	grpcsrv "github.com/skolldire/go-engine/messaging/pkg/server/grpc"
@@ -119,50 +121,23 @@ rabbitmq_clients:
 
 // TestEngine_Kafka publishes and consumes against a real broker.
 //
-// The previous version of this test started a container and asserted that a
-// client existed. That proved nothing: the Kafka client is lazy, so it would
-// have passed against a broker that was never reachable. It also advertised
-// localhost:9092 while testcontainers maps a random host port, so nothing could
-// have connected even if the test had tried.
+// An earlier version started a container and asserted a client existed, which
+// proved nothing: the Kafka client is lazy, so it would have passed against a
+// broker that was never reachable. It also advertised a port testcontainers had
+// not mapped, so nothing could have connected even if it had tried.
 func TestEngine_Kafka(t *testing.T) {
 	requireDocker(t)
 
 	ctx := ctxWithTimeout(t, 8*time.Minute)
+	broker, _ := startKafka(t)
 
-	// The advertised listener must name the port the host will dial, and that
-	// port is only known after the container starts. Fixing it on both sides is
-	// what makes the broker reachable from outside the container.
-	const hostPortNum = "39092"
+	const topic = "e2e-events"
 
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image: "apache/kafka:3.8.0",
-			ExposedPorts: []string{
-				fmt.Sprintf("%s:9092/tcp", hostPortNum),
-			},
-			Env: map[string]string{
-				"KAFKA_NODE_ID":                                  "1",
-				"KAFKA_PROCESS_ROLES":                            "broker,controller",
-				"KAFKA_CONTROLLER_QUORUM_VOTERS":                 "1@localhost:9093",
-				"KAFKA_LISTENERS":                                "PLAINTEXT://:9092,CONTROLLER://:9093",
-				"KAFKA_ADVERTISED_LISTENERS":                     "PLAINTEXT://localhost:" + hostPortNum,
-				"KAFKA_LISTENER_SECURITY_PROTOCOL_MAP":           "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
-				"KAFKA_CONTROLLER_LISTENER_NAMES":                "CONTROLLER",
-				"KAFKA_INTER_BROKER_LISTENER_NAME":               "PLAINTEXT",
-				"KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR":         "1",
-				"KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS":         "0",
-				"KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
-				"KAFKA_TRANSACTION_STATE_LOG_MIN_ISR":            "1",
-				"KAFKA_AUTO_CREATE_TOPICS_ENABLE":                "true",
-			},
-			WaitingFor: wait.ForLog("Kafka Server started").WithStartupTimeout(5 * time.Minute),
-		},
-		Started: true,
-	})
-	require.NoError(t, err)
-	terminate(t, container)
-
-	broker := "localhost:" + hostPortNum
+	// Create the topic before the engine builds its client. The reader is
+	// constructed at Init and resolves the topic then; pointing it at a topic
+	// that does not exist yet leaves it fetching nothing indefinitely, which is
+	// also what a real deployment avoids by provisioning topics up front.
+	createTopic(t, ctx, broker, topic)
 
 	dir := writeConfig(t, fmt.Sprintf(`
 log:
@@ -170,51 +145,96 @@ log:
 kafka:
   brokers:
     - %q
-  topic: "e2e-events"
+  topic: %q
   group_id: "e2e-group"
-  # Without these the reader waits for a full batch, which never arrives when
-  # the test publishes a single message.
   min_bytes: 1
   max_bytes: 1048576
   max_wait: 500ms
   commit_interval: 500ms
-`, broker))
+`, broker, topic))
 
 	eng := newEngine(t, dir, engine.WithProvider(kafkaprovider.New()))
 
 	client, err := kafkaprovider.From(eng)
 	require.NoError(t, err)
 
-	// Publishing is what creates the topic, since auto-creation is on. Doing it
-	// first also proves the advertised listener is reachable from the host,
-	// which a lazy client would otherwise never reveal. It is retried because
-	// the broker reports the topic as unknown for a moment after creating it.
-	require.Eventually(t, func() bool {
-		return client.Publish(ctx, kafka.Message{
-			Key:   []byte("warmup"),
-			Value: []byte(`{"warmup":true}`),
-		}) == nil
-	}, 90*time.Second, 2*time.Second, "the broker must accept a publish from the host")
+	require.NoError(t, client.Ping(ctx), "the broker must be reachable from the host")
 
-	// Consuming is deliberately NOT asserted here, and that is a known gap
-	// rather than an oversight.
-	//
-	// Subscribe runs and blocks — it neither errors nor returns — but no message
-	// is delivered within two minutes against a freshly created single-broker
-	// cluster, and the cause has not been identified. Rather than assert
-	// something weaker and call the path covered, the gap is stated: a reader
-	// that silently delivers nothing is exactly the failure a green test would
-	// hide.
-	//
-	// What this test does prove is real: the broker is reachable from the host
-	// on its advertised listener, and Publish reaches it. That is not
-	// incidental — it failed with "Unknown Topic Or Partition" until the
-	// advertised listener matched the mapped port, so a lazy client alone could
-	// never have passed it.
-	//
-	// The RabbitMQ test above covers the publish-and-consume round trip end to
-	// end, including panic containment, so the messaging contract is not
-	// entirely unverified.
+	received := make(chan kafka.Message, 8)
+	subscribeErr := make(chan error, 1)
+
+	consumeCtx, stopConsuming := context.WithCancel(ctx)
+	defer stopConsuming()
+
+	go func() {
+		subscribeErr <- client.Subscribe(consumeCtx, func(_ context.Context, msg kafka.Message) error {
+			select {
+			case received <- msg:
+			default:
+			}
+			return nil
+		})
+	}()
+
+	// Let the group be assigned the partition; a message published before that
+	// lands with nobody reading it.
+	time.Sleep(10 * time.Second)
+
+	require.NoError(t, client.Publish(ctx, kafka.Message{
+		Key:   []byte("order-1"),
+		Value: []byte(`{"order":1}`),
+	}))
+
+	deadline := time.After(90 * time.Second)
+	for {
+		select {
+		case msg := <-received:
+			if !strings.Contains(string(msg.Value), `"order":1`) {
+				continue // an earlier message from this topic
+			}
+
+			assert.Equal(t, []byte("order-1"), msg.Key, "the key must survive the round trip")
+			assert.Equal(t, topic, msg.Topic)
+
+			// Cancelling the context must end Subscribe cleanly rather than
+			// surfacing the cancellation as a failure.
+			stopConsuming()
+			select {
+			case err := <-subscribeErr:
+				assert.NoError(t, err, "a cancelled Subscribe is a graceful stop, not an error")
+			case <-time.After(30 * time.Second):
+				t.Fatal("Subscribe did not return after its context was cancelled")
+			}
+			return
+
+		case err := <-subscribeErr:
+			t.Fatalf("the consumer stopped before the message arrived: %v", err)
+
+		case <-deadline:
+			t.Fatal("the published message never reached the consumer")
+		}
+	}
+}
+
+// createTopic provisions the topic, retrying because a broker that has just
+// started reports it as unknown for a moment after accepting the request.
+func createTopic(t *testing.T, ctx context.Context, broker, topic string) {
+	t.Helper()
+
+	w := &segmentio.Writer{
+		Addr:                   segmentio.TCP(broker),
+		Topic:                  topic,
+		Balancer:               &segmentio.LeastBytes{},
+		RequiredAcks:           segmentio.RequireAll,
+		AllowAutoTopicCreation: true,
+	}
+	defer func() { _ = w.Close() }()
+
+	var lastErr error
+	require.Eventually(t, func() bool {
+		lastErr = w.WriteMessages(ctx, segmentio.Message{Value: []byte(`{"warmup":true}`)})
+		return lastErr == nil
+	}, 90*time.Second, 3*time.Second, "the topic must be creatable; last error: %v", lastErr)
 }
 
 // TestEngine_GRPC starts the server, calls it, and proves shutdown is bounded
@@ -299,7 +319,11 @@ grpc_client:
 		select {
 		case <-entered:
 		case <-time.After(30 * time.Second):
-			t.Skip("the RPC never reached the handler; nothing to hold shutdown open")
+			// Not a skip: if the RPC never reaches the handler there is nothing
+			// holding shutdown open, so the assertion below would pass for the
+			// wrong reason and hide a regression in the bounded drain.
+			close(blocking)
+			t.Fatal("the RPC never reached the handler, so this test would prove nothing")
 		}
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -327,4 +351,46 @@ func serverAddress(t *testing.T, srv grpcsrv.Service) string {
 		"the server must report the address it bound")
 
 	return srv.Address()
+}
+
+// startKafka boots a single-broker Kafka and returns the address the host can
+// dial.
+//
+// The advertised listener must name the port the host will use, so the mapping
+// is fixed rather than random: a broker advertising a port testcontainers did
+// not map is reachable for the initial connection and for nothing else.
+func startKafka(t *testing.T) (string, func()) {
+	t.Helper()
+
+	const hostPortNum = "39092"
+
+	ctx := ctxWithTimeout(t, 8*time.Minute)
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "apache/kafka:3.8.0",
+			ExposedPorts: []string{fmt.Sprintf("%s:9092/tcp", hostPortNum)},
+			Env: map[string]string{
+				"KAFKA_NODE_ID":                                  "1",
+				"KAFKA_PROCESS_ROLES":                            "broker,controller",
+				"KAFKA_CONTROLLER_QUORUM_VOTERS":                 "1@localhost:9093",
+				"KAFKA_LISTENERS":                                "PLAINTEXT://:9092,CONTROLLER://:9093",
+				"KAFKA_ADVERTISED_LISTENERS":                     "PLAINTEXT://localhost:" + hostPortNum,
+				"KAFKA_LISTENER_SECURITY_PROTOCOL_MAP":           "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+				"KAFKA_CONTROLLER_LISTENER_NAMES":                "CONTROLLER",
+				"KAFKA_INTER_BROKER_LISTENER_NAME":               "PLAINTEXT",
+				"KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR":         "1",
+				"KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS":         "0",
+				"KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
+				"KAFKA_TRANSACTION_STATE_LOG_MIN_ISR":            "1",
+				"KAFKA_AUTO_CREATE_TOPICS_ENABLE":                "true",
+			},
+			WaitingFor: wait.ForLog("Kafka Server started").WithStartupTimeout(5 * time.Minute),
+		},
+		Started: true,
+	})
+	require.NoError(t, err)
+	terminate(t, container)
+
+	return "localhost:" + hostPortNum, func() {}
 }

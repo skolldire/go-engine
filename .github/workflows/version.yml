@@ -31,6 +31,25 @@ jobs:
         with:
           fetch-depth: 0  # Required to fetch all tags
 
+      # The preflight runs the same gates CI does, and none of their tools are
+      # on the runner by default: without these steps `make lint` fails on the
+      # first line with "golangci-lint: command not found", so the release job
+      # could never have got as far as tagging.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.12.2
+          # The action lints on its own by default; here it is only needed to
+          # put the binary on PATH for `make lint`, which walks every module.
+          install-mode: binary
+          args: --help
+
       - name: Get latest root tag
         id: get_tag
         run: |
