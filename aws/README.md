@@ -6,7 +6,10 @@ AWS clients for go-engine: Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, and an obs
 go get github.com/skolldire/go-engine
 ```
 
-All clients are wired automatically when declared in `config/application.yaml` and `WithInitialization()` is called on the builder. Multi-instance clients use the `*_clients` YAML array format.
+Clients are built from `config/application.yaml` by the provider you register
+with `engine.WithProvider(...)`, or by `aws/preset`, which registers every AWS
+provider declared in the configuration at once. Multi-instance clients use the
+`*_clients` YAML array format and are selected by name in `From(eng, "name")`.
 
 ---
 
@@ -85,7 +88,14 @@ sqs_clients:
 ```
 
 ```go
-q := engine.GetSQSClientByName("orders")
+import sqsprovider "github.com/skolldire/go-engine/aws/provider/sqs"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(sqsprovider.New("orders")))
+q, err := sqsprovider.From(eng, "orders")
+if err != nil {
+	return err
+}
 
 // Send
 msgID, err := q.SendMsj(ctx, queueURL, `{"event":"order.placed"}`, nil)
@@ -115,7 +125,14 @@ sns_clients:
 ```
 
 ```go
-sns := engine.GetSNSClientByName("alerts")
+import snsprovider "github.com/skolldire/go-engine/aws/provider/sns"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(snsprovider.New("alerts")))
+sns, err := snsprovider.From(eng, "alerts")
+if err != nil {
+	return err
+}
 _, err := sns.Publish(ctx, topicARN, `{"message":"server down"}`, nil)
 ```
 
@@ -131,7 +148,14 @@ ses_clients:
 ```
 
 ```go
-ses := engine.GetSESClientByName("transactional")
+import sesprovider "github.com/skolldire/go-engine/aws/provider/ses"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(sesprovider.New("transactional")))
+ses, err := sesprovider.From(eng, "transactional")
+if err != nil {
+	return err
+}
 err := ses.SendEmail(ctx, "user@example.com", "Welcome", "<h1>Hello</h1>", "Hello")
 err = ses.SendTemplatedEmail(ctx, "user@example.com", "welcome-tpl", templateData)
 ```
@@ -168,7 +192,14 @@ ssm_clients:
 ```
 
 ```go
-ssm := engine.GetSSMClientByName("config")
+import ssmprovider "github.com/skolldire/go-engine/aws/provider/ssm"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(ssmprovider.New("config")))
+ssm, err := ssmprovider.From(eng, "config")
+if err != nil {
+	return err
+}
 value, err := ssm.GetParameter(ctx, "/my-service/db-password", true) // decrypt=true
 params, err := ssm.GetParametersByPath(ctx, "/my-service/", true)
 ```
@@ -185,7 +216,14 @@ dynamo_clients:
 ```
 
 ```go
-ddb := engine.GetDynamoDBClientByName("main")
+import dynamoprovider "github.com/skolldire/go-engine/aws/provider/dynamo"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(dynamoprovider.New("main")))
+ddb, err := dynamoprovider.From(eng, "main")
+if err != nil {
+	return err
+}
 err := ddb.PutItem(ctx, "users", item)
 result, err := ddb.GetItem(ctx, "users", key)
 items, err := ddb.Query(ctx, "users", "gsi-name", "pk-value", "sk-value")
@@ -196,12 +234,17 @@ err = ddb.DeleteItem(ctx, "users", key)
 
 ## AWS facade (`awsclient`)
 
-`awsclient.Client` is an observability-aware facade over the AWS SDK. It is wired automatically by `WithInitialization()` and retrieved via `engine.GetCloudClient()`. Use it when you need a uniform `cloud.Client` interface across multiple AWS services with built-in logging + tracing + metrics.
+`awsclient.Client` is an observability-aware facade over the AWS SDK. Use it
+when you want a uniform `cloud.Client` interface across several AWS services
+with logging, tracing and metrics already wired.
+
+It has no provider: it wraps an `aws.Config` rather than a configured service,
+so it is constructed directly instead of being resolved from the engine.
 
 ```go
-import "github.com/skolldire/go-engine/aws/pkg/integration/aws"
+import awsclient "github.com/skolldire/go-engine/aws/pkg/integration/aws"
 
-cloudClient := engine.GetCloudClient()
+cloudClient := awsclient.New(awsCfg) // awsCfg is an aws.Config from the AWS SDK
 resp, err := cloudClient.Do(ctx, &cloud.Request{
     Operation: "sqs.send_message",
     Path:      queueURL,

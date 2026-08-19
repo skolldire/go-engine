@@ -14,6 +14,16 @@ import (
 // were dropped, as opposed to a clean shutdown.
 var ErrForcedShutdown = errors.New("gRPC server shutdown was forced")
 
+// ErrServerStopped reports that Start was called on a server that has already
+// been stopped.
+//
+// A *grpc.Server is single-use: once stopped it rejects every connection for
+// good. Without this check Start looked like it succeeded — it bound a listener
+// and returned nil — while Serve returned immediately and the server accepted
+// nothing. Callers got a silently deaf server and a leaked listener. Restarting
+// requires a new server, so build one with NewServer.
+var ErrServerStopped = errors.New("gRPC server is stopped and cannot be restarted")
+
 // DefaultShutdownTimeout bounds a drain that was not given one.
 const DefaultShutdownTimeout = 30 * time.Second
 
@@ -34,8 +44,13 @@ type Service interface {
 	// a background goroutine. It is non-blocking: control returns to the caller
 	// as soon as the listener is bound.
 	//
-	// When ctx is cancelled, Start triggers a GracefulStop that allows in-flight
-	// RPCs to complete before the listener is closed.
+	// When ctx is cancelled, Start triggers a drain bounded by
+	// Config.ShutdownTimeout, allowing in-flight RPCs to complete before the
+	// listener is closed.
+	//
+	// Start returns ErrServerStopped if the server has already been stopped: a
+	// *grpc.Server is single-use and cannot be restarted. Build a new one with
+	// NewServer instead.
 	Start(ctx context.Context) error
 
 	// Address reports the address the listener bound, e.g. "[::]:50051".
@@ -48,9 +63,20 @@ type Service interface {
 
 	// Stop drains the server, bounded by ctx: in-flight RPCs are allowed to
 	// finish, but a stuck one cannot hold shutdown open past the deadline.
-	// It returns ErrForcedShutdown when the deadline expired and connections
-	// had to be dropped.
-	// It is safe to call multiple times and safe to call if Start was never called.
+	// It returns ErrForcedShutdown when the deadline expired and the close had
+	// to be forced.
+	//
+	// It is safe to call concurrently, repeatedly, and before Start. Concurrent
+	// callers share one drain but are bounded individually: each returns on its
+	// own ctx, so a caller asking for one second is never held by another
+	// caller asking for thirty.
+	//
+	// Limit worth knowing: forcing closes listeners and transports, which
+	// cancels every handler's context. A handler that ignores its context
+	// cannot be aborted — Go cannot stop a goroutine from outside, and gRPC
+	// exposes no way to abandon one. Stop therefore guarantees that the caller
+	// is released on time, not that the process is free of the handler. Make
+	// handlers honour their context.
 	Stop(ctx context.Context) error
 }
 
@@ -87,11 +113,23 @@ type server struct {
 	logging         bool
 	shutdownTimeout time.Duration
 
-	// stopOnce serialises every shutdown path — the explicit Stop and the one
-	// the cancelled Start context triggers — so the two cannot run concurrently
-	// and every caller observes the same outcome. The interface promises Stop is
-	// safe to call repeatedly; this is what makes that guarantee ours rather
-	// than a property of the gRPC implementation we happen to rely on.
-	stopOnce sync.Once
-	stopErr  error
+	// Shutdown coordination.
+	//
+	// sync.Once was the wrong primitive here: Do blocks every later caller until
+	// the first returns, so a caller with a one-second deadline waited out
+	// another caller's thirty-second drain with its own context ignored. What is
+	// actually wanted is one drain, observed by many callers, each bounded by
+	// its own context.
+	//
+	//   drainOnce  starts the single graceful drain
+	//   drained    closes when that drain finishes on its own
+	//   forceOnce  guards the forced close, which any caller may trigger
+	//
+	// stopMu only guards lazy initialisation of the channel and the restart
+	// state, never a drain in progress.
+	stopMu    sync.Mutex
+	drainOnce sync.Once
+	forceOnce sync.Once
+	drained   chan struct{}
+	stopped   bool
 }

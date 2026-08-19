@@ -35,7 +35,7 @@ jobs:
           for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
 
       - name: Check architectural constraints
-        run: make lint-arch
+        run: make lint-arch && make lint-docs
 
       # Catches a submodule requiring a core version that was never published.
       # Nothing else can: go.work and the replace directives make it build fine

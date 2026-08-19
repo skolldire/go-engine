@@ -27,7 +27,14 @@ memcached_clients:
 ## Usage
 
 ```go
-mc := engine.GetMemcachedClientByName("cache")
+import mcprovider "github.com/skolldire/go-engine/database/memcached/provider/memcached"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(mcprovider.New("cache")))
+mc, err := mcprovider.From(eng, "cache")
+if err != nil {
+	return err
+}
 
 // Set / Get
 err := mc.Set(ctx, "session:abc", []byte(`{"user":"john"}`), time.Hour)

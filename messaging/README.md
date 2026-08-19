@@ -88,7 +88,14 @@ rabbitmq_clients:
 ```
 
 ```go
-rb := engine.GetRabbitMQClientByName("events")
+import rabbitprovider "github.com/skolldire/go-engine/messaging/provider/rabbitmq"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(rabbitprovider.New("events")))
+rb, err := rabbitprovider.From(eng, "events")
+if err != nil {
+	return err
+}
 err := rb.Publish(ctx, "exam.completed", jsonBytes)
 
 go rb.Consume(ctx, func(msg rabbitmq.Message) error {

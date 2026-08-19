@@ -117,6 +117,7 @@ jobs:
           # lint, coverage and vulnerabilities were all unchecked.
           make lint
           make lint-arch
+          make lint-docs
           make check-modules
           make test
           make coverage-check

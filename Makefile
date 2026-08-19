@@ -13,10 +13,10 @@ MODULES := . aws messaging http \
 FAMILY_MODULES := aws messaging http \
     database/sql database/redis database/mongodb database/memcached
 
-.PHONY: all clean test lint lint-arch lint-deps tidy check-modules smoke example example-e2e
+.PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
 
 ## all: the checks a change must pass before it is pushed
-all: lint lint-arch check-modules test example
+all: lint lint-arch lint-docs check-modules test example
 
 
 clean:
@@ -129,6 +129,10 @@ FORBIDDEN_IN_CORE := \
     github.com/bradfitz/gomemcache \
     gorm.io/gorm
 
+## lint-docs: fails if a README shows an API removed in v0.30.0 as current usage
+lint-docs:
+	@./scripts/check-doc-apis.sh
+
 ## check-modules: fails if an intra-repository require would break a consumer
 check-modules:
 	@./scripts/check-module-versions.sh
@@ -198,6 +202,8 @@ lint-deps:
 		printf "%-26s %10s %10s\n" "$$m" "$$pkgs" "$$mods"; \
 	done
 	@echo ""
-	@echo "==> Core (pkg/engine) resolves:"
-	@go list -deps ./pkg/engine/ | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -v '^github.com/skolldire/go-engine' \
+	@echo "==> An HTTP-only consumer (pkg/engine + pkg/router) resolves:"
+	@go list -deps ./pkg/engine/ ./pkg/router/ | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -v '^github.com/skolldire/go-engine' \
 		| sed -E 's|^([^/]+/[^/]+).*|\1|' | sort -u | sed 's/^/   /'
+	@printf "    ---> %s external modules\n" \
+		"$$(go list -deps ./pkg/engine/ ./pkg/router/ | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -v '^github.com/skolldire/go-engine' | sed -E 's|^([^/]+/[^/]+).*|\1|' | sort -u | grep -c .)"

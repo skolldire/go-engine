@@ -65,6 +65,16 @@ func (s *server) RegisterService(registerFunc func(server *grpc.Server)) {
 // prevents new connections and waits for active RPCs to complete before
 // releasing the port.
 func (s *server) Start(ctx context.Context) error {
+	// Refuse to restart a stopped server rather than binding a listener that
+	// would never serve a request. See ErrServerStopped.
+	s.stopMu.Lock()
+	stopped := s.stopped
+	s.stopMu.Unlock()
+
+	if stopped {
+		return ErrServerStopped
+	}
+
 	address := fmt.Sprintf(":%d", s.puerto)
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -136,41 +146,81 @@ func (s *server) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	// Once, with a shared result: a second caller waits for the first and gets
-	// the same answer instead of starting a competing drain.
-	s.stopOnce.Do(func() { s.stopErr = s.drain(ctx) })
-
-	return s.stopErr
-}
-
-// drain performs the single shutdown, bounded by ctx.
-func (s *server) drain(ctx context.Context) error {
-	if s.logging {
-		s.logger.Info(context.WithoutCancel(ctx), "stopping gRPC server", nil)
-	}
-
-	drained := make(chan struct{})
-	go func() {
-		defer close(drained)
-		s.server.GracefulStop()
-	}()
+	done := s.beginDrain(ctx)
 
 	select {
-	case <-drained:
+	case <-done:
+		// The graceful drain finished within this caller's window.
 		return nil
 
 	case <-ctx.Done():
-		// Stop closes the connections outright, which is what unblocks
-		// GracefulStop.
-		s.server.Stop()
+		// This caller's deadline expired. Force the close so the drain ends for
+		// everyone, then report the forcing to this caller. Another caller with
+		// a longer deadline simply observes the drain completing.
+		s.force()
 
-		// Deliberately not waiting for the drain goroutine here. GracefulStop
-		// only returns once every handler has returned, so waiting would make
-		// a handler that never returns block shutdown for good — the exact
-		// thing this deadline exists to prevent. The goroutine ends when its
-		// handler does; the process is on its way down either way.
+		// Deliberately not waiting for the drain goroutine. GracefulStop only
+		// returns once every handler has returned, so waiting would let a
+		// handler that never returns block shutdown for good — the exact thing
+		// this deadline exists to prevent.
 		return fmt.Errorf("%w: %w", ErrForcedShutdown, ctx.Err())
 	}
+}
+
+// force closes the server the hard way, once, without blocking the caller.
+//
+// The goroutine is not defensive style, it is required. In grpc-go, Stop and
+// GracefulStop share one implementation that holds the server mutex across
+// handlersWG.Wait():
+//
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	...
+//	if graceful || s.opts.waitForHandlers {
+//	    s.handlersWG.Wait()
+//	}
+//
+// So once the graceful drain is waiting on a handler, a concurrent Stop blocks
+// acquiring that same mutex. Calling it inline would make the forced path hang
+// on exactly the stuck handler the deadline exists to escape — the canonical
+// "GracefulStop, then Stop on timeout" snippet has this bug.
+//
+// What this buys, and what it does not: forcing closes the listeners and the
+// transports, so handlers that honour their context are cancelled and return.
+// A handler that ignores its context cannot be aborted — Go has no way to stop
+// a goroutine from outside — so the server keeps its resources until that
+// handler returns. This method guarantees the caller is released on time; it
+// cannot guarantee the process is free of the handler.
+func (s *server) force() {
+	s.forceOnce.Do(func() { go s.server.Stop() })
+}
+
+// beginDrain starts the graceful drain if it is not already running and returns
+// the channel that closes when it finishes.
+//
+// The drain itself takes no context: it belongs to the server, not to whichever
+// caller happened to start it. Deadlines are applied per caller in Stop.
+func (s *server) beginDrain(ctx context.Context) <-chan struct{} {
+	s.stopMu.Lock()
+	if s.drained == nil {
+		s.drained = make(chan struct{})
+	}
+	done := s.drained
+	s.stopped = true
+	s.stopMu.Unlock()
+
+	s.drainOnce.Do(func() {
+		if s.logging {
+			s.logger.Info(context.WithoutCancel(ctx), "stopping gRPC server", nil)
+		}
+
+		go func() {
+			defer close(done)
+			s.server.GracefulStop()
+		}()
+	})
+
+	return done
 }
 
 // Address implements Service.

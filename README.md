@@ -10,7 +10,7 @@ health checks and observability, and releases them in reverse order on shutdown.
 
 The core knows no adapter. AWS, databases and messaging live in their own
 modules and register themselves through a `Provider` interface, so a service
-that only needs an HTTP router links 19 external modules instead of 110.
+that only needs an HTTP router links 13 external modules.
 
 Not a runnable binary — consumed via `go get`.
 
@@ -22,11 +22,20 @@ Not a runnable binary — consumed via `go get`.
 downloads the core plus only the families it imports, so an HTTP-only service
 never fetches the AWS SDK, a Mongo driver or a Kafka client.
 
-Both figures above are reproducible rather than illustrative:
+That figure is reproducible rather than illustrative — the last line of
 
 ```bash
-make lint-deps   # external modules the core links
+make lint-deps
 ```
+
+prints it, resolved from `pkg/engine` plus `pkg/router`. The per-module table it
+also prints counts each module's full dependency set, tests included, so those
+numbers are larger and answer a different question.
+
+For scale: before the v0.30.0 split, the equivalent entry point (`pkg/app`)
+linked every adapter unconditionally. That figure is quoted in
+[`CHANGELOG.md`](CHANGELOG.md) rather than here, because the package no longer
+exists and nothing in this repository can recompute it.
 
 | Module | Import path | Contains |
 |---|---|---|
