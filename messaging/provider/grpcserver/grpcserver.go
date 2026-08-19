@@ -7,6 +7,7 @@ import (
 
 	grpcsrv "github.com/skolldire/go-engine/messaging/pkg/server/grpc"
 	"github.com/skolldire/go-engine/pkg/engine"
+	"google.golang.org/grpc"
 )
 
 // ConfigKey is the configuration section this provider consumes.
@@ -14,13 +15,22 @@ const ConfigKey = "grpc_server"
 
 // Provider builds the gRPC server.
 type Provider struct {
+	opts   []grpc.ServerOption
 	server grpcsrv.Service
 }
 
 var _ engine.Provider = (*Provider)(nil)
 
 // New returns the gRPC server provider.
-func New() *Provider { return &Provider{} }
+//
+// opts reach grpc.NewServer untouched. Interceptors must be supplied here
+// because gRPC fixes them when the server is constructed, and the provider is
+// what constructs it:
+//
+//	engine.WithProvider(grpcserver.New(
+//	    grpc.ChainUnaryInterceptor(authInterceptor, tracingInterceptor),
+//	))
+func New(opts ...grpc.ServerOption) *Provider { return &Provider{opts: opts} }
 
 // Name implements engine.Provider.
 func (p *Provider) Name() string { return "grpc_server" }
@@ -39,7 +49,7 @@ func (p *Provider) Init(ctx context.Context, raw engine.RawConfig, deps engine.D
 		return nil, err
 	}
 
-	p.server = grpcsrv.NewServer(ctx, cfg, deps.Logger)
+	p.server = grpcsrv.NewServer(ctx, cfg, deps.Logger, p.opts...)
 	return p.server, nil
 }
 

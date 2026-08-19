@@ -30,9 +30,12 @@ make lint-deps
 
 prints it, resolved from `pkg/engine` plus `pkg/router`. It counts each
 package's real `Module.Path`, so modules that share an owner stay distinct:
-`spf13/viper` and `spf13/afero` are two, not one. The per-module table it also
-prints counts each module's full dependency set, tests included, so those
-numbers are larger and answer a different question.
+`spf13/viper` and `spf13/afero` are two, not one.
+
+The per-module table printed above it counts every package in that module, not
+just the two an HTTP-only consumer reaches, so those numbers are larger and
+answer a different question. Neither figure includes test-only dependencies:
+they are what a consumer resolves, and `go list -deps` is run without `-test`.
 
 For scale: before the v0.30.0 split, the equivalent entry point (`pkg/app`)
 linked every adapter unconditionally. That figure is quoted in

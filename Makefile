@@ -195,7 +195,10 @@ lint-arch:
 	[ $$FAILED -eq 0 ] || (echo ""; echo "FAIL: architectural violations found"; exit 1)
 	@echo "==> OK: no architectural violations found"
 
-## lint-deps: reports the external dependency footprint of every module
+# The figure README.md quotes for a router-only consumer. Kept here so the
+# claim and the check that enforces it cannot drift apart.
+HTTP_ONLY_MODULES = 19
+
 ## lint-deps: reports the external dependency footprint of every module
 lint-deps:
 	@# Counting uses each package's real Module.Path, never a prefix of the
@@ -203,15 +206,39 @@ lint-deps:
 	@# share an owner: spf13/{viper,afero,cast,pflag} collapsed into one, as did
 	@# golang.org/x/{sync,sys,text} and go-chi/{chi,cors}. That heuristic
 	@# under-reported the HTTP-only footprint as 13 when it is 19.
+	@#
+	@# $(SELF_MODULES) drops this repository's own modules and nothing else.
+	@# A bare prefix would also drop a third-party module that merely started
+	@# with the same string; anchoring on "/" or end-of-line cannot.
+	@#
+	@# No -test flag: these are the dependencies a consumer resolves, so test-only
+	@# imports are deliberately out of scope. Adding -test raises the root module
+	@# from 49 to 55 and answers a different question.
 	@printf "%-26s %10s %10s\n" "MODULE" "PACKAGES" "MODULES"
 	@for m in $(MODULES); do \
-		pkgs=$$(cd $$m && go list -deps ./... 2>/dev/null | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -vc '^github.com/skolldire/go-engine'); \
-		mods=$$(cd $$m && go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./... 2>/dev/null | grep -v '^$$' | grep -v '^github.com/skolldire/go-engine' | sort -u | grep -c .); \
+		pkgs=$$(cd $$m && go list -deps ./... 2>/dev/null | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -vcE '^github\.com/skolldire/go-engine(/|$$)'); \
+		mods=$$(cd $$m && go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./... 2>/dev/null | grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | grep -c .); \
 		printf "%-26s %10s %10s\n" "$$m" "$$pkgs" "$$mods"; \
 	done
 	@echo ""
 	@echo "==> An HTTP-only consumer (pkg/engine + pkg/router) resolves:"
 	@go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router \
-		| grep -v '^$$' | grep -v '^github.com/skolldire/go-engine' | sort -u | sed 's/^/   /'
+		| grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | sed 's/^/   /'
 	@printf "    ---> %s external Go modules\n" \
-		"$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router | grep -v '^$$' | grep -v '^github.com/skolldire/go-engine' | sort -u | grep -c .)"
+		"$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router | grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | grep -c .)"
+	@# Guard the filter itself. An over-broad pattern silently drops third-party
+	@# modules and under-reports the footprint; a broken one leaks our own
+	@# modules in and over-reports it. Both have happened.
+	@internal=$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router \
+		| grep -v '^$$' | grep -cE '^github\.com/skolldire/go-engine(/|$$)' || true); \
+	if [ "$$internal" -eq 0 ]; then \
+		echo "FAIL: the filter matched none of this repository's own modules, so it is not doing its job"; \
+		exit 1; \
+	fi
+	@count=$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router \
+		| grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | grep -c .); \
+	if [ "$$count" -ne $(HTTP_ONLY_MODULES) ]; then \
+		echo "FAIL: the HTTP-only footprint is $$count, but README.md states $(HTTP_ONLY_MODULES)."; \
+		echo "      Update both, or explain the change in CHANGELOG.md."; \
+		exit 1; \
+	fi

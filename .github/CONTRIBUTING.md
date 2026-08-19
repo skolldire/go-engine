@@ -141,7 +141,17 @@ The public interface is always `Service`. The constructor is always `NewClient` 
 
 ## Tests
 
-- Minimum acceptable coverage: **85%** per package.
+- Coverage has two tiers, and they are not the same number:
+  - **CI enforces 80%**, and only on the packages listed as `CRITICAL_PKGS` in
+    the `Makefile`: `pkg/engine`, `pkg/router`, `pkg/health`,
+    `pkg/utilities/{resilience,error_handler,retry_backoff}`. That is
+    `make coverage-check`, and it is the bar a pull request must clear to merge.
+  - **Review expects 85%** on the code you add or change, anywhere in the
+    repository. It is a review judgement rather than a gate, because a package
+    of thin wrappers and one of branching logic do not deserve the same target.
+
+  If you add a package that carries real logic, propose adding it to
+  `CRITICAL_PKGS` in the same pull request.
 - Use `testify/assert` and `testify/mock`.
 - Mocks for external interfaces go in the same `_test.go` file where they are used, or in `mocks_test.go` if they are extensive.
 - Do not mock the database or Redis if the test can use a real in-memory implementation. Mock the engine interfaces, not the full external clients.
@@ -207,7 +217,8 @@ BREAKING CHANGE: ServiceRegistry.Health type changed from health.Service to *hea
 
 ```
 [ ] go build ./... passes (all affected modules)
-[ ] go test ./... passes with coverage ≥ 85% in modified packages
+[ ] go test ./... passes; new and changed code is covered to ~85%
+[ ] make coverage-check passes (80% on the critical packages)
 [ ] golangci-lint run passes with no new warnings
 [ ] CHANGELOG.md updated under [Unreleased]
 [ ] README updated if the public API changed (builder, getters, YAML config)
@@ -233,7 +244,7 @@ BREAKING CHANGE: ServiceRegistry.Health type changed from health.Service to *hea
    otherwise run on a copy and its state would be discarded.
 4. Expose a `From(e *engine.Engine, instance string)` helper so consumers do
    not type-assert by hand.
-5. Add tests with coverage ≥ 85%. Mocks go in the family's `testutil`.
+5. Add tests covering the new code to ~85%. Mocks go in the family's `testutil`.
 6. Document it in that module's README using the provider API; `make lint-docs`
    fails if a README shows an API that no longer exists.
 

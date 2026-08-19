@@ -11,30 +11,29 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-// NewServer creates a gRPC server with gRPC reflection enabled.
-// Reflection allows tools like grpcurl and Postman to discover services without
-// pre-compiled proto descriptors.
+// NewServer creates a gRPC server with reflection enabled, so grpcurl and
+// Postman can discover services without pre-compiled proto descriptors.
 //
-// Interceptors (auth, logging, tracing, etc.) must be provided via
-// grpc.NewServer options before calling NewServer, or registered on the
-// underlying *grpc.Server after construction via RegisterService.
+// opts are passed straight to grpc.NewServer. Interceptors have to arrive this
+// way because gRPC fixes them at construction time and offers no way to add
+// them afterwards; taking them here is what lets a service add auth, tracing or
+// logging without giving up the wrapper's bounded Stop, lifecycle checks and
+// Address.
 //
-// Register your service implementations after the engine has built the server:
+// Typical use goes through the provider, which forwards its own options:
 //
-//	eng, err := engine.New(ctx, engine.WithProvider(grpcserver.New()))
+//	eng, err := engine.New(ctx, engine.WithProvider(grpcserver.New(
+//	    grpc.ChainUnaryInterceptor(authInterceptor, loggingInterceptor),
+//	)))
 //	srv, err := grpcserver.From(eng)
 //
 //	srv.RegisterService(func(s *grpc.Server) {
 //	    pb.RegisterOrdersServer(s, ordersImpl)
 //	})
 //
-// Interceptors are the one thing that cannot be added this way: gRPC fixes them
-// at grpc.NewServer time, before this constructor returns. A service that needs
-// them builds its own *grpc.Server and registers it as a custom component:
-//
-//	engine.Get[*grpc.Server](eng, "my-grpc-server")
-func NewServer(ctx context.Context, cfg Config, log logger.Service) Service {
-	grpcServer := grpc.NewServer()
+//	err = srv.Start(ctx)
+func NewServer(ctx context.Context, cfg Config, log logger.Service, opts ...grpc.ServerOption) Service {
+	grpcServer := grpc.NewServer(opts...)
 
 	reflection.Register(grpcServer)
 

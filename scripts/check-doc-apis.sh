@@ -75,6 +75,20 @@ scan() {
 		hits=$(grep -nE "$expr" "$file" || true)
 		[ -z "$hits" ] && continue
 
+		# An exemption must state a reason. A bare marker is a silent hole, and
+		# the reason is the only thing that lets a later reader judge whether it
+		# still applies, so the marker without one is rejected rather than
+		# honoured.
+		local bare
+		bare=$(echo "$hits" | grep -E "$ALLOW_MARKER" | grep -vE "$ALLOW_MARKER: *[^ ]" || true)
+		if [ -n "$bare" ]; then
+			echo "FAIL: $file uses $ALLOW_MARKER without a reason:"
+			echo "$bare" | sed 's/^/    /'
+			echo "    write it as: $ALLOW_MARKER: <why this text is about the past>"
+			status=1
+			continue
+		fi
+
 		# Drop lines that carry an explicit, reasoned exemption.
 		hits=$(echo "$hits" | grep -v "$ALLOW_MARKER" || true)
 		[ -z "$hits" ] && continue
@@ -120,6 +134,9 @@ EOF
 	cat >"$tmp/dirty/field.md" <<'EOF'
 grpcSrv := engine.GrpcServer
 EOF
+	cat >"$tmp/dirty/bare_marker.md" <<'EOF'
+The old entry point was AppBuilder. removed-api-ok
+EOF
 
 	fails=0
 
@@ -131,7 +148,7 @@ EOF
 		fails=1
 	fi
 
-	for f in readme.md example_test.go getter.md field.md; do
+	for f in readme.md example_test.go getter.md field.md bare_marker.md; do
 		mkdir -p "$tmp/one"
 		cp "$tmp/dirty/$f" "$tmp/one/"
 		if scan "$tmp/one" >/dev/null 2>&1; then
