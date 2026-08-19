@@ -41,8 +41,8 @@ type builder struct {
 // Note: there is deliberately no WithConfigWatch option. Live reload requires
 // republishing the new configuration to components that were already built,
 // which the Provider contract does not yet express. An option that starts a
-// watcher nobody listens to is the defect the audit found in the old
-// WithDynamicConfig, so it is left unimplemented rather than half-implemented.
+// watcher nobody listens to is the defect the audit found in the old builder,
+// so it is left unimplemented rather than half-implemented.
 
 // WithConfigDir reads configuration from dir instead of CONF_DIR or ./config.
 func WithConfigDir(dir string) Option {

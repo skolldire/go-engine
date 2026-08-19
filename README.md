@@ -10,7 +10,7 @@ health checks and observability, and releases them in reverse order on shutdown.
 
 The core knows no adapter. AWS, databases and messaging live in their own
 modules and register themselves through a `Provider` interface, so a service
-that only needs an HTTP router links 13 external modules.
+that only needs an HTTP router links 19 external Go modules.
 
 Not a runnable binary — consumed via `go get`.
 
@@ -28,8 +28,10 @@ That figure is reproducible rather than illustrative — the last line of
 make lint-deps
 ```
 
-prints it, resolved from `pkg/engine` plus `pkg/router`. The per-module table it
-also prints counts each module's full dependency set, tests included, so those
+prints it, resolved from `pkg/engine` plus `pkg/router`. It counts each
+package's real `Module.Path`, so modules that share an owner stay distinct:
+`spf13/viper` and `spf13/afero` are two, not one. The per-module table it also
+prints counts each module's full dependency set, tests included, so those
 numbers are larger and answer a different question.
 
 For scale: before the v0.30.0 split, the equivalent entry point (`pkg/app`)

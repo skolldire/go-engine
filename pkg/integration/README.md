@@ -158,16 +158,13 @@ resp, err := aws.LambdaInvoke(ctx, client, functionName, payload)
 El `CloudClient` está disponible opcionalmente en el Engine:
 
 ```go
-engine := app.NewApp().
-    GetConfigs().
-    Init().
-    Build()
+import awsclient "github.com/skolldire/go-engine/aws/pkg/integration/aws"
 
-// Usar CloudClient del Engine
-client := engine.GetCloudClient()
-if client != nil {
-    msgID, err := aws.SQSSend(ctx, client, "my-queue", payload)
-}
+// El facade envuelve un aws.Config, no un servicio configurado, así que se
+// construye directamente en lugar de resolverse desde el engine.
+client := awsclient.New(awsCfg)
+
+msgID, err := aws.SQSSend(ctx, client, "my-queue", payload)
 ```
 
 ## Middleware de Observabilidad

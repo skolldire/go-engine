@@ -116,7 +116,14 @@ grpc_client:
 ```
 
 ```go
-conn := engine.GetGRPCClient("calibration")
+import grpcprovider "github.com/skolldire/go-engine/messaging/provider/grpcclient"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(grpcprovider.New("calibration")))
+conn, err := grpcprovider.From(eng, "calibration")
+if err != nil {
+    return err
+}
 
 // Get the underlying *grpc.ClientConn for generated stubs:
 grpcConn := conn.GetConnection()
@@ -145,14 +152,30 @@ grpc_server:
 ```
 
 ```go
-grpcSrv := engine.GrpcServer
+import (
+    grpcsrvprovider "github.com/skolldire/go-engine/messaging/provider/grpcserver"
+    "github.com/skolldire/go-engine/pkg/engine"
+)
+
+// The provider reads the grpc_server section and builds the server:
+eng, err := engine.New(ctx, engine.WithProvider(grpcsrvprovider.New()))
+if err != nil {
+    log.Fatal(err)
+}
+
+grpcSrv, err := grpcsrvprovider.From(eng)
+if err != nil {
+    log.Fatal(err)
+}
 
 // Register generated service implementations before Start:
 grpcSrv.RegisterService(func(s *grpc.Server) {
     pb.RegisterCalibrationServiceServer(s, &myImpl{})
 })
 
-// Start is non-blocking; cancelling ctx triggers GracefulStop:
+// Start is non-blocking; cancelling ctx triggers a drain bounded by
+// shutdown_timeout. Start after Stop returns ErrServerStopped: a *grpc.Server
+// is single-use.
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 if err := grpcSrv.Start(ctx); err != nil {

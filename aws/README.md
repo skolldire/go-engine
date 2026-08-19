@@ -112,9 +112,6 @@ for _, m := range msgs {
 }
 ```
 
-**Legacy single client:** `engine.GetSQSClient()`. Prefer named clients.
-
----
 
 ## SNS
 
@@ -257,9 +254,9 @@ Wrap it with observability middleware:
 ```go
 import "github.com/skolldire/go-engine/pkg/integration/observability"
 
-chain := cloud.Chain(engine.GetCloudClient(),
-    observability.Logging(engine.GetLogger()),
-    observability.Metrics(observability.NewTelemetryMetricsRecorder(engine.GetTelemetry())),
+chain := cloud.Chain(awsclient.New(awsCfg),
+    observability.Logging(eng.Logger()),
+    observability.Metrics(observability.NewTelemetryMetricsRecorder(eng.Telemetry())),
     observability.Tracing(myTracer),
 )
 ```

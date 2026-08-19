@@ -65,31 +65,41 @@ func (s *server) RegisterService(registerFunc func(server *grpc.Server)) {
 // prevents new connections and waits for active RPCs to complete before
 // releasing the port.
 func (s *server) Start(ctx context.Context) error {
-	// Refuse to restart a stopped server rather than binding a listener that
-	// would never serve a request. See ErrServerStopped.
-	s.stopMu.Lock()
-	stopped := s.stopped
-	s.stopMu.Unlock()
-
-	if stopped {
+	// The lifecycle check and the bind happen under one lock. Checking, then
+	// releasing, then binding left a window in which a Stop could complete
+	// between the two, and Start would report success for a server that was
+	// already stopped.
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
 		return ErrServerStopped
 	}
+	if s.started {
+		s.mu.Unlock()
+		return ErrAlreadyStarted
+	}
 
-	address := fmt.Sprintf(":%d", s.puerto)
-	listener, err := net.Listen("tcp", address)
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.puerto))
 	if err != nil {
+		// Nothing was reserved, so there is nothing to roll back: started is
+		// still false and a later Start may retry.
+		s.mu.Unlock()
 		return fmt.Errorf("error starting listener: %w", err)
 	}
 
+	s.started = true
+
 	// Record what the kernel actually gave us: with Puerto 0 the configured
 	// address says nothing about where the server can be reached.
-	s.addrMu.Lock()
 	s.addr = listener.Addr().String()
-	s.addrMu.Unlock()
+
+	// Take the drain channel while still holding the lock, so the watcher below
+	// observes the same one a concurrent Stop would create.
+	done := s.drainedLocked()
+	s.mu.Unlock()
 
 	if s.logging {
-		s.logger.Info(ctx, "starting gRPC server",
-			map[string]any{"puerto": s.puerto})
+		s.logger.Info(ctx, "starting gRPC server", map[string]any{"puerto": s.puerto})
 	}
 
 	go func() {
@@ -102,22 +112,29 @@ func (s *server) Start(ctx context.Context) error {
 	}()
 
 	go func() {
-		<-ctx.Done()
+		select {
+		case <-ctx.Done():
+			// Reuse the bounded Stop rather than calling GracefulStop directly.
+			// This path had the very defect Stop was written to remove: a stuck
+			// RPC left this goroutine waiting for the life of the process, and
+			// the explicit shutdown path being correct did not help an
+			// application that only cancels its context.
+			//
+			// The context is detached from the cancelled one so the drain gets
+			// its full window instead of expiring immediately.
+			shutdownCtx, cancel := context.WithTimeout(
+				context.WithoutCancel(ctx), s.shutdownTimeout)
+			defer cancel()
 
-		// Reuse the bounded Stop rather than calling GracefulStop directly.
-		// This path had the very defect Stop was written to remove: a stuck RPC
-		// left this goroutine waiting for the life of the process, and the
-		// explicit shutdown path being correct did not help an application that
-		// only cancels its context.
-		//
-		// The context is detached from the cancelled one so the drain gets its
-		// full window instead of expiring immediately.
-		shutdownCtx, cancel := context.WithTimeout(
-			context.WithoutCancel(ctx), s.shutdownTimeout)
-		defer cancel()
+			if err := s.Stop(shutdownCtx); err != nil && s.logging {
+				s.logger.Error(context.WithoutCancel(ctx), err, nil)
+			}
 
-		if err := s.Stop(shutdownCtx); err != nil && s.logging {
-			s.logger.Error(context.WithoutCancel(ctx), err, nil)
+		case <-done:
+			// The server was shut down through Stop instead. Without this arm
+			// the watcher outlived the server it watched: a caller passing
+			// context.Background() and stopping explicitly leaked one goroutine
+			// per Start for the life of the process.
 		}
 	}()
 
@@ -150,13 +167,19 @@ func (s *server) Stop(ctx context.Context) error {
 
 	select {
 	case <-done:
-		// The graceful drain finished within this caller's window.
+		// The drain finished within this caller's window. It still may not have
+		// been a clean one: another caller's deadline may have expired and cut
+		// connections. Reporting nil then would hide a forced shutdown from the
+		// engine's aggregated error, which is where an operator would look.
+		if s.forced.Load() {
+			return fmt.Errorf("%w: another caller's deadline expired first",
+				ErrForcedShutdown)
+		}
 		return nil
 
 	case <-ctx.Done():
 		// This caller's deadline expired. Force the close so the drain ends for
-		// everyone, then report the forcing to this caller. Another caller with
-		// a longer deadline simply observes the drain completing.
+		// everyone, then report the forcing to this caller.
 		s.force()
 
 		// Deliberately not waiting for the drain goroutine. GracefulStop only
@@ -192,7 +215,12 @@ func (s *server) Stop(ctx context.Context) error {
 // handler returns. This method guarantees the caller is released on time; it
 // cannot guarantee the process is free of the handler.
 func (s *server) force() {
-	s.forceOnce.Do(func() { go s.server.Stop() })
+	s.forceOnce.Do(func() {
+		// Recorded before the close is attempted, so a caller that observes the
+		// drain finishing cannot miss the fact that it was forced.
+		s.forced.Store(true)
+		go s.server.Stop()
+	})
 }
 
 // beginDrain starts the graceful drain if it is not already running and returns
@@ -201,13 +229,10 @@ func (s *server) force() {
 // The drain itself takes no context: it belongs to the server, not to whichever
 // caller happened to start it. Deadlines are applied per caller in Stop.
 func (s *server) beginDrain(ctx context.Context) <-chan struct{} {
-	s.stopMu.Lock()
-	if s.drained == nil {
-		s.drained = make(chan struct{})
-	}
-	done := s.drained
+	s.mu.Lock()
+	done := s.drainedLocked()
 	s.stopped = true
-	s.stopMu.Unlock()
+	s.mu.Unlock()
 
 	s.drainOnce.Do(func() {
 		if s.logging {
@@ -223,9 +248,18 @@ func (s *server) beginDrain(ctx context.Context) <-chan struct{} {
 	return done
 }
 
+// drainedLocked returns the drain channel, creating it on first use.
+// s.mu must be held.
+func (s *server) drainedLocked() chan struct{} {
+	if s.drained == nil {
+		s.drained = make(chan struct{})
+	}
+	return s.drained
+}
+
 // Address implements Service.
 func (s *server) Address() string {
-	s.addrMu.RLock()
-	defer s.addrMu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.addr
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
@@ -24,6 +25,11 @@ var ErrForcedShutdown = errors.New("gRPC server shutdown was forced")
 // requires a new server, so build one with NewServer.
 var ErrServerStopped = errors.New("gRPC server is stopped and cannot be restarted")
 
+// ErrAlreadyStarted reports that Start was called on a server that is already
+// serving. Without it a second Start bound a second listener and leaked it,
+// since only the first is ever handed to Serve or closed.
+var ErrAlreadyStarted = errors.New("gRPC server is already started")
+
 // DefaultShutdownTimeout bounds a drain that was not given one.
 const DefaultShutdownTimeout = 30 * time.Second
 
@@ -31,13 +37,25 @@ const DefaultShutdownTimeout = 30 * time.Second
 type Service interface {
 	// RegisterService calls registerFunc with the underlying *grpc.Server so
 	// that the caller can register one or more generated service implementations.
-	// It must be called before Start.
+	// It must be called before Start: gRPC rejects registrations once the
+	// server is serving.
 	//
-	// Example:
+	// Obtain the server from the engine, register, then start:
 	//
+	//   import grpcsrvprovider "github.com/skolldire/go-engine/messaging/provider/grpcserver"
+	//
+	//   eng, err := engine.New(ctx, engine.WithProvider(grpcsrvprovider.New()))
+	//   ...
+	//   srv, err := grpcsrvprovider.From(eng)
+	//   ...
 	//   srv.RegisterService(func(s *grpc.Server) {
 	//       pb.RegisterAssessmentServiceServer(s, &myImpl{})
 	//   })
+	//   err = srv.Start(ctx)
+	//
+	// The provider builds the server from the grpc_server configuration section
+	// and registers its Stop with the engine's shutdown, so the drain happens
+	// in reverse dependency order without the application arranging it.
 	RegisterService(registerFunc func(server *grpc.Server))
 
 	// Start begins listening on the configured port and serves incoming RPCs in
@@ -50,7 +68,8 @@ type Service interface {
 	//
 	// Start returns ErrServerStopped if the server has already been stopped: a
 	// *grpc.Server is single-use and cannot be restarted. Build a new one with
-	// NewServer instead.
+	// NewServer instead. It returns ErrAlreadyStarted on a second call, rather
+	// than binding a second listener nothing would ever close.
 	Start(ctx context.Context) error
 
 	// Address reports the address the listener bound, e.g. "[::]:50051".
@@ -70,6 +89,11 @@ type Service interface {
 	// callers share one drain but are bounded individually: each returns on its
 	// own ctx, so a caller asking for one second is never held by another
 	// caller asking for thirty.
+	//
+	// Once any caller forces the close, every caller reports ErrForcedShutdown,
+	// including one whose own deadline had room to spare. A forced shutdown cut
+	// live connections, and returning nil to the caller that happened to be
+	// waiting would hide that from the engine's aggregated shutdown error.
 	//
 	// Limit worth knowing: forcing closes listeners and transports, which
 	// cancels every handler's context. A handler that ignores its context
@@ -103,33 +127,39 @@ type Config struct {
 }
 
 type server struct {
-	// addr is written once by Start and read by Address, so it is guarded.
-	addrMu sync.RWMutex
-	addr   string
-
 	server          *grpc.Server
 	puerto          int
 	logger          logger.Service
 	logging         bool
 	shutdownTimeout time.Duration
 
+	// mu guards the whole lifecycle: addr, the started/stopped flags and the
+	// lazily created drained channel.
+	//
+	// One mutex rather than two. Start used to read the stopped flag, release
+	// its lock and only then bind the listener, so a Stop landing in that gap
+	// let Start return nil for a server that was already finished. Holding the
+	// lock across net.Listen closes the window outright; the call is a syscall,
+	// not a drain, so nothing waits on it for long. A four-state machine would
+	// buy the same guarantee at more cost than the problem is worth.
+	mu      sync.Mutex
+	addr    string
+	started bool
+	stopped bool
+	drained chan struct{}
+
 	// Shutdown coordination.
 	//
-	// sync.Once was the wrong primitive here: Do blocks every later caller until
-	// the first returns, so a caller with a one-second deadline waited out
-	// another caller's thirty-second drain with its own context ignored. What is
-	// actually wanted is one drain, observed by many callers, each bounded by
-	// its own context.
+	// sync.Once was the wrong primitive: Do blocks every later caller until the
+	// first returns, so a caller with a one-second deadline waited out another
+	// caller's thirty-second drain with its own context ignored. What is wanted
+	// is one drain, observed by many callers, each bounded by its own context.
 	//
 	//   drainOnce  starts the single graceful drain
-	//   drained    closes when that drain finishes on its own
+	//   drained    closes when that drain finishes
 	//   forceOnce  guards the forced close, which any caller may trigger
-	//
-	// stopMu only guards lazy initialisation of the channel and the restart
-	// state, never a drain in progress.
-	stopMu    sync.Mutex
+	//   forced     records that a force happened, for every caller to read
 	drainOnce sync.Once
 	forceOnce sync.Once
-	drained   chan struct{}
-	stopped   bool
+	forced    atomic.Bool
 }

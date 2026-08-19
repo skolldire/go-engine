@@ -65,12 +65,14 @@ func (c *IRTScorerClient) Score(ctx context.Context, responses []int) (*IRTScore
 
 // --- Example function ---
 
-// Example_customClient shows how to build a custom client using BaseClient,
-// inject it into the engine via WithCustomClient, and retrieve it with
-// GetCustomClient + SafeTypeAssert.
+// Example_customClient shows how to build a client on top of BaseClient and
+// hand it to the engine.
 //
-// In a real service the engine would be built with app.NewAppBuilder();
-// here we demonstrate the pattern with the client in isolation.
+// There is no generic "custom client" slot. A client joins an engine by
+// implementing engine.Provider, the same interface every adapter in this
+// repository uses, and is retrieved with engine.Get[T]. That is what keeps the
+// core free of adapter imports: the engine never needs to know the concrete
+// type, only that something claimed the configuration section.
 func Example_customClient() {
 	// 1. Build the custom client.
 	log := &noopLogger{}
@@ -79,18 +81,32 @@ func Example_customClient() {
 		Timeout: 5 * time.Second,
 	}, log)
 
-	// 2. Use it directly (or inject into the AppBuilder via WithCustomClient).
+	// 2. Use it directly, or wrap it in an engine.Provider so the engine builds
+	//    it from configuration and closes it in reverse order on shutdown:
 	//
-	//    engine, _ := app.NewAppBuilder().
-	//        WithDynamicConfig().
-	//        WithCustomClient("irt-scorer", scorer).
-	//        WithRouter().
-	//        Build()
+	//    type provider struct{ c *IRTScorerClient }
 	//
-	//    Later, in a handler or use-case:
+	//    func (p *provider) Name() string      { return "irt-scorer" }
+	//    func (p *provider) ConfigKey() string { return "irt_scorer" }
 	//
-	//    raw    := engine.GetCustomClient("irt-scorer")
-	//    scorer, err := client.SafeTypeAssert[*IRTScorerClient](raw)
+	//    func (p *provider) Init(ctx context.Context, raw engine.RawConfig,
+	//        deps engine.Deps) (any, error) {
+	//
+	//        var cfg IRTScorerConfig
+	//        if err := raw.Decode(&cfg); err != nil {
+	//            return nil, err
+	//        }
+	//        p.c = NewIRTScorerClient(cfg, deps.Logger)
+	//        return p.c, nil
+	//    }
+	//
+	//    func (p *provider) Close(ctx context.Context) error { return nil }
+	//
+	//    eng, _ := engine.New(ctx, engine.WithProvider(&provider{}))
+	//
+	//    Later, in a handler or use case:
+	//
+	//    scorer, err := engine.Get[*IRTScorerClient](eng, "irt-scorer")
 
 	// 3. Call it.
 	result, err := scorer.Score(context.Background(), []int{1, 0, 1, 1})

@@ -129,8 +129,11 @@ FORBIDDEN_IN_CORE := \
     github.com/bradfitz/gomemcache \
     gorm.io/gorm
 
-## lint-docs: fails if a README shows an API removed in v0.30.0 as current usage
+## lint-docs: fails if docs or examples show an API removed in v0.30.0
 lint-docs:
+	@# The gate runs its own fixtures first: the first version of this script
+	@# reported OK against a tree that had six stale examples in it.
+	@./scripts/check-doc-apis.sh --self-test
 	@./scripts/check-doc-apis.sh
 
 ## check-modules: fails if an intra-repository require would break a consumer
@@ -193,17 +196,22 @@ lint-arch:
 	@echo "==> OK: no architectural violations found"
 
 ## lint-deps: reports the external dependency footprint of every module
+## lint-deps: reports the external dependency footprint of every module
 lint-deps:
+	@# Counting uses each package's real Module.Path, never a prefix of the
+	@# import path. Truncating to two segments merges distinct modules that
+	@# share an owner: spf13/{viper,afero,cast,pflag} collapsed into one, as did
+	@# golang.org/x/{sync,sys,text} and go-chi/{chi,cors}. That heuristic
+	@# under-reported the HTTP-only footprint as 13 when it is 19.
 	@printf "%-26s %10s %10s\n" "MODULE" "PACKAGES" "MODULES"
 	@for m in $(MODULES); do \
-		deps=$$(cd $$m && go list -deps ./... 2>/dev/null | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -v '^github.com/skolldire/go-engine'); \
-		pkgs=$$(echo "$$deps" | grep -c .); \
-		mods=$$(echo "$$deps" | sed -E 's|^([^/]+/[^/]+).*|\1|' | sort -u | grep -c .); \
+		pkgs=$$(cd $$m && go list -deps ./... 2>/dev/null | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -vc '^github.com/skolldire/go-engine'); \
+		mods=$$(cd $$m && go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./... 2>/dev/null | grep -v '^$$' | grep -v '^github.com/skolldire/go-engine' | sort -u | grep -c .); \
 		printf "%-26s %10s %10s\n" "$$m" "$$pkgs" "$$mods"; \
 	done
 	@echo ""
 	@echo "==> An HTTP-only consumer (pkg/engine + pkg/router) resolves:"
-	@go list -deps ./pkg/engine/ ./pkg/router/ | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -v '^github.com/skolldire/go-engine' \
-		| sed -E 's|^([^/]+/[^/]+).*|\1|' | sort -u | sed 's/^/   /'
-	@printf "    ---> %s external modules\n" \
-		"$$(go list -deps ./pkg/engine/ ./pkg/router/ | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -v '^github.com/skolldire/go-engine' | sed -E 's|^([^/]+/[^/]+).*|\1|' | sort -u | grep -c .)"
+	@go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router \
+		| grep -v '^$$' | grep -v '^github.com/skolldire/go-engine' | sort -u | sed 's/^/   /'
+	@printf "    ---> %s external Go modules\n" \
+		"$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router | grep -v '^$$' | grep -v '^github.com/skolldire/go-engine' | sort -u | grep -c .)"

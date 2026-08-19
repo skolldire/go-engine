@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"net"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -149,12 +150,158 @@ func TestStop_EachCallerIsBoundedByItsOwnDeadline(t *testing.T) {
 
 	select {
 	case got := <-patient:
-		assert.NoError(t, got.err,
-			"the patient caller observed a clean drain, so it reports success")
+		// Not nil: connections were cut while this caller was waiting. Reporting
+		// success here would hide a forced shutdown from the engine's aggregated
+		// error, which is the only place an operator would see it.
+		assert.ErrorIs(t, got.err, ErrForcedShutdown,
+			"a caller that observes the drain must still learn it was forced")
+		assert.NotErrorIs(t, got.err, context.DeadlineExceeded,
+			"this caller's own deadline never expired")
 		assert.Less(t, got.elapsed, 5*time.Second)
 	case <-time.After(4 * time.Second):
 		t.Fatal("the patient caller never observed the drain finishing")
 	}
+}
+
+// TestStop_CleanDrainReportsSuccess is the counterpart: with nothing stuck and
+// no deadline expiring, Stop must report nil. Without this the forced-shutdown
+// propagation could be satisfied by always returning an error.
+func TestStop_CleanDrainReportsSuccess(t *testing.T) {
+	s, release := blockedServer(t)
+	close(release)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	require.NoError(t, s.Stop(ctx))
+
+	// A second caller observing the already-finished drain agrees.
+	require.NoError(t, s.Stop(context.Background()))
+}
+
+// TestStart_ConcurrentWithStopIsAlwaysConsistent drives Start against Stop many
+// times over.
+//
+// Scope, stated honestly: this does NOT discriminate the ordering defect the
+// lifecycle lock was added for. That was checked by reintroducing the old
+// check-unlock-bind sequence, and this test still passed — Start marks the
+// server started either way, so the recorded state looks identical afterwards.
+// Distinguishing the two would need the moment Start *committed*, and nothing
+// outside the lock can observe it.
+//
+// What the lock guarantees is therefore structural, and what proves it is
+// TestStart_AfterStopIsRefused, where Stop demonstrably precedes Start.
+//
+// What this test does earn: under -race, that the two paths share their state
+// safely, that neither panics, and that the outcome is always one of the two
+// legal ones rather than some third state.
+func TestStart_ConcurrentWithStopIsAlwaysConsistent(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		lis, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		port := lis.Addr().(*net.TCPAddr).Port
+		require.NoError(t, lis.Close())
+
+		s := &server{
+			server:          grpc.NewServer(),
+			puerto:          port,
+			logger:          silentLogger{},
+			shutdownTimeout: time.Second,
+		}
+
+		var wg sync.WaitGroup
+		var startErr error
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			startErr = s.Start(context.Background())
+		}()
+		go func() {
+			defer wg.Done()
+			_ = s.Stop(context.Background())
+		}()
+		wg.Wait()
+
+		// Two outcomes are legal and the reported one must match the recorded
+		// state. A third — Start reporting success while the server was never
+		// marked started, or refusing while marking it — would mean the two
+		// paths disagree about what happened.
+		s.mu.Lock()
+		started := s.started
+		s.mu.Unlock()
+
+		if startErr == nil {
+			require.True(t, started,
+				"Start reported success but the server was never marked started, "+
+					"so it bound a listener for a server that was already stopped")
+		} else {
+			require.ErrorIs(t, startErr, ErrServerStopped,
+				"the only legitimate refusal in this race is ErrServerStopped")
+			require.False(t, started,
+				"Start was refused but still marked the server started")
+		}
+
+		_ = s.Stop(context.Background())
+	}
+}
+
+// TestStart_TwiceIsRefused pins the other half of the lifecycle: a second Start
+// bound a second listener and leaked it, since only the first is ever handed to
+// Serve or closed.
+func TestStart_TwiceIsRefused(t *testing.T) {
+	s := &server{
+		server:          grpc.NewServer(),
+		puerto:          0,
+		logger:          silentLogger{},
+		shutdownTimeout: time.Second,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NoError(t, s.Start(ctx))
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
+
+	require.ErrorIs(t, s.Start(ctx), ErrAlreadyStarted)
+}
+
+// TestStart_WatcherDoesNotOutliveAnExplicitStop is the regression test for the
+// leaked cancellation watcher.
+//
+// Start spawns a goroutine waiting on ctx.Done(). With context.Background() and
+// an explicit Stop, that goroutine had nothing left to wait for and lived for
+// the rest of the process — one leak per Start.
+func TestStart_WatcherDoesNotOutliveAnExplicitStop(t *testing.T) {
+	before := runtime.NumGoroutine()
+
+	for i := 0; i < 20; i++ {
+		s := &server{
+			server:          grpc.NewServer(),
+			puerto:          0,
+			logger:          silentLogger{},
+			shutdownTimeout: time.Second,
+		}
+		// Background: nothing will ever cancel it, so only the drain can end
+		// the watcher.
+		require.NoError(t, s.Start(context.Background()))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		require.NoError(t, s.Stop(ctx))
+		cancel()
+	}
+
+	// Goroutines wind down asynchronously, so allow them a moment rather than
+	// sampling the instant after the last Stop.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if runtime.NumGoroutine() <= before+5 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	t.Fatalf("watchers outlived their servers: %d goroutines before, %d after 20 start/stop cycles",
+		before, runtime.NumGoroutine())
 }
 
 // TestStop_CallerArrivingAfterAForcedCloseIsStillBounded covers the reverse
