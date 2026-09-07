@@ -119,6 +119,22 @@ updates:
           - "go.opentelemetry.io/*"
 
   - package-ecosystem: "gomod"
+    directory: "/database/sqlc"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  - package-ecosystem: "gomod"
     directory: "/database/memcached"
     schedule:
       interval: "weekly"

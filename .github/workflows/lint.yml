@@ -47,7 +47,7 @@ jobs:
 
       - name: Lint every module
         run: |
-          for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do
+          for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do
             echo "==> lint $m"
             # Tests are linted too; excluding them hid real findings in test code.
             (cd "$m" && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci.yml" --timeout=10m ./...)

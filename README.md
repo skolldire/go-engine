@@ -49,20 +49,23 @@ exists and nothing in this repository can recompute it.
 | **messaging** | `github.com/skolldire/go-engine/messaging` | Kafka, RabbitMQ, gRPC client/server and their providers |
 | **http** | `github.com/skolldire/go-engine/http` | REST client (`http/pkg/rest`) and its provider |
 | **database/sql** | `github.com/skolldire/go-engine/database/sql` | GORM wrapper (`gormsql.DBClient`) and its provider |
+| **database/sqlc** | `github.com/skolldire/go-engine/database/sqlc` | `database/sql` client for sqlc-generated code (`sqlcdb.Client`) and its provider; no ORM, no external runtime dependency |
 | **database/redis** | `github.com/skolldire/go-engine/database/redis` | Redis client (go-redis/v9) and its provider |
 | **database/mongodb** | `github.com/skolldire/go-engine/database/mongodb` | MongoDB client and its provider |
 | **database/memcached** | `github.com/skolldire/go-engine/database/memcached` | Memcached client and its provider |
-| **preset/full** | `github.com/skolldire/go-engine/preset/full` | The everything preset; depends on every module above **except `database/sql`** (see below) |
+| **preset/full** | `github.com/skolldire/go-engine/preset/full` | The everything preset; depends on every module above **except `database/sql` and `database/sqlc`** (see below) |
 
-The four database engines are separate modules rather than one because their
-drivers share no dependency: a service using Redis has no reason to resolve
-GORM's dialects or the MongoDB driver.
+The database engines are separate modules rather than one because their drivers
+share no dependency: a service using Redis has no reason to resolve GORM's
+dialects or the MongoDB driver. `database/sqlc` is split from `database/sql` for
+the same reason — it is the SQL client for services that find an ORM too heavy,
+so linking GORM to get it would defeat its purpose.
 
 Local development uses the `go.work` at the repository root, so a change to the
 core is visible to every family without a tagged release in between.
 
 Each family has its own README with configuration reference and usage examples:
-[`aws/`](aws/README.md) · [`messaging/`](messaging/README.md) · [`database/sql/`](database/sql/README.md) · [`database/redis/`](database/redis/README.md) · [`database/mongodb/`](database/mongodb/README.md) · [`database/memcached/`](database/memcached/README.md)
+[`aws/`](aws/README.md) · [`messaging/`](messaging/README.md) · [`database/sql/`](database/sql/README.md) · [`database/sqlc/`](database/sqlc/README.md) · [`database/redis/`](database/redis/README.md) · [`database/mongodb/`](database/mongodb/README.md) · [`database/memcached/`](database/memcached/README.md)
 
 ---
 
@@ -200,17 +203,26 @@ service not pay for what it does not use, but it also means a forgotten
 `WithProvider` shows up as a missing component rather than an error —
 `eng.ComponentNames()` lists what was actually built.
 
-### Why SQL is not in `preset/full`
+### Two SQL clients: GORM or sqlc
 
-Every other adapter can be built from configuration alone. GORM cannot: it needs
-a `gorm.Dialector`, and picking one from a string such as `"postgres"` would mean
-importing the Postgres, MySQL, SQLite and SQL Server dialects together, so every
-consumer would link all four to use one.
+There are two SQL adapters, in two modules, and an application picks one when it
+assembles the engine — by registering that provider and no other. They read
+different configuration sections and register under different component names,
+so they can also coexist: a service can keep GORM for the tables it already maps
+and move new queries to sqlc.
 
-The driver is therefore supplied by the caller, and the SQL provider is
-registered explicitly rather than discovered:
+| | `database/sql` (GORM) | `database/sqlc` |
+|---|---|---|
+| Import | `database/sql/provider/sql` | `database/sqlc/provider/sqlc` |
+| Config section | `sql_clients` | `sqlc_clients` |
+| Component name | `sql:<instance>` | `sqlc:<instance>` |
+| Runtime dependencies | GORM + one dialect | none beyond the core (stdlib `database/sql`) |
+| Queries | ORM methods, associations, `AutoMigrate` | SQL you write, compiled to typed Go by the `sqlc` CLI |
+| Driver | a `gorm.Dialector` passed in Go | a driver name in the YAML + a blank import |
+| Use it when | the schema is large, relations are mapped, migrations are automatic | the project is small, the queries are known, the ORM is more machinery than the problem needs |
 
 ```go
+// GORM
 import (
     sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
     "gorm.io/driver/postgres"
@@ -219,12 +231,42 @@ import (
 eng, err := engine.New(ctx,
     engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
 )
-
 db, err := sqlprovider.From(eng, "main")
 ```
 
-Its `sql_clients` section holds pool and behaviour settings only; the DSN travels
-with the dialector.
+```go
+// sqlc
+import (
+    _ "github.com/jackc/pgx/v5/stdlib"
+
+    sqlcprovider "github.com/skolldire/go-engine/database/sqlc/provider/sqlc"
+)
+
+eng, err := engine.New(ctx,
+    engine.WithProvider(sqlcprovider.New("main")),
+)
+client, err := sqlcprovider.From(eng, "main")
+queries := db.New(client)   // db is your sqlc-generated package
+```
+
+Either way the engine owns the pool: it is closed in LIFO order on shutdown and
+contributes a health check.
+
+### Why neither is in `preset/full`
+
+Every other adapter can be built from configuration alone. GORM cannot: it needs
+a `gorm.Dialector`, and picking one from a string such as `"postgres"` would mean
+importing the Postgres, MySQL, SQLite and SQL Server dialects together, so every
+consumer would link all four to use one. The driver is therefore supplied by the
+caller, and the provider is registered explicitly rather than discovered.
+
+The sqlc client stays out for a different reason: it *can* be built from
+configuration, but choosing between the two is an application decision, and a
+preset that auto-discovered both would build whichever section happened to be in
+the file. Registering the provider is that decision, written down.
+
+`sql_clients` holds pool and behaviour settings only — the DSN travels with the
+dialector; `sqlc_clients` holds the driver name and the DSN as well.
 
 Full schema: see [CLAUDE.md](CLAUDE.md).
 

@@ -5,13 +5,13 @@ MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/nul
 # them together for local development, so a change to the core is visible to
 # every family without a tagged release in between.
 MODULES := . aws messaging http \
-    database/sql database/redis database/mongodb database/memcached \
+    database/sql database/sqlc database/redis database/mongodb database/memcached \
     preset/full
 
 # Modules that ship an adapter family. The core is deliberately absent: its
 # whole point is that it resolves none of their dependencies.
 FAMILY_MODULES := aws messaging http \
-    database/sql database/redis database/mongodb database/memcached
+    database/sql database/sqlc database/redis database/mongodb database/memcached
 
 .PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
 

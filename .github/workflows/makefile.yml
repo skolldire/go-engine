@@ -29,4 +29,4 @@ jobs:
 
     - name: Build every module
       run: |
-        for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
+        for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done

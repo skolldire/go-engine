@@ -32,7 +32,7 @@ jobs:
       # against every family in the same run.
       - name: Build every module
         run: |
-          for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
+          for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
 
       - name: Check architectural constraints
         run: make lint-arch && make lint-docs
@@ -94,7 +94,7 @@ jobs:
 
       - name: Run govulncheck
         run: |
-          for m in . aws messaging http database/sql database/redis database/mongodb database/memcached preset/full; do
+          for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do
             echo "==> govulncheck $m"
             (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
           done

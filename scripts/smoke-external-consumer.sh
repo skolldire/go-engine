@@ -33,6 +33,7 @@ import (
 	_ "github.com/skolldire/go-engine/database/mongodb/provider/mongodb"
 	_ "github.com/skolldire/go-engine/database/redis/provider/redis"
 	_ "github.com/skolldire/go-engine/database/sql/provider/sql"
+	_ "github.com/skolldire/go-engine/database/sqlc/provider/sqlc"
 	_ "github.com/skolldire/go-engine/http/provider/rest"
 	_ "github.com/skolldire/go-engine/messaging/provider/kafka"
 	_ "github.com/skolldire/go-engine/pkg/engine"
@@ -61,6 +62,7 @@ github.com/skolldire/go-engine/aws:$REPO/aws
 github.com/skolldire/go-engine/messaging:$REPO/messaging
 github.com/skolldire/go-engine/http:$REPO/http
 github.com/skolldire/go-engine/database/sql:$REPO/database/sql
+github.com/skolldire/go-engine/database/sqlc:$REPO/database/sqlc
 github.com/skolldire/go-engine/database/redis:$REPO/database/redis
 github.com/skolldire/go-engine/database/mongodb:$REPO/database/mongodb
 github.com/skolldire/go-engine/database/memcached:$REPO/database/memcached

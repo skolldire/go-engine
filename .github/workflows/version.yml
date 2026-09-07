@@ -125,13 +125,13 @@ jobs:
           make smoke
 
           # Never publish a version with a known reachable vulnerability.
-          for m in . aws messaging http database/sql database/redis \
+          for m in . aws messaging http database/sql database/sqlc database/redis \
                    database/mongodb database/memcached preset/full; do
             echo "==> govulncheck $m"
             (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
           done
 
-          for m in "" aws messaging http database/sql database/redis \
+          for m in "" aws messaging http database/sql database/sqlc database/redis \
                    database/mongodb database/memcached preset/full; do
             tag="${m:+$m/}$NEW_VERSION"
             if git rev-parse "$tag" >/dev/null 2>&1; then
@@ -149,7 +149,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           TAGS=()
-          for m in "" aws messaging http database/sql database/redis \
+          for m in "" aws messaging http database/sql database/sqlc database/redis \
                    database/mongodb database/memcached preset/full; do
             # Go resolves a sub-module only through a tag prefixed with its
             # directory, so each module needs its own.

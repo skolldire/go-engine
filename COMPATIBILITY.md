@@ -13,6 +13,7 @@ The repository is a set of modules, released together under one tag:
 | `github.com/skolldire/go-engine/messaging` | `/messaging` |
 | `github.com/skolldire/go-engine/http` | `/http` |
 | `github.com/skolldire/go-engine/database/sql` | `/database/sql` |
+| `github.com/skolldire/go-engine/database/sqlc` | `/database/sqlc` |
 | `github.com/skolldire/go-engine/database/redis` | `/database/redis` |
 | `github.com/skolldire/go-engine/database/mongodb` | `/database/mongodb` |
 | `github.com/skolldire/go-engine/database/memcached` | `/database/memcached` |
