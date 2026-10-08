@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the released code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Check out what is being released, not the ref the workflow was
           # launched from. Under workflow_dispatch those differ, so the tests
