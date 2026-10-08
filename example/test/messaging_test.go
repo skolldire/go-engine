@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	amqp "github.com/rabbitmq/amqp091-go"
 	segmentio "github.com/segmentio/kafka-go"
 	"github.com/skolldire/go-engine/messaging/pkg/integration/kafka"
@@ -388,7 +390,15 @@ func startKafka(t *testing.T) string {
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "apache/kafka:3.8.0",
-			ExposedPorts: []string{fmt.Sprintf("%s:9092/tcp", hostPortNum)},
+			ExposedPorts: []string{"9092/tcp"},
+			// testcontainers no longer parses "host:container" in ExposedPorts;
+			// a fixed host port is a binding on the host config, which it keeps
+			// for any port that is also exposed.
+			HostConfigModifier: func(hc *container.HostConfig) {
+				hc.PortBindings = network.PortMap{
+					network.MustParsePort("9092/tcp"): {{HostPort: hostPortNum}},
+				}
+			},
 			Env: map[string]string{
 				"KAFKA_NODE_ID":                                  "1",
 				"KAFKA_PROCESS_ROLES":                            "broker,controller",
