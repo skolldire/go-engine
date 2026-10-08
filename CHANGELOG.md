@@ -18,6 +18,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Import paths moved (BREAKING)**: `pkg/app/router` → `pkg/router` (it was core, not legacy); `pkg/clients/rest` → `http/pkg/rest`; `provider/*` → `<family>/provider/*`; `preset/aws` → `aws/preset`. `provider/otel` and `preset/http` stay in the core module.
 - **`pkg/testutil` split (BREAKING)**: it keeps `MockLogger` and the context helpers. The adapter mocks move to the module of the adapter they imitate — `aws/pkg/testutil` (S3, SQS), `http/pkg/testutil` (REST), `database/redis/pkg/testutil` (Redis). Keeping them in the core forced every consumer to resolve the AWS SDK just to get a logger double.
 - **`make lint-arch` is now structural**: it reads the core module's `go.mod` for adapter SDKs and family modules, rather than grepping for import strings. `make test`, `make lint`, `make lint-deps` and the new `make tidy` walk every module.
+- **Go 1.27.2 floor (BREAKING)**: every module and `go.work` now declare `go 1.27.2`. golangci-lint is pinned to v2.14.0, the first release built with Go 1.27 — older binaries refuse a module that targets a newer Go.
+- **Dependencies refreshed**: every module upgraded to its latest compatible versions (AWS SDK v2, OpenTelemetry v1.47.0, gRPC v1.84.0, `golang.org/x/*`, go-redis v9.23.0, amqp091-go v1.15.0, GORM v1.31.2, testify v1.12.1, among others).
+
+### Security
+- **GO-2026-6505** (OpenTelemetry OTLP exporters could leak endpoint URLs in info logs): fixed by `go.opentelemetry.io/otel/exporters/otlp/otlptrace{,/otlptracegrpc}` v1.47.0.
+- **GO-2026-6348** (heap exhaustion via HTTP/2 DATA frame fragmentation in gRPC): fixed by `google.golang.org/grpc` v1.84.0.
 
 ### Added
 - **`database/sqlc` module**: a `database/sql` client for [sqlc](https://sqlc.dev)-generated code, for the projects where GORM is more machinery than the problem needs. `sqlcdb.Client` satisfies the `DBTX` interface sqlc emits, so the generated `New(db)` takes it directly and every query gets the framework's timeout, logging and health check. It resolves no external dependency beyond the core — it is its own module precisely so that choosing it does not link GORM anyway. `sqlcdb.InTx(ctx, client, queries.WithTx, fn)` runs generated queries in a transaction with rollback on error and on panic; `Tx`/`TxWithOptions` take the raw `*sql.Tx`.

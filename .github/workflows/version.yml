@@ -44,7 +44,7 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.12.2
+          version: v2.14.0
           # Only the binary is wanted here: `make lint` walks every module
           # itself. install-only says that outright, where "args: --help" was a
           # trick that depended on the action's default behaviour not changing.

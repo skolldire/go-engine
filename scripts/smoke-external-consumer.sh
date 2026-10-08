@@ -45,7 +45,7 @@ GO
 
 # The consumer declares the same floor the modules promise. Pinning the
 # toolchain to it is what makes that promise tested rather than assumed: without
-# GOTOOLCHAIN, Go silently builds with whatever is installed locally (1.26.x
+# GOTOOLCHAIN, Go silently builds with whatever is installed locally (1.27.x
 # here), so a dependency that had quietly started needing a newer Go would still
 # pass — and break only for a consumer actually on the declared minimum.
 GO_FLOOR=$(awk '/^go /{print $2; exit}' "$REPO/go.mod")

@@ -41,7 +41,7 @@ jobs:
         with:
           # Pinned, not `latest`: a linter that changes under us turns CI into a
           # non-reproducible gate.
-          version: v2.12.2
+          version: v2.14.0
           install-mode: binary
           args: --timeout=10m ./...
 
