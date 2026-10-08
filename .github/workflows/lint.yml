@@ -37,7 +37,7 @@ jobs:
       # One job per module: golangci-lint resolves packages within a single
       # module, so a matrix is what actually covers the repository.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           # Pinned, not `latest`: a linter that changes under us turns CI into a
           # non-reproducible gate.
