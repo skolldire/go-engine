@@ -1,0 +1,16 @@
+# Default owner for everything in the repository.
+* @skolldire
+
+# Build, CI and release configuration.
+/.github/            @skolldire
+/Makefile            @skolldire
+/go.mod              @skolldire
+/go.sum              @skolldire
+/.golangci.yml       @skolldire
+
+# Public contracts: changes here affect every consumer.
+/pkg/app/            @skolldire
+/pkg/config/         @skolldire
+/COMPATIBILITY.md    @skolldire
+/MIGRATION.md        @skolldire
+/SECURITY.md         @skolldire

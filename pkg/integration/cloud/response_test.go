@@ -30,7 +30,7 @@ func TestResponse_UnmarshalBody(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resp := &Response{Body: tt.body}
-			var result map[string]interface{}
+			var result map[string]any
 			err := resp.UnmarshalBody(&result)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UnmarshalBody() error = %v, wantErr %v", err, tt.wantErr)
@@ -51,7 +51,7 @@ func TestResponse_Complete(t *testing.T) {
 		StatusCode: 200,
 		Body:       []byte(`{"key":"value"}`),
 		Headers:    map[string]string{"header": "value"},
-		Metadata:   map[string]interface{}{"meta": "value"},
+		Metadata:   map[string]any{"meta": "value"},
 	}
 
 	if resp.StatusCode != 200 {

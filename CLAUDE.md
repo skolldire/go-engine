@@ -5,105 +5,121 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Run all tests
-go test ./... -v
+# Run every module's tests with the race detector
+make test
 
-# Run a single package's tests
-go test ./pkg/clients/cognito/... -v
+# Lint every module (golangci-lint, root config)
+make lint
+
+# Architectural gate: the core must resolve no adapter
+make lint-arch
+
+# External dependency footprint per module
+make lint-deps
+
+# go mod tidy in every module + go work sync
+make tidy
+
+# Run a single package's tests (from inside its module)
+cd aws && go test ./pkg/clients/cognito/... -v
 
 # Run a single test
-go test ./pkg/clients/cognito/... -v -run TestMFA
-
-# Clear test cache before running
-go clean -testcache && go test ./... -v
+cd aws && go test ./pkg/clients/cognito/... -v -run TestMFA
 
 # Initialize/setup (runs init.sh)
 make init
-
-# Full cycle: init + test
-make all
 ```
 
 ## Architecture
 
-`go-engine` is a reusable Go framework library (module `github.com/skolldire/go-engine`) consumed by applications via `go get`. It is not a runnable binary itself.
+`go-engine` is a reusable Go framework consumed via `go get`. It is not a
+runnable binary. Since `v0.30.0` it is a **set of modules**, one per adapter
+family, bound together for local development by the `go.work` at the root.
 
-### Core assembly: `pkg/app`
+| Module | Directory | Contains |
+|---|---|---|
+| `github.com/skolldire/go-engine` | `/` | the core |
+| `github.com/skolldire/go-engine/aws` | `/aws` | AWS clients + providers + `aws/preset` |
+| `github.com/skolldire/go-engine/messaging` | `/messaging` | Kafka, RabbitMQ, gRPC + providers |
+| `github.com/skolldire/go-engine/http` | `/http` | REST client + provider |
+| `github.com/skolldire/go-engine/database/{sql,redis,mongodb,memcached}` | `/database/*` | one module per engine; their drivers share no dependency |
+| `github.com/skolldire/go-engine/preset/full` | `/preset/full` | the everything preset |
 
-The entry point for consumers is `app.NewAppBuilder()`, which implements a fluent builder pattern:
+**The rule:** the core knows no adapter; adapters know the core. It is enforced
+structurally — the core is its own module, so importing an adapter would require
+a `require` line in its `go.mod` — and `make lint-arch` reads that manifest.
 
+Every provider lives in its family's module. It has to: `provider/sqs` imports
+both the core and the AWS adapter, so keeping it at the root would create a
+core → aws → core cycle between modules. `provider/otel` is the exception that
+stays at the root, because it depends only on `pkg/telemetry/otel`.
+
+### Core assembly: `pkg/engine`
+
+The entry point for consumers is `engine.New(ctx, opts...)`:
+
+```go
+eng, err := engine.New(ctx,
+    engine.WithRouter(),
+    engine.WithHealth(),
+    engine.WithProvider(sqs.New("orders"), redis.New("cache")),
+)
 ```
-NewAppBuilder()
-  .WithContext(ctx)
-  .WithConfigs()        // loads config/application.yaml via Viper → populates Engine.Conf
-  .WithInitialization() // constructs all clients from config → populates Engine.Services
-  .WithRouter()         // creates chi-based HTTP router → populates Engine.Router
-  .Build()              // returns *Engine or error
-```
 
-`WithDynamicConfig()` is an alternative to `WithConfigs()` that also starts a file watcher for live config reloads.
+Options carry no ordering rules — `New` applies steps in dependency order.
+Presets bundle them: `preset/http` (core only), `aws/preset` (AWS only),
+`preset/full` (everything the YAML declares).
 
-**`Engine`** (`pkg/app/entity.go`) is the central struct returned to consumers. It exposes typed getters for every registered client (e.g., `GetSQSClientByName`, `GetRedisClientByName`, `GetRestClient`).
+- `engine.Provider` — `Name`, `ConfigKey`, `Init(ctx, RawConfig, Deps)`, `Close(ctx)`.
+- `engine.Config` uses `mapstructure:",remain"`: the core types only `router`,
+  `log` and `health`; every other section travels raw and each provider decodes
+  its own.
+- Typed retrieval is `engine.Get[T](eng, name)`, or the `From` helper each
+  provider exposes (`sqs.From(eng, "orders")`).
+- A section with no registered provider builds nothing. That is deliberate;
+  `eng.ComponentNames()` lists what was actually built.
 
-**`ServiceRegistry`** (`pkg/app/registry.go`) is a composition struct inside `Engine` that holds all named client maps (`RESTClients`, `SQSClients`, `DynamoDBClients`, etc.). Thread-safe lazy initialization via `sync.Once`.
-
-**`ConfigRegistry`** holds the four config buckets consumed by Clean Architecture layers: `Repositories`, `UseCases`, `Handlers`, `Batches`.
-
-### Configuration: `pkg/config`
-
-- `pkg/config/viper` — wraps Spf13/Viper; reads `config/application.yaml`. The `viper.Config` struct is the single source of truth for all service configurations.
-- `pkg/config/dynamic` — `FeatureFlags` with file-watch-based live updates via fsnotify.
-
-### Client packages
-
-Each client package follows the same structure:
-- `entity.go` — `Config` struct + interface definition (`Service`)
-- `service.go` — `NewClient(cfg, log) Service` constructor + implementation
-
-| Directory | AWS/External service |
-|---|---|
-| `pkg/clients/cognito` | Cognito: auth, MFA (TOTP/SMS), JWT validation, session management |
-| `pkg/clients/sqs`, `sns`, `ses`, `s3`, `ssm` | AWS messaging and storage |
-| `pkg/clients/rest` | HTTP client via go-resty with circuit breaker |
-| `pkg/clients/grpc` | gRPC client |
-| `pkg/clients/rabbitmq` | RabbitMQ via amqp091-go |
-| `pkg/database/dynamo` | DynamoDB |
-| `pkg/database/gormsql` | GORM (Postgres/MySQL/SQLite/SQLServer) |
-| `pkg/database/redis` | Redis via go-redis/v9 |
-| `pkg/database/mongodb` | MongoDB |
-| `pkg/database/memcached` | Memcached |
-
-Multiple named instances of the same client type are supported via `[]map[string]Config` in the Viper config (e.g., `sqs_clients`, `redis_clients`). The single-instance fields (`sqs`, `redis`, etc.) are legacy and exist for backward compatibility.
-
-### Integration: `pkg/integration`
-
-- `pkg/integration/aws` — `awsclient.Client` facade that wraps AWS SDK with observability (metrics + tracing).
-- `pkg/integration/aws/adapters` — adapts the facade for Lambda, SQS, and other specific use cases.
-- `pkg/integration/inbound` — normalizes inbound events (e.g., `NormalizeAPIGatewayEvent`).
-- `pkg/integration/observability` — `MetricsRecorder` backed by OpenTelemetry.
-- `pkg/integration/cloud` — cloud-agnostic abstraction layer.
-
-### Utilities: `pkg/utilities`
+### Core packages (root module)
 
 | Package | Purpose |
 |---|---|
-| `logger` | Logrus wrapper with ECS format |
-| `telemetry` | OpenTelemetry metrics + tracing (OTLP/gRPC export) |
-| `circuit_breaker` | gobreaker wrapper |
-| `retry_backoff` | Exponential backoff retry |
-| `task_executor` | Bounded concurrency worker pool |
-| `validation` | go-playground/validator global instance |
-| `error_handler` | Centralized error types |
-| `resilience` | Combined resilience primitives |
+| `pkg/engine` | the Provider core, config loading, lifecycle |
+| `pkg/router` | chi router, JWT middleware, health/ping/pprof routes |
+| `pkg/health` | health service and checkers |
+| `pkg/core/client` | `BaseClient`, `SafeTypeAssert[T]`, middleware chain |
+| `pkg/core/registry` | client factory registry |
+| `pkg/telemetry/otel` | OTel provider, OTLP export, and the `Telemetry` recording surface |
+| `pkg/integration/{cloud,observability}` | cloud-agnostic client abstraction + its middleware |
+| `pkg/config/dynamic` | file-watching feature flags (opt-in; the engine does not wire it) |
+| `pkg/utilities/*` | logger, circuit_breaker, retry_backoff, resilience, task_executor, validation, error_handler, app_profile, helpers, file_utils |
+| `pkg/testutil` | `MockLogger` and context helpers — the doubles that carry no adapter dependency |
+| `provider/otel` | OTel as an `engine.Provider` |
+| `preset/http` | preset for a plain HTTP service |
 
-### Server: `pkg/server/grpc`
+### Family modules
 
-gRPC server (separate from the gRPC client in `pkg/clients/grpc`). Initialized when `grpc_server` is present in config.
+| Directory | Service |
+|---|---|
+| `aws/pkg/clients/{cognito,sqs,sns,ses,s3,ssm}` | AWS clients; Cognito covers auth, MFA, JWT validation |
+| `aws/pkg/database/dynamo` | DynamoDB |
+| `aws/pkg/integration/aws` | AWS facade with observability, plus `adapters/` and `inbound/` |
+| `messaging/pkg/integration/{kafka,rabbitmq,grpc}`, `messaging/pkg/server/grpc` | brokers and gRPC |
+| `http/pkg/rest` | HTTP client via go-resty, with retry and circuit breaker composed in |
+| `database/sql/pkg/database/gormsql` | GORM (Postgres/MySQL/SQLite/SQLServer) |
+| `database/{redis,mongodb,memcached}/pkg/database/*` | the remaining stores |
+
+Each family also holds `<module>/provider/<name>` and, where useful, its own
+`testutil` with the mocks for its clients.
+
+Multiple named instances of a client are declared as `[]map[string]Config` in
+the YAML (`sqs_clients`, `redis_clients`, …). The singular form is not read by
+any provider.
 
 ### Conventions
 
-- Every package exposes a `Service` interface and a `NewClient`/`NewService` constructor.
+- Every client package exposes a `Service` interface and a `NewClient`/`NewService` constructor, with `entity.go` for types and `service.go` for the implementation.
+- Every adapter also exposes an `engine.Provider` in its family's `provider/` directory.
 - `pkg/core/client` provides `SafeTypeAssert[T]` used for safe type assertions across the framework.
-- `pkg/core/registry` holds a global client factory registry used by `RegisterDefaultClients`.
-- `pkg/testutil` provides `MockLogger` for use in tests.
+- `pkg/testutil` provides `MockLogger`; adapter mocks live in their family's `testutil`.
+- Comments are in English and explain the *why*, not the *what*.
 - Test files use `testify/assert` and `testify/mock`; mocks live in `mocks_test.go` or `helpers_test.go` alongside the package under test.

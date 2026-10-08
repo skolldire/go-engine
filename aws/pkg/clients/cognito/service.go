@@ -7,8 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	baseclient "github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 const (
@@ -44,14 +44,15 @@ type Client struct {
 
 	cognitoClient cognitoAPI
 	jwksClient    *JWKSClient
-	logger        logger.Service
-	resilience    *resilience.Service
-	logging       bool
+
+	// Timeout handling, logging and resilience come from BaseClient's
+	// middleware chain rather than from fields and conditionals here.
+	*baseclient.BaseClient
 }
 
 // NewClient crea una nueva instancia del cliente Cognito
 // CRÍTICO: Manejo seguro del secret - se copia a campo privado y se limpia de Config
-func NewClient(cfg Config, log logger.Service) (Service, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, fmt.Errorf("invalid cognito config: %w", err)
 	}
@@ -59,7 +60,7 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 	clientSecret := cfg.ClientSecret
 	cfg.ClientSecret = ""
 
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
+	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.Region),
 	)
 	if err != nil {
@@ -76,96 +77,23 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 
 	jwksClient := NewJWKSClient(jwksURL)
 
-	var resilienceSvc *resilience.Service
-	if cfg.WithResilience {
-		resilienceSvc = resilience.NewResilienceService(cfg.Resilience, log)
-	}
-
-	client := &Client{
-		config:        cfg,
-		clientSecret:  clientSecret,
-		cognitoClient: cognitoClient,
-		jwksClient:    jwksClient,
-		logger:        log,
-		resilience:    resilienceSvc,
-		logging:       cfg.EnableLogging,
-	}
-
-	if client.logging {
-		logFields := map[string]interface{}{
-			"user_pool_id": cfg.UserPoolID,
-			"client_id":    cfg.ClientID,
-			"region":       cfg.Region,
-			"has_secret":   clientSecret != "",
-		}
-		if clientSecret != "" {
-			log.Debug(context.Background(), "Cognito client initialized with client secret", logFields)
-		} else {
-			log.Debug(context.Background(), "Cognito client initialized without client secret", logFields)
-		}
-	}
-
-	return client, nil
-}
-
-func (c *Client) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	timeout := c.config.Timeout
+	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
 
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		return context.WithTimeout(ctx, timeout)
-	}
-	return context.WithCancel(ctx)
-}
-
-func (c *Client) executeOperation(ctx context.Context, operationName string,
-	operation func() (interface{}, error)) (interface{}, error) {
-	logFields := map[string]interface{}{
-		"operation": operationName,
-		"service":   "Cognito",
-	}
-
-	if c.resilience != nil {
-		return c.executeWithResilience(ctx, operationName, operation, logFields)
-	}
-
-	return c.executeWithLogging(ctx, operationName, operation, logFields)
-}
-
-func (c *Client) executeWithResilience(ctx context.Context, operationName string,
-	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
-	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("starting Cognito operation with resilience: %s", operationName), logFields)
-	}
-
-	result, err := c.resilience.Execute(ctx, operation)
-
-	if err != nil && c.logging {
-		c.logger.Error(ctx, err, logFields)
-	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Cognito operation completed with resilience: %s", operationName), logFields)
-	}
-
-	return result, err
-}
-
-func (c *Client) executeWithLogging(ctx context.Context, operationName string,
-	operation func() (interface{}, error), logFields map[string]interface{}) (interface{}, error) {
-	if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("starting Cognito operation: %s", operationName), logFields)
-	}
-
-	result, err := operation()
-
-	if err != nil && c.logging {
-		c.logger.Error(ctx, err, logFields)
-	} else if c.logging {
-		c.logger.Debug(ctx, fmt.Sprintf("Cognito operation completed: %s", operationName), logFields)
-	}
-
-	return result, err
+	return &Client{
+		config:        cfg,
+		clientSecret:  clientSecret,
+		cognitoClient: cognitoClient,
+		jwksClient:    jwksClient,
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{
+			EnableLogging:  cfg.EnableLogging,
+			WithResilience: cfg.WithResilience,
+			Resilience:     cfg.Resilience,
+			Timeout:        timeout,
+		}, log, "Cognito"),
+	}, nil
 }
 
 func (c *Client) computeSecretHash(username string) string {

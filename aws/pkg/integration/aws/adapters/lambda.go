@@ -84,7 +84,7 @@ func (a *lambdaAdapter) invoke(ctx context.Context, req *cloud.Request) (*cloud.
 		StatusCode: statusCode,
 		Body:       result.Payload,
 		Headers:    headers,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"lambda.executed_version": result.ExecutedVersion,
 		},
 	}, nil

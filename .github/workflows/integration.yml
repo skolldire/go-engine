@@ -1,0 +1,56 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  redis:
+    name: Redis integration
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Run Redis integration tests
+        env:
+          REDIS_ADDR: 127.0.0.1:6379
+        working-directory: database/redis
+        run: go test -tags integration -run Integration ./... -count=1 -v
+
+  example-e2e:
+    name: Example service against real services
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      # The runner already has a Docker daemon, which is all testcontainers
+      # needs: it starts and stops the containers itself, so there is no compose
+      # lifecycle to manage here.
+      - name: Run the container suite
+        run: make example-e2e

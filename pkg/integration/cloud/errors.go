@@ -30,7 +30,7 @@ type Error struct {
 	StatusCode int
 
 	// Metadata contains error-specific metadata
-	Metadata map[string]interface{}
+	Metadata map[string]any
 }
 
 // Error codes constants
@@ -64,9 +64,9 @@ func (e *Error) IsRetriable() bool {
 }
 
 // WithMetadata adds metadata to the error
-func (e *Error) WithMetadata(key string, value interface{}) *Error {
+func (e *Error) WithMetadata(key string, value any) *Error {
 	if e.Metadata == nil {
-		e.Metadata = make(map[string]interface{})
+		e.Metadata = make(map[string]any)
 	}
 	e.Metadata[key] = value
 	return e

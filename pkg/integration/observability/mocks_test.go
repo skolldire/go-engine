@@ -15,23 +15,23 @@ type mockLogger struct {
 	mock.Mock
 }
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
 
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
 
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
 
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{}) {
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any) {
 	m.Called(ctx, err, fields)
 }
 
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {
 	m.Called(ctx, err, fields)
 }
 
@@ -40,12 +40,12 @@ func (m *mockLogger) WrapError(err error, msg string) error {
 	return args.Error(0)
 }
 
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service {
+func (m *mockLogger) WithField(key string, value any) logger.Service {
 	args := m.Called(key, value)
 	return args.Get(0).(logger.Service)
 }
 
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service {
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service {
 	args := m.Called(fields)
 	return args.Get(0).(logger.Service)
 }

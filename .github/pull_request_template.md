@@ -26,22 +26,25 @@ Closes #<!-- issue number -->
 
 <!-- List the most relevant files or packages and what changed in each. -->
 
-- `pkg/...`:
-- `pkg/app/builder.go`:
+- `pkg/...` (core module):
+- `aws/...`, `messaging/...`, `http/...`, `database/...` (family modules):
 
 ## How to test
 
 <!-- Concrete steps to verify the change. Include the test command if relevant. -->
 
 ```bash
-go test ./pkg/... -v -run TestNameOfTest
+make test                                  # every module, with -race
+go test ./pkg/... -v -run TestNameOfTest   # one package in the core module
 ```
 
 ## Checklist
 
-- [ ] `go build ./...` passes (all affected modules)
-- [ ] `go test ./...` passes — coverage ≥ 85% in modified packages
-- [ ] `golangci-lint run` with no new warnings
+- [ ] `go build ./...` passes in every affected module
+- [ ] `make test` passes — coverage ≥ 85% in modified packages
+- [ ] `make lint` with no new warnings
+- [ ] `make lint-arch` passes (the core resolves no adapter)
+- [ ] `make tidy` run if any dependency changed
 - [ ] `CHANGELOG.md` updated under `[Unreleased]`
 - [ ] README updated if the public API changed (builder, getters, YAML config)
 - [ ] No secrets, tokens, or credentials in the diff

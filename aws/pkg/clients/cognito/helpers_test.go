@@ -284,7 +284,7 @@ func TestComputeSecretHash(t *testing.T) {
 }
 
 func TestGetStringClaim(t *testing.T) {
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		"sub":    "user-id-123",
 		"email":  "test@example.com",
 		"number": 123,
@@ -297,7 +297,7 @@ func TestGetStringClaim(t *testing.T) {
 }
 
 func TestGetBoolClaim(t *testing.T) {
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		"verified":     true,
 		"enabled":      false,
 		"string_true":  "true",
@@ -314,9 +314,9 @@ func TestGetBoolClaim(t *testing.T) {
 }
 
 func TestGetStringSliceClaim(t *testing.T) {
-	claims := map[string]interface{}{
-		"groups": []interface{}{"admin", "user", "guest"},
-		"mixed":  []interface{}{"string", 123, "another"},
+	claims := map[string]any{
+		"groups": []any{"admin", "user", "guest"},
+		"mixed":  []any{"string", 123, "another"},
 		"number": 123,
 	}
 
@@ -334,7 +334,7 @@ func TestGetStringSliceClaim(t *testing.T) {
 }
 
 func TestGetFloat64Claim(t *testing.T) {
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		"exp":    1234567890.0,
 		"iat":    float64(1234567890),
 		"string": "not-a-number",

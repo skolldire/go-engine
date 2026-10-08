@@ -17,7 +17,7 @@ func TestClient_SignOut_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -53,7 +53,7 @@ func TestClient_GlobalSignOut_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -91,7 +91,7 @@ func TestClient_SignOut_WithLogging(t *testing.T) {
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 	log.On("Info", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -111,7 +111,7 @@ func TestClient_GlobalSignOut_WithLogging(t *testing.T) {
 	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 	log.On("Info", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()

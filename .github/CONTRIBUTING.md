@@ -30,36 +30,60 @@ Thank you for your interest in improving **go-engine**. This guide covers everyt
 
 **Requirements:**
 
-| Tool | Minimum version |
+| Tool | Version |
 |---|---|
-| Go | 1.21 (see `go.mod`) |
+| Go | whatever `go.mod` declares — currently 1.26.6, and it is a hard floor |
 | Make | any |
-| golangci-lint | v1.57+ |
+| golangci-lint | v2.12.2, pinned in `.github/workflows/lint.yml` |
+
+The Go version is not a suggestion: every module sets it as the `go` directive,
+so an older toolchain refuses to build. It is kept on a patched release
+deliberately — see [COMPATIBILITY.md](../COMPATIBILITY.md#go-version-policy).
 
 ```bash
 # Clone
 git clone https://github.com/skolldire/go-engine.git
 cd go-engine
 
-# Initialize (downloads tools and verifies setup)
-make init
-
-# Run all tests
+# Everything a change must pass before it is pushed:
+# lint, architecture, module versions, tests, and the example service.
 make all
-
-# Or manually
-go test ./... -v
 ```
+
+There is deliberately no setup step. `go.work` binds the modules together, so a
+clone builds as it is.
 
 ### Sub-modules
 
-The repository has multiple Go modules. If your change touches `aws/`, `messaging/`, or `database/*`, enter the corresponding directory:
+The repository is ten Go modules. `make all` walks every one of them, so it is
+what to run before pushing. To work on a single family:
 
 ```bash
 cd aws && go test ./...
-cd messaging && go test ./...
 cd database/redis && go test ./...
 ```
+
+### The gates, and what each is for
+
+| Command | Catches |
+|---|---|
+| `make lint-arch` | the core importing an adapter, which is what the whole split exists to prevent |
+| `make check-modules` | a module requiring a version a consumer cannot resolve — invisible locally, because `go.work` satisfies it |
+| `make smoke` | the published import graph failing outside the repo |
+| `make example` | a change that compiles but makes an application awkward to build |
+| `make coverage-check` | critical packages dropping below 80% |
+
+### End-to-end tests
+
+The example service has a suite that runs against real backing services in
+containers, managed by testcontainers:
+
+```bash
+make example-e2e     # needs a running Docker daemon
+```
+
+Without Docker the suite skips rather than fails, so `go test ./...` stays green
+on a machine without it.
 
 ---
 
@@ -117,7 +141,17 @@ The public interface is always `Service`. The constructor is always `NewClient` 
 
 ## Tests
 
-- Minimum acceptable coverage: **85%** per package.
+- Coverage has two tiers, and they are not the same number:
+  - **CI enforces 80%**, and only on the packages listed as `CRITICAL_PKGS` in
+    the `Makefile`: `pkg/engine`, `pkg/router`, `pkg/health`,
+    `pkg/utilities/{resilience,error_handler,retry_backoff}`. That is
+    `make coverage-check`, and it is the bar a pull request must clear to merge.
+  - **Review expects 85%** on the code you add or change, anywhere in the
+    repository. It is a review judgement rather than a gate, because a package
+    of thin wrappers and one of branching logic do not deserve the same target.
+
+  If you add a package that carries real logic, propose adding it to
+  `CRITICAL_PKGS` in the same pull request.
 - Use `testify/assert` and `testify/mock`.
 - Mocks for external interfaces go in the same `_test.go` file where they are used, or in `mocks_test.go` if they are extensive.
 - Do not mock the database or Redis if the test can use a real in-memory implementation. Mock the engine interfaces, not the full external clients.
@@ -166,7 +200,7 @@ fix(builder): prevent double health route mount when WithRouter called twice
 
 docs(readme): add builder method reference table
 
-BREAKING CHANGE: ServiceRegistry.Health type changed from health.Service to *health.HealthService
+BREAKING CHANGE: ServiceRegistry.Health type changed from health.Service to *health.HealthService <!-- removed-api-ok: historical commit message example -->
 ```
 
 ---
@@ -183,7 +217,8 @@ BREAKING CHANGE: ServiceRegistry.Health type changed from health.Service to *hea
 
 ```
 [ ] go build ./... passes (all affected modules)
-[ ] go test ./... passes with coverage ≥ 85% in modified packages
+[ ] go test ./... passes; new and changed code is covered to ~85%
+[ ] make coverage-check passes (80% on the critical packages)
 [ ] golangci-lint run passes with no new warnings
 [ ] CHANGELOG.md updated under [Unreleased]
 [ ] README updated if the public API changed (builder, getters, YAML config)
@@ -197,13 +232,24 @@ BREAKING CHANGE: ServiceRegistry.Health type changed from health.Service to *hea
 
 ### New client or integration
 
-1. Create the directory `pkg/clients/my-client/` with `entity.go` and `service.go`.
-2. Define the `Service` interface with the required methods.
-3. Add the client to `ServiceRegistry` in `registry.go`.
-4. Add the getter in the Engine's `entity.go`.
-5. Add initialization in `service.go` (or in the corresponding sub-module).
-6. Add tests with coverage ≥ 85%.
-7. Document in the README (getter table + YAML config section if applicable).
+1. Pick the family module it belongs to (`aws`, `messaging`, `http`,
+   `database/<engine>`), or add a new one if its driver shares no dependency
+   with an existing family.
+2. Create `<module>/pkg/.../my-client/` with `entity.go` and `service.go`.
+   Define a `Service` interface and a `NewClient`/`NewService` constructor
+   taking `ctx` as its first argument.
+3. Add `<module>/provider/my-client/` implementing `engine.Provider`: `Name`,
+   `ConfigKey`, `Init(ctx, RawConfig, Deps)` and `Close(ctx)`. Return a pointer
+   from `New` — the engine rejects value providers, because `Init` would
+   otherwise run on a copy and its state would be discarded.
+4. Expose a `From(e *engine.Engine, instance string)` helper so consumers do
+   not type-assert by hand.
+5. Add tests covering the new code to ~85%. Mocks go in the family's `testutil`.
+6. Document it in that module's README using the provider API; `make lint-docs`
+   fails if a README shows an API that no longer exists.
+
+There is no central registry to edit and no getter to add to the engine. The
+core imports no adapter, which is what `make lint-arch` enforces.
 
 ### New health checker
 
@@ -242,4 +288,21 @@ Use local interfaces (see `redisPinger`, `sqlPinger`) so tests can use mocks. In
 The linter is a requirement. Fix the warnings before requesting review — we do not use `//nolint` except in justified cases with a comment explaining why.
 
 **Where does SQL/GORM go?**
-SQL is not auto-initialized by the engine. Inject it via `WithCustomClient` and retrieve it with `GetCustomClient`. See the README for an example.
+In its own module, `database/sql`. Register its provider and retrieve the client
+by name:
+
+```go
+import (
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "gorm.io/driver/postgres"
+)
+
+// The dialector is supplied by the application, so the module never links
+// every driver GORM supports.
+eng, err := engine.New(ctx,
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))))
+db, err := sqlprovider.From(eng, "main")
+```
+
+It is a separate module because GORM's dialects share no dependency with the
+other stores, so a service using Redis never resolves them.

@@ -2,10 +2,11 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
-	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
+	telemetry "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -41,7 +42,8 @@ func (m *metricsMiddleware) Do(ctx context.Context, req *cloud.Request) (*cloud.
 	statusCode := 500
 	errorCode := ""
 	if err != nil {
-		if cloudErr, ok := err.(*cloud.Error); ok {
+		var cloudErr *cloud.Error
+		if errors.As(err, &cloudErr) {
 			statusCode = cloudErr.StatusCode
 			errorCode = cloudErr.Code
 			if cloudErr.Code == cloud.ErrCodeThrottling {

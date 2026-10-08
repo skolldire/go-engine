@@ -8,6 +8,11 @@ on:
     branches: [main, master]
     # Also runs on merge to main/master
 
+env:
+  # Pinned, not @latest: a scanner that changes under us turns a release gate
+  # into a non-reproducible one, and a new advisory can fail an unrelated PR.
+  GOVULNCHECK_VERSION: v1.7.0
+
 jobs:
   test:
     name: Run Unit Tests with Coverage
@@ -19,15 +24,43 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          # Pin to the toolchain declared in go.mod for reproducible builds.
+          go-version-file: go.mod
           check-latest: true
 
-      - name: Build
-        run: go build ./...
-
-      - name: Run Tests with Coverage
+      # go.work binds the modules together, so a change to the core is compiled
+      # against every family in the same run.
+      - name: Build every module
         run: |
-          go test -coverprofile=coverage.out ./...
+          for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
+
+      - name: Check architectural constraints
+        run: make lint-arch && make lint-docs
+
+      # Catches a submodule requiring a core version that was never published.
+      # Nothing else can: go.work and the replace directives make it build fine
+      # in the repo, and it fails only for the first consumer to run `go get`.
+      - name: Check module versions resolve for consumers
+        run: make check-modules
+
+      - name: Smoke test an external consumer
+        run: make smoke
+
+      # The example service is a real consumer of the library. A change that
+      # passes every unit test can still make an application impossible to
+      # build; this is where that shows up.
+      - name: Build and test the example service
+        run: make example
+
+      - name: Report dependency footprint per module
+        run: make lint-deps
+
+      - name: Run Tests with Race Detector
+        run: make test
+
+      - name: Coverage (core module)
+        run: |
+          go test -race -covermode=atomic -coverprofile=coverage.out ./...
           go tool cover -func=coverage.out
 
       - name: Check Coverage File
@@ -37,8 +70,31 @@ jobs:
             exit 1
           fi
 
+      - name: Enforce minimum coverage on critical packages
+        run: make coverage-check
+
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.out
+
+  vulncheck:
+    name: Vulnerability Scan (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Run govulncheck
+        run: |
+          for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do
+            echo "==> govulncheck $m"
+            (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
+          done

@@ -10,7 +10,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(cfg Config, log logger.Service) (Service, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Service, error) {
 	if cfg.URL == "" {
 		return nil, fmt.Errorf("%w: URL is required", ErrConnection)
 	}
@@ -30,13 +30,13 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		Dial: dialer.Dial,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
+		return nil, fmt.Errorf("%w: %w", ErrConnection, err)
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
 		_ = conn.Close() // Ignore error on cleanup
-		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
+		return nil, fmt.Errorf("%w: %w", ErrConnection, err)
 	}
 
 	baseConfig := client.BaseConfig{
@@ -52,14 +52,6 @@ func NewClient(cfg Config, log logger.Service) (Service, error) {
 		channel:    ch,
 	}
 
-	if c.IsLoggingEnabled() {
-		log.Debug(context.Background(), "RabbitMQ connection established successfully",
-			map[string]interface{}{
-				"url":     cfg.URL,
-				"timeout": timeout.String(),
-			})
-	}
-
 	return c, nil
 }
 
@@ -68,7 +60,7 @@ func (c *RabbitMQClient) Publish(ctx context.Context, msg Message) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "Publish", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "Publish", func(ctx context.Context) (any, error) {
 		return nil, c.channel.PublishWithContext(ctx,
 			msg.Exchange,
 			msg.RoutingKey,
@@ -98,21 +90,11 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 	}
 
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if c.IsLoggingEnabled() {
-					c.GetLogger().Error(ctx, fmt.Errorf("panic in consume handler: %v", r), map[string]interface{}{
-						"queue": queue,
-					})
-				}
-			}
-		}()
-
 		for {
 			select {
 			case <-ctx.Done():
 				if c.IsLoggingEnabled() {
-					c.GetLogger().Debug(ctx, "context cancelled, stopping message consumption", map[string]interface{}{
+					c.GetLogger().Debug(ctx, "context cancelled, stopping message consumption", map[string]any{
 						"queue": queue,
 					})
 				}
@@ -120,7 +102,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 			case delivery, ok := <-deliveries:
 				if !ok {
 					if c.IsLoggingEnabled() {
-						c.GetLogger().Debug(ctx, "delivery channel closed", map[string]interface{}{
+						c.GetLogger().Debug(ctx, "delivery channel closed", map[string]any{
 							"queue": queue,
 						})
 					}
@@ -129,19 +111,19 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 
 				// Handle Ack/Nack manually when autoAck is false
 				if !autoAck {
-					err := handler(delivery)
+					err := c.safeHandle(ctx, queue, delivery, handler)
 					if err != nil {
 						// Handler returned error, Nack the message
 						if nackErr := delivery.Nack(false, true); nackErr != nil {
 							if c.IsLoggingEnabled() {
-								c.GetLogger().Error(ctx, nackErr, map[string]interface{}{
+								c.GetLogger().Error(ctx, nackErr, map[string]any{
 									"queue":   queue,
 									"message": "failed to nack message",
 								})
 							}
 						}
 						if c.IsLoggingEnabled() {
-							c.GetLogger().Error(ctx, err, map[string]interface{}{
+							c.GetLogger().Error(ctx, err, map[string]any{
 								"queue": queue,
 							})
 						}
@@ -149,7 +131,7 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 						// Handler succeeded, Ack the message
 						if ackErr := delivery.Ack(false); ackErr != nil {
 							if c.IsLoggingEnabled() {
-								c.GetLogger().Error(ctx, ackErr, map[string]interface{}{
+								c.GetLogger().Error(ctx, ackErr, map[string]any{
 									"queue":   queue,
 									"message": "failed to ack message",
 								})
@@ -157,10 +139,13 @@ func (c *RabbitMQClient) Consume(ctx context.Context, queue string, autoAck bool
 						}
 					}
 				} else {
-					// autoAck is true, RabbitMQ handles Ack automatically
-					if err := handler(delivery); err != nil {
+					// autoAck is true, RabbitMQ handles Ack automatically.
+					// The panic containment applies here too: the broker having
+					// already acked the message does not make a panicking
+					// handler any less fatal to the consumer goroutine.
+					if err := c.safeHandle(ctx, queue, delivery, handler); err != nil {
 						if c.IsLoggingEnabled() {
-							c.GetLogger().Error(ctx, err, map[string]interface{}{
+							c.GetLogger().Error(ctx, err, map[string]any{
 								"queue": queue,
 							})
 						}
@@ -178,7 +163,7 @@ func (c *RabbitMQClient) DeclareQueue(ctx context.Context, name string, durable,
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeclareQueue", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "DeclareQueue", func(ctx context.Context) (any, error) {
 		return c.channel.QueueDeclare(name, durable, autoDelete, exclusive, noWait, args)
 	})
 
@@ -190,7 +175,7 @@ func (c *RabbitMQClient) DeclareExchange(ctx context.Context, name, kind string,
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeclareExchange", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "DeclareExchange", func(ctx context.Context) (any, error) {
 		return nil, c.channel.ExchangeDeclare(name, kind, durable, autoDelete, internal, noWait, args)
 	})
 
@@ -202,7 +187,7 @@ func (c *RabbitMQClient) BindQueue(ctx context.Context, queue, routingKey, excha
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "BindQueue", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "BindQueue", func(ctx context.Context) (any, error) {
 		return nil, c.channel.QueueBind(queue, routingKey, exchange, noWait, args)
 	})
 
@@ -221,4 +206,34 @@ func (c *RabbitMQClient) Close() error {
 
 func (c *RabbitMQClient) EnableLogging(enable bool) {
 	c.SetLogging(enable)
+}
+
+// safeHandle runs the caller's handler and converts a panic into an error.
+//
+// The recover used to sit on the consumer goroutine, outside the delivery loop,
+// so a single panicking handler unwound the whole goroutine: the consumer
+// stopped reading the queue for good and the message was neither acked nor
+// nacked. Containing the panic per delivery means one bad message is nacked and
+// requeued while the consumer keeps running.
+//
+// The recover must be in the same goroutine that calls the handler; a recover
+// in a parent cannot catch a panic raised in a child.
+func (c *RabbitMQClient) safeHandle(
+	ctx context.Context,
+	queue string,
+	delivery amqp.Delivery,
+	handler func(amqp.Delivery) error,
+) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%w: %v", ErrHandlerPanic, r)
+			if c.IsLoggingEnabled() {
+				c.GetLogger().Error(ctx, err, map[string]any{
+					"queue": queue,
+				})
+			}
+		}
+	}()
+
+	return handler(delivery)
 }

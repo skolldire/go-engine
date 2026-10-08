@@ -27,7 +27,7 @@ func WrapError(err error, msg string) error {
 //	if err != nil {
 //	    return WrapErrorf(err, "failed to process user %d", userID)
 //	}
-func WrapErrorf(err error, format string, args ...interface{}) error {
+func WrapErrorf(err error, format string, args ...any) error {
 	if err == nil {
 		return nil
 	}
@@ -51,6 +51,6 @@ func NewError(msg string) error {
 // Example:
 //
 //	return NewErrorf("invalid user ID: %d", userID)
-func NewErrorf(format string, args ...interface{}) error {
+func NewErrorf(format string, args ...any) error {
 	return fmt.Errorf(format, args...)
 }

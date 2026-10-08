@@ -7,60 +7,60 @@ import (
 func TestSanitizeFields(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    map[string]interface{}
-		expected map[string]interface{}
+		input    map[string]any
+		expected map[string]any
 	}{
 		{
 			name: "sanitize password field",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"username": "testuser",
 				"password": "secret123",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"username": "testuser",
 				"password": "[REDACTED]",
 			},
 		},
 		{
 			name: "sanitize token field",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"user_id": "123",
 				"token":   "abc123xyz",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"user_id": "123",
 				"token":   "[REDACTED]",
 			},
 		},
 		{
 			name: "sanitize api_key field",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"service": "test",
 				"api_key": "key123",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"service": "test",
 				"api_key": "[REDACTED]",
 			},
 		},
 		{
 			name: "sanitize aws credentials",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"aws_access_key_id":     "AKIAIOSFODNN7EXAMPLE",
 				"aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"aws_access_key_id":     "[REDACTED]",
 				"aws_secret_access_key": "[REDACTED]",
 			},
 		},
 		{
 			name: "no sensitive fields",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"username": "testuser",
 				"user_id":  "12345",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"username": "testuser",
 				"user_id":  "12345",
 			},
@@ -72,8 +72,8 @@ func TestSanitizeFields(t *testing.T) {
 		},
 		{
 			name:     "empty input",
-			input:    map[string]interface{}{},
-			expected: map[string]interface{}{},
+			input:    map[string]any{},
+			expected: map[string]any{},
 		},
 	}
 
@@ -174,7 +174,7 @@ func TestShouldSanitizeField(t *testing.T) {
 }
 
 func TestSanitizeFields_CaseInsensitive(t *testing.T) {
-	input := map[string]interface{}{
+	input := map[string]any{
 		"Password": "secret123",
 		"TOKEN":    "abc123",
 		"Api_Key":  "key123",

@@ -19,19 +19,19 @@ type mockLogger struct {
 	mock.Mock
 }
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{}) {
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any) {
 	m.Called(ctx, err, fields)
 }
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
 func (m *mockLogger) WrapError(err error, msg string) error {
 	args := m.Called(err, msg)
 	if args.Get(0) != nil {
@@ -39,10 +39,10 @@ func (m *mockLogger) WrapError(err error, msg string) error {
 	}
 	return err
 }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service  { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string                                     { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                          { return nil }
+func (m *mockLogger) WithField(key string, value any) logger.Service  { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service { return m }
+func (m *mockLogger) GetLogLevel() string                             { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                  { return nil }
 
 func TestNewClient(t *testing.T) {
 	cfg := Config{
@@ -55,7 +55,7 @@ func TestNewClient(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -73,7 +73,7 @@ func TestNewClient_WithSecret(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -93,13 +93,14 @@ func TestNewClient_WithLogging(t *testing.T) {
 		WithResilience: false,
 	}
 	log := &mockLogger{}
-	log.On("Debug", mock.Anything, mock.Anything, mock.Anything).Return()
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	log.AssertExpectations(t)
+	// Constructing a client emits nothing: a library must not write log lines
+	// the application did not ask for. Operations are logged, construction is not.
+	log.AssertNotCalled(t, "Debug", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestNewClient_WithResilience(t *testing.T) {
@@ -120,12 +121,13 @@ func TestNewClient_WithResilience(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, err := NewClient(cfg, log)
+	client, err := NewClient(context.Background(), cfg, log)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	cognitoClient := client.(*Client)
-	assert.NotNil(t, cognitoClient.resilience)
+	// Resilience now lives in the embedded BaseClient middleware chain.
+	assert.NotNil(t, cognitoClient.BaseClient)
 }
 
 func TestNewClient_InvalidConfig(t *testing.T) {
@@ -168,7 +170,7 @@ func TestNewClient_InvalidConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			log := &mockLogger{}
-			client, err := NewClient(tt.cfg, log)
+			client, err := NewClient(context.Background(), tt.cfg, log)
 			assert.Error(t, err)
 			assert.Nil(t, client)
 		})
@@ -184,7 +186,7 @@ func TestClient_RegisterUser_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -241,7 +243,7 @@ func TestClient_Authenticate_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -281,7 +283,7 @@ func TestClient_ConfirmSignUp_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -321,7 +323,7 @@ func TestClient_RespondToMFAChallenge_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -382,7 +384,7 @@ func TestClient_ValidateToken_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -422,7 +424,7 @@ func TestClient_GetUserByAccessToken_InvalidToken(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -441,7 +443,7 @@ func TestClient_RefreshToken_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -461,7 +463,7 @@ func TestClient_ForgotPassword_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -481,7 +483,7 @@ func TestClient_ConfirmForgotPassword_InvalidRequest(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client, _ := NewClient(cfg, log)
+	client, _ := NewClient(context.Background(), cfg, log)
 	assert.NotNil(t, client)
 
 	ctx := context.Background()
@@ -589,7 +591,8 @@ func TestHandleCognitoError(t *testing.T) {
 			assert.NotNil(t, result)
 
 			if tt.expectedCode != "" {
-				cognitoErr, ok := result.(*CognitoError)
+				var cognitoErr *CognitoError
+				ok := errors.As(result, &cognitoErr)
 				assert.True(t, ok, "expected CognitoError")
 				assert.Equal(t, tt.expectedCode, cognitoErr.Code)
 			}

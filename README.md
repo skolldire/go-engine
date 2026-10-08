@@ -4,42 +4,97 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![CI](https://github.com/skolldire/go-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/skolldire/go-engine/actions/workflows/ci.yml)
 
-Go framework for enterprise microservices. Provides a fluent builder that wires AWS clients, databases, messaging, health checks, and observability into a single `*Engine` handle. Not a runnable binary — consumed via `go get`.
+Go framework for microservices. An application declares the components it wants
+as options to `engine.New`; the engine builds them from configuration, wires in
+health checks and observability, and releases them in reverse order on shutdown.
+
+The core knows no adapter. AWS, databases and messaging live in their own
+modules and register themselves through a `Provider` interface, so a service
+that only needs an HTTP router links 19 external Go modules.
+
+Not a runnable binary — consumed via `go get`.
 
 ---
 
 ## Modules
 
-| Module | Import path | Details |
-|---|---|---|
-| **core** | `github.com/skolldire/go-engine` | AppBuilder, Engine, health, resilience, error_handler, app_profile, OTEL, observability |
-| **aws** | `github.com/skolldire/go-engine/aws` | Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, AWS facade |
-| **messaging** | `github.com/skolldire/go-engine/messaging` | Kafka, RabbitMQ, gRPC client/server |
-| **database/sql** | `github.com/skolldire/go-engine/database/sql` | GORM wrapper (`gormsql.DBClient`) |
-| **database/redis** | `github.com/skolldire/go-engine/database/redis` | Redis client (go-redis/v9) |
-| **database/mongodb** | `github.com/skolldire/go-engine/database/mongodb` | MongoDB client |
-| **database/memcached** | `github.com/skolldire/go-engine/database/memcached` | Memcached client |
+`go-engine` is a **set of Go modules**, one per adapter family. A consumer
+downloads the core plus only the families it imports, so an HTTP-only service
+never fetches the AWS SDK, a Mongo driver or a Kafka client.
 
-Each module has its own README with configuration reference and usage examples:
-[`aws/`](aws/README.md) · [`messaging/`](messaging/README.md) · [`database/sql/`](database/sql/README.md) · [`database/redis/`](database/redis/README.md) · [`database/mongodb/`](database/mongodb/README.md) · [`database/memcached/`](database/memcached/README.md)
+That figure is reproducible rather than illustrative — the last line of
+
+```bash
+make lint-deps
+```
+
+prints it, resolved from `pkg/engine` plus `pkg/router`. It counts each
+package's real `Module.Path`, so modules that share an owner stay distinct:
+`spf13/viper` and `spf13/afero` are two, not one.
+
+The per-module table printed above it counts every package in that module, not
+just the two an HTTP-only consumer reaches, so those numbers are larger and
+answer a different question. Neither figure includes test-only dependencies:
+they are what a consumer resolves, and `go list -deps` is run without `-test`.
+
+For scale: before the v0.30.0 split, the equivalent entry point (`pkg/app`)
+linked every adapter unconditionally. That figure is quoted in
+[`CHANGELOG.md`](CHANGELOG.md) rather than here, because the package no longer
+exists and nothing in this repository can recompute it.
+
+| Module | Import path | Contains |
+|---|---|---|
+| **core** | `github.com/skolldire/go-engine` | `pkg/engine` (Provider core), `pkg/router`, `pkg/health`, `pkg/core`, `pkg/utilities`, `pkg/telemetry/otel`, `pkg/integration/{cloud,observability}`, `pkg/testutil`, `provider/otel`, `preset/http` |
+| **aws** | `github.com/skolldire/go-engine/aws` | Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, the AWS facade, their providers and `aws/preset` |
+| **messaging** | `github.com/skolldire/go-engine/messaging` | Kafka, RabbitMQ, gRPC client/server and their providers |
+| **http** | `github.com/skolldire/go-engine/http` | REST client (`http/pkg/rest`) and its provider |
+| **database/sql** | `github.com/skolldire/go-engine/database/sql` | GORM wrapper (`gormsql.DBClient`) and its provider |
+| **database/sqlc** | `github.com/skolldire/go-engine/database/sqlc` | `database/sql` client for sqlc-generated code (`sqlcdb.Client`) and its provider; no ORM, no external runtime dependency |
+| **database/redis** | `github.com/skolldire/go-engine/database/redis` | Redis client (go-redis/v9) and its provider |
+| **database/mongodb** | `github.com/skolldire/go-engine/database/mongodb` | MongoDB client and its provider |
+| **database/memcached** | `github.com/skolldire/go-engine/database/memcached` | Memcached client and its provider |
+| **preset/full** | `github.com/skolldire/go-engine/preset/full` | The everything preset; depends on every module above **except `database/sql` and `database/sqlc`** (see below) |
+
+The database engines are separate modules rather than one because their drivers
+share no dependency: a service using Redis has no reason to resolve GORM's
+dialects or the MongoDB driver. `database/sqlc` is split from `database/sql` for
+the same reason — it is the SQL client for services that find an ORM too heavy,
+so linking GORM to get it would defeat its purpose.
+
+Local development uses the `go.work` at the repository root, so a change to the
+core is visible to every family without a tagged release in between.
+
+Each family has its own README with configuration reference and usage examples:
+[`aws/`](aws/README.md) · [`messaging/`](messaging/README.md) · [`database/sql/`](database/sql/README.md) · [`database/sqlc/`](database/sqlc/README.md) · [`database/redis/`](database/redis/README.md) · [`database/mongodb/`](database/mongodb/README.md) · [`database/memcached/`](database/memcached/README.md)
 
 ---
 
 ## Quick Start
+
+The core knows no adapter. Each one implements `engine.Provider` in its own
+package and is registered explicitly, or in bulk through a preset.
+
+```bash
+go get github.com/skolldire/go-engine
+go get github.com/skolldire/go-engine/preset/full   # only if you want everything
+```
 
 ```go
 package main
 
 import (
     "context"
+    "net/http"
     "os"
     "os/signal"
     "syscall"
     "time"
 
-    "github.com/skolldire/go-engine/pkg/app"
+    "github.com/skolldire/go-engine/aws/provider/sqs"
+    "github.com/skolldire/go-engine/pkg/engine"
     "github.com/skolldire/go-engine/pkg/health"
-    pkgotel "github.com/skolldire/go-engine/pkg/telemetry/otel"
+    "github.com/skolldire/go-engine/pkg/router"
+    presetfull "github.com/skolldire/go-engine/preset/full"
 )
 
 func main() {
@@ -49,36 +104,53 @@ func main() {
     signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
     go func() { <-sig; cancel() }()
 
-    engine, err := app.NewAppBuilder().
-        WithContext(ctx).
-        WithDynamicConfig().                           // reads config/application.yaml + file-watch
-        WithOTEL(pkgotel.OTELConfig{                  // optional: distributed tracing + metrics
-            ServiceName:      "my-service",
-            ExporterEndpoint: "localhost:4317",
-            Enabled:          true,
-        }).
-        WithInitialization().                          // builds all clients declared in YAML
-        WithRouter().                                  // chi router; mounts GET /health automatically
-        WithHealth(health.Config{Timeout: 5 * time.Second}).
-        RegisterHealthChecker("postgres", myDBChecker).
-        RegisterHealthChecker("redis", myRedisChecker).
-        WithJWTAuth(router.JWTAuthConfig{           // validate Bearer tokens
-            JWKSEndpoint: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
-            Issuer:       "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX",
-            Audience:     "your-client-id",
-            SkipPaths:    []string{"/health", "/ping", "/live", "/ready"},
-        }).
-        Build()
+    // The preset supplies router, health probes and every component the YAML
+    // declares; anything after it refines that baseline.
+    opts := append(presetfull.Options(),
+        engine.WithHealthConfig(health.Config{Timeout: 5 * time.Second}),
+        engine.WithMiddleware(func(r router.Service) {
+            r.Use(router.JWTAuth(router.JWTAuthConfig{
+                JWKSURL:   "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
+                Issuer:    "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX",
+                Audience:  "your-client-id",
+                SkipPaths: []string{"/health", "/ping", "/live", "/ready"},
+            }))
+        }),
+    )
+
+    eng, err := engine.New(ctx, opts...)
     if err != nil {
         os.Exit(1)
     }
+    defer func() { _ = eng.Close(ctx) }()
 
-    engine.GetRouter().AddRoute("GET", "/users", usersHandler)
-    engine.Run()
+    eng.Router().AddRoute("GET", "/users", usersHandler)
+
+    // Typed retrieval replaces the old getters: the type travels with the caller.
+    orders, err := sqs.From(eng, "orders")
+    if err != nil {
+        os.Exit(1)
+    }
+    _ = orders
+
+    if err := eng.Run(ctx); err != nil {
+        os.Exit(1)
+    }
 }
 ```
 
-> `WithConfigs()` is legacy (no file-watch). Always use `WithDynamicConfig()`.
+An HTTP-only service registers no adapter at all and needs the core module only:
+
+```go
+import (
+    "github.com/skolldire/go-engine/pkg/engine"
+    presethttp "github.com/skolldire/go-engine/preset/http"
+)
+
+eng, err := engine.New(ctx, presethttp.Options()...)
+```
+
+Migrating from the removed `pkg/app` builder: [`docs/migration-engine.md`](docs/migration-engine.md).
 
 ---
 
@@ -90,8 +162,12 @@ log:
 
 router:
   port: "8080"
-  read_timeout: 10     # seconds
-  write_timeout: 30
+  # Durations must be Go duration strings. A bare number is rejected at
+  # startup: `read_timeout: 10` would mean 10 nanoseconds, so the engine
+  # refuses it rather than start a server that times out instantly.
+  read_timeout: 10s
+  write_timeout: 30s
+  shutdown_timeout: 30s
   enable_cors: false
 
 aws:
@@ -107,79 +183,157 @@ redis_clients:
 sqs_clients:
   - orders:
       endpoint: "http://localhost:4566"
-      wait_time: 20
+      enable_logging: true
 
 kafka:
   brokers: ["kafka:9092"]
   group_id: "my-service"
   topic: "events"
 
-feature_flags:
+telemetry:
+  service_name: "my-service"
+  exporter_endpoint: "localhost:4317"   # OTLP/gRPC
+  sampling_rate: 0.1
   enabled: true
-  file_path: "config/features.yaml"
-  watch: true
+  insecure: true                        # TLS by default; explicit opt-out
 ```
+
+A section with no registered provider builds nothing. That is what lets a
+service not pay for what it does not use, but it also means a forgotten
+`WithProvider` shows up as a missing component rather than an error —
+`eng.ComponentNames()` lists what was actually built.
+
+### Two SQL clients: GORM or sqlc
+
+There are two SQL adapters, in two modules, and an application picks one when it
+assembles the engine — by registering that provider and no other. They read
+different configuration sections and register under different component names,
+so they can also coexist: a service can keep GORM for the tables it already maps
+and move new queries to sqlc.
+
+| | `database/sql` (GORM) | `database/sqlc` |
+|---|---|---|
+| Import | `database/sql/provider/sql` | `database/sqlc/provider/sqlc` |
+| Config section | `sql_clients` | `sqlc_clients` |
+| Component name | `sql:<instance>` | `sqlc:<instance>` |
+| Runtime dependencies | GORM + one dialect | none beyond the core (stdlib `database/sql`) |
+| Queries | ORM methods, associations, `AutoMigrate` | SQL you write, compiled to typed Go by the `sqlc` CLI |
+| Driver | a `gorm.Dialector` passed in Go | a driver name in the YAML + a blank import |
+| Use it when | the schema is large, relations are mapped, migrations are automatic | the project is small, the queries are known, the ORM is more machinery than the problem needs |
+
+```go
+// GORM
+import (
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "gorm.io/driver/postgres"
+)
+
+eng, err := engine.New(ctx,
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
+db, err := sqlprovider.From(eng, "main")
+```
+
+```go
+// sqlc
+import (
+    _ "github.com/jackc/pgx/v5/stdlib"
+
+    sqlcprovider "github.com/skolldire/go-engine/database/sqlc/provider/sqlc"
+)
+
+eng, err := engine.New(ctx,
+    engine.WithProvider(sqlcprovider.New("main")),
+)
+client, err := sqlcprovider.From(eng, "main")
+queries := db.New(client)   // db is your sqlc-generated package
+```
+
+Either way the engine owns the pool: it is closed in LIFO order on shutdown and
+contributes a health check.
+
+### Why neither is in `preset/full`
+
+Every other adapter can be built from configuration alone. GORM cannot: it needs
+a `gorm.Dialector`, and picking one from a string such as `"postgres"` would mean
+importing the Postgres, MySQL, SQLite and SQL Server dialects together, so every
+consumer would link all four to use one. The driver is therefore supplied by the
+caller, and the provider is registered explicitly rather than discovered.
+
+The sqlc client stays out for a different reason: it *can* be built from
+configuration, but choosing between the two is an application decision, and a
+preset that auto-discovered both would build whichever section happened to be in
+the file. Registering the provider is that decision, written down.
+
+`sql_clients` holds pool and behaviour settings only — the DSN travels with the
+dialector; `sqlc_clients` holds the driver name and the DSN as well.
 
 Full schema: see [CLAUDE.md](CLAUDE.md).
 
 ---
 
-## Builder API
+## Engine API
 
-| Method | What it does |
+| Option | What it does |
 |---|---|
-| `WithContext(ctx)` | Sets the root context |
-| `WithDynamicConfig()` | Reads YAML + starts fsnotify file-watch |
-| `WithConfigs()` | Reads YAML once — **legacy**, no file-watch |
-| `SetLogger(log)` | Injects an external logger |
-| `WithInitialization()` | Builds all clients declared in YAML |
-| `WithRouter()` | Creates chi router; auto-mounts `GET /health` |
-| `WithMiddleware(fn)` | Adds a global HTTP middleware |
-| `WithOTEL(cfg)` | Initializes OTLP provider + registers Shutdown hook |
-| `WithHealth(cfg)` | Creates the HealthService |
-| `RegisterHealthChecker(name, checker)` | Adds a named checker; initializes HealthService if needed |
-| `WithCustomClient(name, client)` | Stores any client in `Services.CustomClients` |
-| `WithJWTAuth(cfg)` | Registers JWT Bearer validation middleware; must be called after `WithRouter` |
-| `WithGracefulShutdown()` | No-op — graceful shutdown is built into `Router.Run()` |
-| `Build()` | Returns `*Engine` or accumulated errors |
+| `engine.WithConfigDir(dir)` | Directory to read the YAML from (default: `CONF_DIR`, else `./config`) |
+| `engine.WithConfigFiles(names...)` | File names to read inside that directory |
+| `engine.WithConfig(cfg)` | Supplies an already-decoded configuration |
+| `engine.WithLogger(l)` | Injects an external logger |
+| `engine.WithTelemetry(t)` | Injects the telemetry every provider records through |
+| `engine.WithRouter()` | Creates the chi router |
+| `engine.WithMiddleware(fn)` | Runs `fn` against the router once it exists |
+| `engine.WithHealth()` | Creates the health service with defaults |
+| `engine.WithHealthConfig(cfg)` | Same, with an explicit `health.Config` |
+| `engine.WithProvider(p...)` | Registers adapters explicitly |
+| `engine.WithProviderFunc(fn)` | Registers adapters derived from the configuration — how presets discover instances |
 
-| `WithJWTAuth(cfg)` | Registers JWT Bearer validation middleware; must be called after `WithRouter` |
-
----
-
-## Engine getters
+Options carry no ordering rules: `engine.New` applies the steps in dependency
+order, not in call order.
 
 ```go
-engine.GetLogger()                     // logger.Service
-engine.GetRouter()                     // router.Service  (AddRoute, Use, Mount)
-engine.GetConfig()                     // *viper.Config
-engine.GetHealthService()              // health.Service
-engine.GetOTELProvider()               // pkgotel.Provider
-engine.GetFeatureFlags()               // *dynamic.FeatureFlags
-engine.GetValidator()                  // *validator.Validate
-
-// Named clients (populated from YAML)
-engine.GetRestClient("api1")           // rest.Service
-engine.GetRedisClientByName("cache")   // *redis.RedisClient
-engine.GetSQSClientByName("orders")    // sqs.Service
-engine.GetDynamoDBClientByName("main") // dynamo.Service
-engine.GetS3ClientByName("assets")     // s3.Service
-engine.GetSESClientByName("tx")        // ses.Service
-engine.GetSSMClientByName("cfg")       // ssm.Service
-engine.GetMongoDBClientByName("db")    // mongodb.Service
-engine.GetRabbitMQClientByName("evts") // rabbitmq.Service
-engine.GetGRPCClient("auth")           // grpcClient.Service
-engine.GetKafkaProducer()              // kafka.Producer
-engine.GetKafkaConsumer()              // kafka.Consumer
-engine.GetCognito()                    // cognito.Service
-engine.GetCustomClient("my-db")        // interface{}
+eng.Router()          // router.Service (AddRoute, Use, Mount)
+eng.Health()          // *health.HealthService
+eng.Logger()          // logger.Service
+eng.Telemetry()       // engine.Telemetry
+eng.Component(name)   // (any, bool)
+eng.ComponentNames()  // everything that was actually built
+eng.RegisterCloser(name, fn)
+eng.Run(ctx)
+eng.Close(ctx)
 ```
+
+### Typed retrieval
+
+Each provider exposes a `From` helper, so the type travels with the caller
+instead of with a getter on the engine:
+
+```go
+orders, err := sqs.From(eng, "orders")     // sqs.Service
+cache,  err := redis.From(eng, "cache")    // *redis.RedisClient
+api,    err := rest.From(eng, "api")       // rest.Service
+auth,   err := cognito.From(eng)           // cognito.Service
+
+// And for anything else, including your own components:
+thing, err := engine.Get[*MyThing](eng, "mything")
+```
+
+Asking for a component that does not exist, or with the wrong type, returns an
+error listing what *is* registered rather than a silent `nil`.
+
+### Writing your own adapter
+
+No core change is needed — implement `engine.Provider` in your own package. The
+contract and a worked example are in
+[`docs/migration-engine.md`](docs/migration-engine.md).
 
 ---
 
 ## Health checks
 
-`GET /health` is mounted automatically when `WithRouter` + `WithHealth`/`RegisterHealthChecker` are both called.
+`GET /health`, `/live` and `/ready` are mounted automatically when both
+`engine.WithRouter()` and `engine.WithHealth()` are in play — every preset
+includes them. Providers register their own checker during `Init`.
 
 ```go
 // Available checkers — no external import needed for SQL and Redis:
@@ -188,9 +342,7 @@ health.NewRedisChecker(client)                    // any type with Ping(ctx) err
 health.NewHTTPChecker("https://svc/ping", 2*time.Second)
 
 // Custom checker:
-type myChecker struct{}
-func (c *myChecker) Check(ctx context.Context) error { return nil }
-builder.RegisterHealthChecker("my-dep", &myChecker{})
+eng.Health().RegisterCheck("my-dep", func(ctx context.Context) error { return nil })
 ```
 
 Response shape → see [`pkg/health/`](pkg/health/).
@@ -219,12 +371,15 @@ cfg := resilience.Config{
     },
 }
 svc := resilience.NewResilienceService(cfg, log)
-result, err := svc.Execute(ctx, func() (interface{}, error) {
-    return callExternalAPI()
+result, err := svc.Execute(ctx, func(ctx context.Context) (any, error) {
+    return callExternalAPI(ctx)
 })
 ```
 
-All database and HTTP clients accept `WithResilience: true` in their `Config` to enable this automatically.
+Database and AWS clients accept `WithResilience: true` in their `Config` to
+enable this automatically. The REST client does not: it composes the two
+decorators separately through its `retry` and `circuit_breaker` blocks, so a
+nil block means that decorator is simply not installed.
 
 ---
 
@@ -242,7 +397,7 @@ err := error_handler.NewUnauthorizedError("token expired", originalErr)
 err := error_handler.NewInternalError("unexpected failure", originalErr)
 
 // In an HTTP handler:
-error_handler.HandleApiErrorResponse(err, w, engine.GetLogger())
+error_handler.HandleApiErrorResponse(err, w, eng.Logger())
 ```
 
 Error codes: `ER-400`, `ER-401`, `ER-403`, `ER-404`, `ER-409`, `ER-422`, `ER-500`.
@@ -291,35 +446,39 @@ cfg := pkgotel.OTELConfig{
     SamplingRate:     1.0,
     Enabled:          true,
 }
-// Wire via builder:
-builder.WithOTEL(cfg)
+// Wire as a provider (reads the `telemetry:` section of the YAML):
+import otelprovider "github.com/skolldire/go-engine/provider/otel"
+
+p := otelprovider.New()
+eng, _ := engine.New(ctx, engine.WithProvider(p), engine.WithTelemetry(p.Telemetry()))
 
 // HTTP middleware (auto-propagates W3C traceparent header):
 import "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-engine.GetRouter().Use(pkgotel.NewMiddleware(cfg))
+eng.Router().Use(pkgotel.NewMiddleware(cfg))
 ```
 
 ---
 
 ## JWT authentication
 
-`pkg/app/router` provides a chi middleware that validates RS256 Bearer tokens offline using JWKS public key caching. No Cognito SDK call is made per request — keys are fetched once and cached (default TTL: 1 h).
+`pkg/router` provides a chi middleware that validates RS256 Bearer tokens offline using JWKS public key caching. No Cognito SDK call is made per request — keys are fetched once and cached (default TTL: 1 h).
 
 ```go
-import "github.com/skolldire/go-engine/pkg/app/router"
+import "github.com/skolldire/go-engine/pkg/router"
 
-// 1. Wire in the builder (after WithRouter):
-engine, _ := app.NewAppBuilder().
-    WithDynamicConfig().
-    WithRouter().
-    WithJWTAuth(router.JWTAuthConfig{
-        JWKSEndpoint: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
-        Issuer:       "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX",
-        Audience:     "your-app-client-id",
-        SkipPaths:    []string{"/health", "/ping", "/live", "/ready"},
-        CacheTTL:     time.Hour,
-    }).
-    Build()
+// 1. Install it on the router:
+eng, _ := engine.New(ctx,
+    engine.WithRouter(),
+    engine.WithMiddleware(func(r router.Service) {
+        r.Use(router.JWTAuth(router.JWTAuthConfig{
+            JWKSURL:   "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX/.well-known/jwks.json",
+            Issuer:    "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXX",
+            Audience:  "your-app-client-id",
+            SkipPaths: []string{"/health", "/ping", "/live", "/ready"},
+            CacheTTL:  time.Hour,
+        }))
+    }),
+)
 
 // 2. Read claims in any handler:
 func getUser(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +492,7 @@ func getUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // 3. Restrict routes to specific Cognito groups:
-r := engine.GetRouter()
+r := eng.Router()
 r.With(router.RequireGroup("admins")).Get("/admin/users", adminHandler)
 r.With(router.RequireGroup("teachers", "admins")).Get("/content", contentHandler)
 ```
@@ -346,27 +505,41 @@ r.With(router.RequireGroup("teachers", "admins")).Get("/content", contentHandler
 - Expired token → `401 {"code":"ER-401","msg":"authentication token has expired","details":{"reason":"expired_token"}}`
 - Wrong group → `403 {"code":"ER-403","msg":"access forbidden: insufficient permissions","details":{"reason":"forbidden"}}`
 
-## WithCustomClient — external clients
+## Components the engine does not build
+
+Anything can be registered as a component and retrieved with the same typed
+lookup, including a connection the engine knows nothing about:
 
 ```go
-// Wire a GORM connection not managed by the engine:
-import gormsql "github.com/skolldire/go-engine/database/sql/pkg/database/gormsql"
-import "github.com/skolldire/go-engine/pkg/core/client"
+import (
+    "gorm.io/driver/postgres"
 
-dbClient, _ := gormsql.New(gormsql.Config{MaxOpenConnections: 20}, dialector, log)
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "github.com/skolldire/go-engine/pkg/engine"
+)
 
-engine, _ := app.NewAppBuilder().
-    WithDynamicConfig().
-    WithCustomClient("main-db", dbClient).
-    WithRouter().
-    Build()
+// SQL is the one adapter whose driver cannot come from configuration: GORM
+// needs a gorm.Dialector, and resolving one from a string such as "postgres"
+// would mean importing the Postgres, MySQL, SQLite and SQL Server dialects
+// together, so every consumer would link all four to use one.
+//
+// The provider takes the driver as an argument instead. Everything else works
+// as it does for any other adapter: it is registered, closed and health-checked
+// by the engine.
+eng, err := engine.New(ctx,
+    engine.WithRouter(),
+    engine.WithHealth(),
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
 
-// Retrieve:
-raw := engine.GetCustomClient("main-db")
-db, _ := client.SafeTypeAssert[*gormsql.DBClient](raw)
+db, err := sqlprovider.From(eng, "main")
 ```
 
-See [`database/sql/README.md`](database/sql/README.md) for the hexagonal architecture pattern.
+Its `sql_clients` section carries pool and behaviour settings only; the DSN
+travels with the dialector.
+
+See [`database/sql/README.md`](database/sql/README.md) for the hexagonal
+architecture pattern.
 
 ---
 
@@ -374,11 +547,11 @@ See [`database/sql/README.md`](database/sql/README.md) for the hexagonal archite
 
 | Pattern | Use when | go-engine | Example |
 |---|---|---|---|
-| **REST** | Sync request/response; caller needs the result now | `GetRestClient(name)` | Payment charge, third-party API |
-| **SQS** | Fire-and-forget tasks; AWS-native; simple retry | `GetSQSClientByName(name)` | Enqueue report generation after exam |
-| **Kafka** | High-throughput events; replay; multiple consumers | `GetKafkaProducer/Consumer()` | ExamCompleted → analytics + notifications |
-| **gRPC** | Low-latency internal calls; typed contracts | `GetGRPCClient(name)` / `engine.GrpcServer` | Calibration sidecar (IRT parameters) |
-| **RabbitMQ** | Flexible routing; on-prem or non-AWS | `GetRabbitMQClientByName(name)` | Notification fanout (email + SMS + push) |
+| **REST** | Sync request/response; caller needs the result now | `rest.From(eng, name)` | Payment charge, third-party API |
+| **SQS** | Fire-and-forget tasks; AWS-native; simple retry | `sqs.From(eng, name)` | Enqueue report generation after exam |
+| **Kafka** | High-throughput events; replay; multiple consumers | `kafka.From(eng)` | ExamCompleted → analytics + notifications |
+| **gRPC** | Low-latency internal calls; typed contracts | `grpcclient.From(eng, name)` / `grpcserver.From(eng)` | Calibration sidecar (IRT parameters) |
+| **RabbitMQ** | Flexible routing; on-prem or non-AWS | `rabbitmq.From(eng, name)` | Notification fanout (email + SMS + push) |
 
 Details: [`messaging/README.md`](messaging/README.md)
 
@@ -386,10 +559,17 @@ Details: [`messaging/README.md`](messaging/README.md)
 
 ## Architecture enforcement
 
+Most of the boundary is now structural: the core is its own module, so it
+cannot import an adapter without a `require` line appearing in its `go.mod`.
+`make lint-arch` reads that manifest, plus the two ways the boundary can still
+be crossed inside the core module.
+
 ```bash
-make lint-arch   # fails if gorm.io/gorm is imported in pkg/ (must stay in database/sql)
-make lint        # runs golangci-lint
-make test        # go test ./...
+make lint-arch   # fails if the core module resolves an adapter SDK or family module
+make lint        # golangci-lint over every module
+make test        # go test -race in every module
+make lint-deps   # external dependency footprint, per module
+make tidy        # go mod tidy in every module, then go work sync
 ```
 
 ---
@@ -397,8 +577,8 @@ make test        # go test ./...
 ## Repository conventions
 
 - `entity.go` — structs, interfaces, constants. `service.go` — implementation. `service_test.go` — tests.
-- Multi-instance clients use `[]map[name]Config` in YAML (e.g. `redis_clients`). Singular fields are legacy.
-- `client.SafeTypeAssert[T](raw)` — safe type assertion on `interface{}` values from `GetCustomClient`.
+- Multi-instance clients use `[]map[name]Config` in YAML (e.g. `redis_clients`). The singular form is not read by any provider.
+- `client.SafeTypeAssert[T](raw)` — safe type assertion on `any` values.
 - Comments explain *why*, not *what*. No godoc that restates the function name.
 - Minimum test coverage: 80% per package. Use `testify/assert` + `testify/mock`.
 

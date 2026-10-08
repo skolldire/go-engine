@@ -17,7 +17,7 @@ type client struct {
 //
 // The underlying kafka.Writer and kafka.Reader connect lazily on first use;
 // NewClient itself makes no network calls.
-func NewClient(cfg Config, log logger.Service) (Client, error) {
+func NewClient(ctx context.Context, cfg Config, log logger.Service) (Client, error) {
 	return &client{
 		prod: NewProducer(cfg, log),
 		cons: NewConsumer(cfg, log),

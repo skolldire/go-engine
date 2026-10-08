@@ -24,7 +24,7 @@ var (
 type Option func(*config)
 
 type Tasker interface {
-	Execute(ctx context.Context) (result interface{}, duration int, err error)
+	Execute(ctx context.Context) (result any, duration int, err error)
 	Priority() int
 }
 
@@ -41,7 +41,7 @@ type Task[I, O any] struct {
 type Result struct {
 	ID        string
 	Err       error
-	Res       interface{}
+	Res       any
 	Time      int
 	StartTime time.Time
 	EndTime   time.Time

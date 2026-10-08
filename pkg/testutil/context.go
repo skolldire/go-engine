@@ -3,7 +3,7 @@ package testutil
 import (
 	"context"
 
-	"github.com/skolldire/go-engine/pkg/app/router"
+	"github.com/skolldire/go-engine/pkg/router"
 )
 
 // NewTestContext creates a context.Context with JWT Claims injected,

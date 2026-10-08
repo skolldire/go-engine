@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
@@ -47,6 +48,13 @@ type Checker interface {
 	Check(ctx context.Context) error
 }
 
+// CheckerFunc adapts a plain function to Checker, so a provider can contribute
+// a health check without declaring a type for it.
+type CheckerFunc func(ctx context.Context) error
+
+// Check implements Checker.
+func (f CheckerFunc) Check(ctx context.Context) error { return f(ctx) }
+
 // DependencyStatus is the result of one checker run.
 type DependencyStatus struct {
 	Name      string `json:"name"`
@@ -71,8 +79,11 @@ type Config struct {
 // Service is the read-only interface consumed by the HTTP handler and callers.
 type Service interface {
 	IsLive() bool
-	IsReady() bool
-	GetStatus() HealthStatus
+	IsReady(ctx context.Context) bool
+	// GetStatus runs all checkers bounded by ctx and the configured timeout,
+	// whichever fires first. It always returns within that bound: a checker
+	// that has not finished is reported as down rather than blocking the caller.
+	GetStatus(ctx context.Context) HealthStatus
 }
 
 type namedChecker struct {
@@ -82,6 +93,7 @@ type namedChecker struct {
 
 // HealthService executes registered checkers and aggregates their results.
 type HealthService struct {
+	mu       sync.RWMutex // guards checkers
 	checkers []namedChecker
 	cfg      Config
 	log      logger.Service

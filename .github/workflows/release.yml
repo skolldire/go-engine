@@ -1,9 +1,21 @@
 name: CD Pipeline
 
+# This is the manual path only: a tag pushed by a person fires it, which is
+# useful for re-publishing a release. The automated path does not rely on it,
+# because a workflow cannot trigger another one through the default
+# GITHUB_TOKEN, and pushing more than three tags at once produces no tag event
+# either — version.yml therefore creates its own release inline.
+#
+# softprops/action-gh-release is idempotent, so the two paths cannot collide.
 on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish a release for"
+        required: true
 
 permissions:
   contents: write
@@ -13,13 +25,23 @@ jobs:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout the released code
         uses: actions/checkout@v4
+        with:
+          # Check out what is being released, not the ref the workflow was
+          # launched from. Under workflow_dispatch those differ, so the tests
+          # and the README that ended up in the release came from the branch
+          # rather than from the tag being published.
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          # Follow the floor declared in go.mod rather than whatever "stable"
+          # happens to be: a release must be built with the version consumers
+          # are told they need.
+          go-version-file: go.mod
           check-latest: true
 
       - name: Cache Go modules
@@ -33,14 +55,42 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Run Tests
-        run: go test ./... -v
+        run: make test
 
-      - name: Get tag name
+      - name: Resolve the tag
         id: tag
         run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          set -euo pipefail
+
+          # GITHUB_REF only names a tag for the push trigger. Under
+          # workflow_dispatch it is the branch the workflow was launched from,
+          # so stripping refs/tags/ left the literal "refs/heads/main" and the
+          # manual path published a release for a tag that does not exist.
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG_NAME="${{ inputs.tag }}"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [ -z "$TAG_NAME" ] || [ "${TAG_NAME#refs/}" != "$TAG_NAME" ]; then
+            echo "::error::could not resolve a tag (got '$TAG_NAME')"
+            exit 1
+          fi
+
+          # A release must describe something that exists.
+          git fetch --tags --quiet
+          if ! git rev-parse "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            echo "::error::tag $TAG_NAME does not exist"
+            exit 1
+          fi
+
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "Creating release for tag: $TAG_NAME"
+
+      # Tagging happens in version.yml, which pushes every module's tag
+      # atomically after a full preflight. Doing it here meant the root tag
+      # existed — and consumers could resolve it — before the sub-module tags
+      # were created.
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

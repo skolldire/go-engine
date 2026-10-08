@@ -78,12 +78,12 @@ type AuthTokens struct {
 // Cognito genera y firma los tokens JWT automáticamente
 // Este cliente solo valida y extrae los claims
 type TokenClaims struct {
-	Sub           string                 `json:"sub"` // User ID (Cognito User Sub)
-	Email         string                 `json:"email"`
-	EmailVerified bool                   `json:"email_verified"`
-	Username      string                 `json:"cognito:username"`
-	Groups        []string               `json:"cognito:groups"` // Grupos de Cognito
-	CustomClaims  map[string]interface{} `json:"-"`              // Claims personalizados
+	Sub           string         `json:"sub"` // User ID (Cognito User Sub)
+	Email         string         `json:"email"`
+	EmailVerified bool           `json:"email_verified"`
+	Username      string         `json:"cognito:username"`
+	Groups        []string       `json:"cognito:groups"` // Grupos de Cognito
+	CustomClaims  map[string]any `json:"-"`              // Claims personalizados
 
 	// Standard JWT Claims (generados por Cognito)
 	Iss      string `json:"iss"`       // Issuer (Cognito User Pool URL)
@@ -246,49 +246,80 @@ func (e *MFARequiredError) Error() string {
 	return "MFA required: " + string(e.ChallengeType)
 }
 
-// IsCognitoError verifica si un error es de tipo CognitoError
+// IsCognitoError reports whether err is, or wraps, a *CognitoError.
+// It uses errors.As so the check keeps working once a caller wraps the error.
 func IsCognitoError(err error) bool {
-	_, ok := err.(*CognitoError)
-	return ok
+	var target *CognitoError
+	return errors.As(err, &target)
 }
 
-// IsMFARequiredError verifica si un error es de tipo MFARequiredError
+// IsMFARequiredError reports whether err is, or wraps, an *MFARequiredError.
 func IsMFARequiredError(err error) bool {
-	_, ok := err.(*MFARequiredError)
-	return ok
+	var target *MFARequiredError
+	return errors.As(err, &target)
 }
 
 // Service define la interfaz del cliente Cognito
 //
 // PRINCIPIO YAGNI (You Aren't Gonna Need It):
 // Esta interfaz incluye solo los métodos esenciales para MVP 0 y MVP 1
-type Service interface {
-	// MVP 0 - Funcionalidades Críticas
+// The interface is split by concern, mirroring the files that implement it:
+// authentication.go, token.go, mfa.go, password.go, session.go and groups.go.
+// The responsibilities were already separated in the layout; the interface was
+// a single flat block that hid it, so a handler that only validates a token
+// depended on user registration and MFA enrolment to do it.
+//
+// Service composes them all, so nothing that held a Service breaks.
+
+// Registrar creates and confirms user accounts.
+type Registrar interface {
 	RegisterUser(ctx context.Context, req RegisterUserRequest) (*User, error)
 	ConfirmSignUp(ctx context.Context, req ConfirmSignUpRequest) error
+}
+
+// Authenticator exchanges credentials for tokens.
+type Authenticator interface {
 	Authenticate(ctx context.Context, req AuthenticateRequest) (*AuthTokens, error)
+	RefreshToken(ctx context.Context, req RefreshTokenRequest) (*AuthTokens, error)
+}
+
+// TokenValidator inspects an access token. This is what an HTTP middleware
+// needs, and the smallest useful dependency in this package.
+type TokenValidator interface {
 	ValidateToken(ctx context.Context, token string) (*TokenClaims, error)
 	GetUserByAccessToken(ctx context.Context, accessToken string) (*User, error)
+}
 
-	// MVP 0 - MFA Support
+// MFAManager enrols a user in multi-factor authentication and answers its
+// challenges.
+type MFAManager interface {
 	RespondToMFAChallenge(ctx context.Context, req MFAChallengeRequest) (*AuthTokens, error)
-
-	// MVP 1 - Funcionalidades Adicionales
-	RefreshToken(ctx context.Context, req RefreshTokenRequest) (*AuthTokens, error)
-	ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error
-	ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPasswordRequest) error
-
-	// MVP 0 - Gestión Completa de MFA
 	AssociateSoftwareToken(ctx context.Context, accessToken string) (*SoftwareTokenAssociation, error)
 	VerifySoftwareToken(ctx context.Context, accessToken, userCode, session string) error
 	SetUserMFAPreference(ctx context.Context, accessToken string, smsEnabled, totpEnabled bool) error
 	GetUserMFAStatus(ctx context.Context, accessToken string) (*MFAStatus, error)
+}
 
-	// MVP 0 - Gestión de Sesiones
+// PasswordManager drives the forgotten-password flow.
+type PasswordManager interface {
+	ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error
+	ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPasswordRequest) error
+}
+
+// SessionManager revokes issued tokens.
+type SessionManager interface {
 	SignOut(ctx context.Context, accessToken string) error
 	GlobalSignOut(ctx context.Context, accessToken string) error
+}
 
-	// MVP 1 - Gestión de Grupos (roles)
+// Service is the full Cognito client, composed of the concerns above.
+type Service interface {
+	Registrar
+	Authenticator
+	TokenValidator
+	MFAManager
+	PasswordManager
+	SessionManager
 	GroupService
 }
 

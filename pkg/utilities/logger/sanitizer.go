@@ -54,12 +54,12 @@ const (
 )
 
 // SanitizeFields sanitizes sensitive fields in a map
-func SanitizeFields(fields map[string]interface{}) map[string]interface{} {
+func SanitizeFields(fields map[string]any) map[string]any {
 	if fields == nil {
 		return nil
 	}
 
-	sanitized := make(map[string]interface{}, len(fields))
+	sanitized := make(map[string]any, len(fields))
 	for k, v := range fields {
 		keyLower := strings.ToLower(k)
 

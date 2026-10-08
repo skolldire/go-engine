@@ -49,7 +49,7 @@ func TestWrapErrorf(t *testing.T) {
 		name    string
 		err     error
 		format  string
-		args    []interface{}
+		args    []any
 		wantNil bool
 		wantMsg string
 	}{
@@ -57,14 +57,14 @@ func TestWrapErrorf(t *testing.T) {
 			name:    "nil error returns nil",
 			err:     nil,
 			format:  "failed: %d",
-			args:    []interface{}{123},
+			args:    []any{123},
 			wantNil: true,
 		},
 		{
 			name:    "wraps error with formatted message",
 			err:     errors.New("original error"),
 			format:  "failed to process user %d",
-			args:    []interface{}{123},
+			args:    []any{123},
 			wantNil: false,
 			wantMsg: "failed to process user 123: original error",
 		},

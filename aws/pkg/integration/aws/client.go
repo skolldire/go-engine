@@ -7,8 +7,8 @@ import (
 	"github.com/skolldire/go-engine/aws/pkg/integration/aws/adapters"
 	"github.com/skolldire/go-engine/pkg/integration/cloud"
 	"github.com/skolldire/go-engine/pkg/integration/observability"
+	telemetry "github.com/skolldire/go-engine/pkg/telemetry/otel"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/telemetry"
 )
 
 // Client is the AWS implementation of cloud.Client

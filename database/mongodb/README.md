@@ -43,7 +43,14 @@ mongodb_clients:
 `mongodb.Service` exposes `GetDatabase()` and `GetCollection()` for direct access to the mongo-driver primitives. This gives full query flexibility without wrapper overhead.
 
 ```go
-mdb := engine.GetMongoDBClientByName("analytics")
+import mongoprovider "github.com/skolldire/go-engine/database/mongodb/provider/mongodb"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(mongoprovider.New("analytics")))
+mdb, err := mongoprovider.From(eng, "analytics")
+if err != nil {
+	return err
+}
 
 // Get a collection
 col := mdb.GetCollection("exam_results")

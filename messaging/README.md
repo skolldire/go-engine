@@ -88,7 +88,14 @@ rabbitmq_clients:
 ```
 
 ```go
-rb := engine.GetRabbitMQClientByName("events")
+import rabbitprovider "github.com/skolldire/go-engine/messaging/provider/rabbitmq"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(rabbitprovider.New("events")))
+rb, err := rabbitprovider.From(eng, "events")
+if err != nil {
+	return err
+}
 err := rb.Publish(ctx, "exam.completed", jsonBytes)
 
 go rb.Consume(ctx, func(msg rabbitmq.Message) error {
@@ -109,7 +116,14 @@ grpc_client:
 ```
 
 ```go
-conn := engine.GetGRPCClient("calibration")
+import grpcprovider "github.com/skolldire/go-engine/messaging/provider/grpcclient"
+
+// Registered at build time:
+//   engine.New(ctx, engine.WithProvider(grpcprovider.New("calibration")))
+conn, err := grpcprovider.From(eng, "calibration")
+if err != nil {
+    return err
+}
 
 // Get the underlying *grpc.ClientConn for generated stubs:
 grpcConn := conn.GetConnection()
@@ -138,14 +152,30 @@ grpc_server:
 ```
 
 ```go
-grpcSrv := engine.GrpcServer
+import (
+    grpcsrvprovider "github.com/skolldire/go-engine/messaging/provider/grpcserver"
+    "github.com/skolldire/go-engine/pkg/engine"
+)
+
+// The provider reads the grpc_server section and builds the server:
+eng, err := engine.New(ctx, engine.WithProvider(grpcsrvprovider.New()))
+if err != nil {
+    log.Fatal(err)
+}
+
+grpcSrv, err := grpcsrvprovider.From(eng)
+if err != nil {
+    log.Fatal(err)
+}
 
 // Register generated service implementations before Start:
 grpcSrv.RegisterService(func(s *grpc.Server) {
     pb.RegisterCalibrationServiceServer(s, &myImpl{})
 })
 
-// Start is non-blocking; cancelling ctx triggers GracefulStop:
+// Start is non-blocking; cancelling ctx triggers a drain bounded by
+// shutdown_timeout. Start after Stop returns ErrServerStopped: a *grpc.Server
+// is single-use.
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 if err := grpcSrv.Start(ctx); err != nil {
@@ -155,23 +185,34 @@ if err := grpcSrv.Start(ctx); err != nil {
 
 ### Adding interceptors
 
-`NewServer` creates a plain `*grpc.Server` without interceptors. To add auth, tracing, or logging interceptors, construct the server manually and inject it:
+Interceptors must be supplied at construction: gRPC fixes them when the server
+is created and offers no way to add them later. Pass them to the provider, which
+forwards them to `grpc.NewServer`:
 
 ```go
-import "google.golang.org/grpc"
-
-rawServer := grpc.NewServer(
-    grpc.ChainUnaryInterceptor(
-        myAuthInterceptor,
-        myLoggingInterceptor,
-    ),
+import (
+    grpcsrvprovider "github.com/skolldire/go-engine/messaging/provider/grpcserver"
+    "google.golang.org/grpc"
 )
-engine, _ := app.NewAppBuilder().
-    WithDynamicConfig().
-    WithCustomClient("grpc-server", rawServer).
-    WithRouter().
-    Build()
+
+eng, err := engine.New(ctx,
+    engine.WithProvider(grpcsrvprovider.New(
+        grpc.ChainUnaryInterceptor(myAuthInterceptor, myLoggingInterceptor),
+        grpc.ChainStreamInterceptor(myStreamInterceptor),
+    )),
+)
+if err != nil {
+    log.Fatal(err)
+}
+
+srv, err := grpcsrvprovider.From(eng)
 ```
+
+Any `grpc.ServerOption` works the same way — `MaxRecvMsgSize`, `Creds`,
+`KeepaliveParams`. Building a bare `*grpc.Server` by hand is no longer
+necessary, and costs more than it looks: it gives up the deadline-bounded
+`Stop`, the restart and double-start checks, `Address()` for `puerto: 0`, and
+the automatic reflection registration.
 
 ### Reflection
 

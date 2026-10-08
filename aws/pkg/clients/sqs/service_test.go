@@ -20,19 +20,19 @@ type mockLogger struct {
 	mock.Mock
 }
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{}) {
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any) {
 	m.Called(ctx, err, fields)
 }
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
 func (m *mockLogger) WrapError(err error, msg string) error {
 	args := m.Called(err, msg)
 	if args.Get(0) != nil {
@@ -40,10 +40,10 @@ func (m *mockLogger) WrapError(err error, msg string) error {
 	}
 	return err
 }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service  { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service { return m }
-func (m *mockLogger) GetLogLevel() string                                     { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                          { return nil }
+func (m *mockLogger) WithField(key string, value any) logger.Service  { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service { return m }
+func (m *mockLogger) GetLogLevel() string                             { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                  { return nil }
 
 func TestNewClient(t *testing.T) {
 	acf := aws.Config{
@@ -56,7 +56,7 @@ func TestNewClient(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	assert.NotNil(t, client)
 	assert.IsType(t, &Cliente{}, client)
@@ -72,12 +72,13 @@ func TestNewClient_WithEndpoint(t *testing.T) {
 		WithResilience: false,
 	}
 	log := &mockLogger{}
-	log.On("Debug", mock.Anything, "SQS client initialized", mock.Anything).Return()
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	assert.NotNil(t, client)
-	log.AssertExpectations(t)
+	// Constructing a client emits nothing: a library must not write log lines
+	// the application did not ask for.
+	log.AssertNotCalled(t, "Debug", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestNewClient_WithResilience(t *testing.T) {
@@ -99,26 +100,28 @@ func TestNewClient_WithResilience(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	assert.NotNil(t, client)
 	cliente := client.(*Cliente)
-	assert.NotNil(t, cliente.resilience)
+	// Resilience now lives in the embedded BaseClient's middleware chain rather
+	// than in a field of this package.
+	assert.NotNil(t, cliente.BaseClient)
 }
 
-func TestCliente_SendMsj_InvalidInput(t *testing.T) {
+func TestCliente_SendMessage_InvalidInput(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
-	_, err := client.SendMsj(ctx, "", "message", nil)
+	_, err := client.SendMessage(ctx, "", "message", nil)
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 
-	_, err = client.SendMsj(ctx, "queue-url", "", nil)
+	_, err = client.SendMessage(ctx, "queue-url", "", nil)
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 }
@@ -128,7 +131,7 @@ func TestCliente_SendJSON_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.SendJSON(ctx, "", map[string]string{"key": "value"}, nil)
@@ -140,20 +143,20 @@ func TestCliente_SendJSON_InvalidInput(t *testing.T) {
 	assert.Equal(t, ErrInvalidInput, err)
 }
 
-func TestCliente_ReceiveMsj_InvalidInput(t *testing.T) {
+func TestCliente_ReceiveMessages_InvalidInput(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
-	_, err := client.ReceiveMsj(ctx, "", 10, 0)
+	_, err := client.ReceiveMessages(ctx, "", 10, 0)
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 }
 
-func TestCliente_ReceiveMsj_DefaultMaxMessages(t *testing.T) {
+func TestCliente_ReceiveMessages_DefaultMaxMessages(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
@@ -161,30 +164,30 @@ func TestCliente_ReceiveMsj_DefaultMaxMessages(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	// This will fail without a real AWS connection, but tests the default logic
-	_, err := client.ReceiveMsj(ctx, "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue", 0, 0)
+	_, err := client.ReceiveMessages(ctx, "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue", 0, 0)
 	// We expect an error since there's no real AWS connection
 	assert.Error(t, err)
 	// But the error should not be ErrInvalidInput since queueURL is provided
 	assert.NotEqual(t, ErrInvalidInput, err)
 }
 
-func TestCliente_DeleteMsj_InvalidInput(t *testing.T) {
+func TestCliente_DeleteMessage_InvalidInput(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
-	err := client.DeleteMsj(ctx, "", "receipt-handle")
+	err := client.DeleteMessage(ctx, "", "receipt-handle")
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 
-	err = client.DeleteMsj(ctx, "queue-url", "")
+	err = client.DeleteMessage(ctx, "queue-url", "")
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidInput, err)
 }
@@ -194,7 +197,7 @@ func TestCliente_CreateQueue_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.CreateQueue(ctx, "", nil)
@@ -210,7 +213,7 @@ func TestCliente_CreateQueue_WithAttributes(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	attributes := map[string]string{
@@ -227,7 +230,7 @@ func TestCliente_DeleteQueue_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	err := client.DeleteQueue(ctx, "")
@@ -240,7 +243,7 @@ func TestCliente_GetURLQueue_InvalidInput(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.GetURLQueue(ctx, "")
@@ -256,7 +259,7 @@ func TestCliente_ListQueue(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	// This will fail without a real AWS connection
@@ -274,7 +277,7 @@ func TestCliente_ListQueue_WithPrefix(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	_, err := client.ListQueue(ctx, "test-prefix")
@@ -289,12 +292,12 @@ func TestCliente_EnableLogging(t *testing.T) {
 	}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 	cliente := client.(*Cliente)
 
-	assert.False(t, cliente.logging)
+	assert.False(t, cliente.IsLoggingEnabled())
 	client.EnableLogging(true)
-	assert.True(t, cliente.logging)
+	assert.True(t, cliente.IsLoggingEnabled())
 }
 
 func TestCliente_SendJSON_ValidJSON(t *testing.T) {
@@ -305,10 +308,10 @@ func TestCliente_SendJSON_ValidJSON(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
-	message := map[string]interface{}{
+	message := map[string]any{
 		"key":    "value",
 		"number": 42,
 		"bool":   true,
@@ -328,7 +331,7 @@ func TestCliente_SendJSON_WithAttributes(t *testing.T) {
 	// Configure mock to return error when WrapError is called
 	log.On("WrapError", mock.Anything, mock.Anything).Return(errors.New("mock error"))
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 
 	ctx := context.Background()
 	message := map[string]string{"key": "value"}
@@ -349,11 +352,11 @@ func TestCliente_EnsureContextWithTimeout(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 	cliente := client.(*Cliente)
 
 	ctx := context.Background()
-	newCtx, cancel := cliente.ensureContextWithTimeout(ctx)
+	newCtx, cancel := cliente.ContextWithTimeout(ctx)
 	assert.NotNil(t, newCtx)
 	assert.NotNil(t, cancel)
 	cancel()
@@ -364,13 +367,13 @@ func TestCliente_EnsureContextWithTimeout_WithDeadline(t *testing.T) {
 	cfg := Config{}
 	log := &mockLogger{}
 
-	client := NewClient(acf, cfg, log)
+	client := NewClient(context.Background(), acf, cfg, log)
 	cliente := client.(*Cliente)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	newCtx, cancelFunc := cliente.ensureContextWithTimeout(ctx)
+	newCtx, cancelFunc := cliente.ContextWithTimeout(ctx)
 	assert.NotNil(t, newCtx)
 	assert.NotNil(t, cancelFunc)
 	cancelFunc()

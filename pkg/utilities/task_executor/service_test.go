@@ -3,25 +3,28 @@ package task_executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 type mockLogger struct{}
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{})     {}
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{})      {}
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
-func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any)     {}
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any)      {}
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any)      {}
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any)      {}
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
+func (m *mockLogger) WrapError(err error, msg string) error                            { return err }
+func (m *mockLogger) WithField(key string, value any) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                              { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                   { return nil }
 
 type mockMetricsCollector struct{}
 
@@ -161,4 +164,178 @@ func TestNewTask(t *testing.T) {
 	assert.NotNil(t, task)
 	assert.Equal(t, "input", task.Args)
 	assert.Equal(t, PriorityNormal, task.priority)
+}
+
+// TestWorkerPool_PanicIsContained verifies that a task that panics does not
+// crash the process: the panic is recovered in the task goroutine and surfaced
+// as an ErrTaskPanic result.
+func TestWorkerPool_PanicIsContained(t *testing.T) {
+	tasks := map[string]Tasker{
+		"boom": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				panic("kaboom")
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+		"ok": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				return "fine", nil
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	results := WorkerPool(context.Background(), tasks, 2, WithLogger(&mockLogger{}))
+
+	assert.Len(t, results, 2)
+	assert.ErrorIs(t, results["boom"].Err, ErrTaskPanic)
+	assert.NoError(t, results["ok"].Err)
+	assert.Equal(t, "fine", results["ok"].Res)
+}
+
+// TestWorkerPool_TaskTimeout verifies a task that exceeds the task timeout
+// yields an ErrTaskTimeout result instead of blocking the pool.
+func TestWorkerPool_TaskTimeout(t *testing.T) {
+	tasks := map[string]Tasker{
+		"slow": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				// Cooperative task: respects ctx cancellation.
+				<-ctx.Done()
+				return "", ctx.Err()
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	results := WorkerPool(context.Background(), tasks, 1,
+		WithTaskTimeout(50*time.Millisecond),
+		WithLogger(&mockLogger{}),
+	)
+
+	assert.Len(t, results, 1)
+	assert.ErrorIs(t, results["slow"].Err, ErrTaskTimeout)
+}
+
+// TestWorkerPool_NonCooperativeTaskTimeoutDoesNotLeak verifies that when a task
+// ignores ctx and outlives the timeout, the pool still returns promptly and the
+// runaway goroutine does not block on the outcome channel (bounded leak).
+func TestWorkerPool_NonCooperativeTaskTimeoutDoesNotLeak(t *testing.T) {
+	done := make(chan struct{})
+	tasks := map[string]Tasker{
+		"stubborn": &Task[string, string]{
+			Func: func(ctx context.Context, input string) (string, error) {
+				// Ignores ctx; finishes shortly after the timeout.
+				time.Sleep(150 * time.Millisecond)
+				close(done)
+				return "late", nil
+			},
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	start := time.Now()
+	results := WorkerPool(context.Background(), tasks, 1,
+		WithTaskTimeout(30*time.Millisecond),
+		WithLogger(&mockLogger{}),
+	)
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, 120*time.Millisecond, "pool must return on timeout, not wait for the task")
+	assert.ErrorIs(t, results["stubborn"].Err, ErrTaskTimeout)
+
+	// The runaway goroutine must still be able to complete and send on the
+	// buffered channel without blocking; wait for it so goleak stays clean.
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runaway task goroutine did not finish")
+	}
+}
+
+func TestWorkerPool_NoGoroutineLeak(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	tasks := map[string]Tasker{
+		"a": &Task[string, string]{
+			Func:     func(ctx context.Context, input string) (string, error) { return "a", nil },
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+		"b": &Task[string, string]{
+			Func:     func(ctx context.Context, input string) (string, error) { return "b", nil },
+			Args:     "input",
+			priority: PriorityNormal,
+		},
+	}
+
+	results := WorkerPool(context.Background(), tasks, 2, WithLogger(&mockLogger{}))
+	assert.Len(t, results, 2)
+}
+
+// TestBatchWorkPool_ProcessesFinalPartialBatch is the regression test for the
+// bug where the per-batch counter was compared against the total task count, so
+// any remainder smaller than batchSize was silently dropped: no error, no log,
+// just lost work.
+func TestBatchWorkPool_ProcessesFinalPartialBatch(t *testing.T) {
+	cases := []struct {
+		name      string
+		total     int
+		batchSize int
+	}{
+		{"remainder smaller than batch", 250, 100},
+		{"exact multiple", 200, 100},
+		{"single partial batch", 30, 100},
+		{"batch size of one", 7, 1},
+		{"remainder of one", 101, 10},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := make(map[string]Tasker, tc.total)
+			for i := 0; i < tc.total; i++ {
+				tasks[fmt.Sprintf("task-%d", i)] = &Task[int, int]{
+					Func: func(ctx context.Context, in int) (int, error) { return in * 2, nil },
+					Args: i,
+				}
+			}
+
+			results := BatchWorkPool(context.Background(), tasks, 4, tc.batchSize)
+
+			assert.Equal(t, tc.total, len(results),
+				"every task must run exactly once regardless of how the last batch divides")
+			for id := range tasks {
+				res, ok := results[id]
+				require.True(t, ok, "missing result for %s", id)
+				assert.NoError(t, res.Err)
+			}
+		})
+	}
+}
+
+// TestBatchWorkPool_EmptyTaskSet guards the boundary where there is no work.
+func TestBatchWorkPool_EmptyTaskSet(t *testing.T) {
+	results := BatchWorkPool(context.Background(), map[string]Tasker{}, 4, 100)
+	assert.Empty(t, results)
+}
+
+// TestBatchWorkPool_StopsOnCancelledContext verifies cancellation still short
+// circuits the remaining batches instead of flushing them anyway.
+func TestBatchWorkPool_StopsOnCancelledContext(t *testing.T) {
+	tasks := make(map[string]Tasker, 500)
+	for i := 0; i < 500; i++ {
+		tasks[fmt.Sprintf("task-%d", i)] = &Task[int, int]{
+			Func: func(ctx context.Context, in int) (int, error) { return in, nil },
+			Args: i,
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	results := BatchWorkPool(ctx, tasks, 4, 50)
+	assert.Less(t, len(results), 500)
 }

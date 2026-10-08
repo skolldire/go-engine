@@ -1,38 +1,68 @@
 MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/null || pwd))
 
-.PHONY: all init clean test lint lint-arch
+# Every module in the repository, in dependency order: the core first, then the
+# adapter families, then the preset that composes all of them. `go.work` binds
+# them together for local development, so a change to the core is visible to
+# every family without a tagged release in between.
+MODULES := . aws messaging http \
+    database/sql database/sqlc database/redis database/mongodb database/memcached \
+    preset/full
 
-all: init test
+# Modules that ship an adapter family. The core is deliberately absent: its
+# whole point is that it resolves none of their dependencies.
+FAMILY_MODULES := aws messaging http \
+    database/sql database/sqlc database/redis database/mongodb database/memcached
 
-init:
-	@chmod +x init.sh && ./init.sh
+.PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
+
+## all: the checks a change must pass before it is pushed
+all: lint lint-arch lint-docs check-modules test example
+
 
 clean:
-	go clean -testcache
+	@for m in $(MODULES); do (cd $$m && go clean -testcache); done
 
+## test: runs the suite of every module with the race detector
 test:
-	go test ./... -v
+	@FAILED=0; \
+	for m in $(MODULES); do \
+		echo "==> test $$m"; \
+		(cd $$m && go test -race -count=1 ./...) || FAILED=1; \
+	done; \
+	[ $$FAILED -eq 0 ] || (echo ""; echo "FAIL: tests failed in one or more modules"; exit 1)
 
+## lint: golangci-lint over every module, all sharing the root configuration
 lint:
-	golangci-lint run ./...
+	@FAILED=0; \
+	root=$$(pwd); \
+	for m in $(MODULES); do \
+		echo "==> lint $$m"; \
+		(cd $$m && golangci-lint run --config $$root/.golangci.yml ./...) || FAILED=1; \
+	done; \
+	[ $$FAILED -eq 0 ] || (echo ""; echo "FAIL: lint failed in one or more modules"; exit 1)
+
+## tidy: go mod tidy in every module, then re-sync the workspace
+tidy:
+	@for m in $(MODULES); do echo "==> tidy $$m"; (cd $$m && GOWORK=off go mod tidy); done
+	@go work sync
 
 COVERAGE_THRESHOLD := 80
 
-# Packages with meaningful logic in the root module.
-# Sub-modules (aws/, database/*, messaging/) are tested independently.
+# Packages with meaningful logic in the core module. The adapter families are
+# covered by their own suites, which `make test` runs.
+#
+# it is tracked separately; gating on it today would only mean disabling the gate.
 CRITICAL_PKGS := \
-    ./pkg/app/router/... \
-    ./pkg/app/build/... \
+    ./pkg/engine/... \
+    ./pkg/router/... \
     ./pkg/health/... \
     ./pkg/utilities/resilience/... \
     ./pkg/utilities/error_handler/... \
     ./pkg/utilities/retry_backoff/...
-# Note: ./pkg/app (root) is excluded — service.go initializes real AWS clients
-# that require live infrastructure. Those are covered by integration tests.
 
 .PHONY: coverage coverage-check coverage-module
 
-## coverage: generates coverage.out and coverage.html for the root module
+## coverage: generates coverage.out and coverage.html for the core module
 coverage:
 	@echo "==> Generating coverage report..."
 	@go test ./... -coverprofile=coverage.out -covermode=atomic 2>/dev/null || true
@@ -46,7 +76,12 @@ coverage-check:
 	@FAILED=0; \
 	for pkg in $(CRITICAL_PKGS); do \
 		outfile=$$(echo $$pkg | tr '/.' '__' | tr -d '*').out; \
-		go test $$pkg -coverprofile=$$outfile -covermode=atomic -count=1 2>/dev/null || true; \
+		if ! go test $$pkg -coverprofile=$$outfile -covermode=atomic -count=1; then \
+			printf "FAIL  %-50s (tests failed)\n" "$$pkg"; \
+			FAILED=1; \
+			rm -f $$outfile; \
+			continue; \
+		fi; \
 		if [ -f "$$outfile" ]; then \
 			pct=$$(go tool cover -func=$$outfile 2>/dev/null | tail -1 | awk '{gsub(/%/,""); print int($$3)}'); \
 			if [ "$${pct:-0}" -lt "$(COVERAGE_THRESHOLD)" ]; then \
@@ -72,17 +107,138 @@ coverage-module:
 	@echo "==> Report: coverage_module.html"
 	@rm -f coverage_module.out
 
-# lint-arch enforces the hexagonal architecture boundary:
-# gorm.io/gorm must NOT be imported in the root pkg/ packages.
-# GORM is confined to the database/sql sub-package; consumers inject a
-# *gorm.DB (or gormsql.DBClient) via app.NewAppBuilder().WithCustomClient().
+# lint-arch enforces the boundary that makes the library modular.
+#
+# Most of it is now structural: the core is its own module, so it *cannot*
+# import an adapter without a require line appearing in its go.mod. That is what
+# the first check reads — the module manifest, not the source. The remaining
+# checks catch the two ways the boundary can still be crossed inside the core
+# module: pkg/engine reaching for a provider or a preset that lives beside it.
+#
+# Without this gate the coupling grows back one import at a time, which is
+# exactly how a YAML reader ended up pulling in forty modules.
+# google.golang.org/grpc is absent from this list on purpose: pkg/telemetry/otel
+# ships the OTLP/gRPC exporter, and it is part of the core by design. Package
+# pruning keeps it off the build of anyone who does not import it.
+FORBIDDEN_IN_CORE := \
+    github.com/aws/aws-sdk-go-v2 \
+    go.mongodb.org \
+    github.com/redis/go-redis \
+    github.com/segmentio/kafka-go \
+    github.com/rabbitmq/amqp091-go \
+    github.com/bradfitz/gomemcache \
+    gorm.io/gorm
+
+## lint-docs: fails if docs or examples show an API removed in v0.30.0
+lint-docs:
+	@# The gate runs its own fixtures first: the first version of this script
+	@# reported OK against a tree that had six stale examples in it.
+	@./scripts/check-doc-apis.sh --self-test
+	@./scripts/check-doc-apis.sh
+
+## check-modules: fails if an intra-repository require would break a consumer
+check-modules:
+	@./scripts/check-module-versions.sh
+
+## smoke: builds a throwaway consumer outside the repo with GOWORK=off
+## Usage: make smoke            (working tree, import graph only)
+##        make smoke VERSION=v0.30.0   (published tags, end to end)
+smoke:
+	@./scripts/smoke-external-consumer.sh $(VERSION)
+
+## example: builds and tests the example service, the check that the library
+## is still usable when someone actually implements it
+example:
+	@echo "==> example service"
+	@cd example && go build ./... && go test ./... -count=1
+
+## example-e2e: the same, plus the container suite (needs Docker)
+example-e2e:
+	@cd example && go test -tags e2e ./... -count=1 -v
+
 lint-arch:
 	@echo "==> Checking architectural constraints..."
-	@if grep -rn '"gorm.io/gorm"' pkg/ 2>/dev/null; then \
+	@FAILED=0; \
+	for forbidden in $(FORBIDDEN_IN_CORE); do \
+		if go list -deps ./... 2>/dev/null | grep -q "^$$forbidden"; then \
+			echo ""; \
+			echo "VIOLATION: the core module resolves $$forbidden"; \
+			echo "An adapter SDK belongs to its family module, behind an engine.Provider."; \
+			FAILED=1; \
+		fi; \
+	done; \
+	for family in $(FAMILY_MODULES); do \
+		if grep -q "github.com/skolldire/go-engine/$$family " go.mod 2>/dev/null; then \
+			echo ""; \
+			echo "VIOLATION: the core module depends on the $$family module"; \
+			echo "The dependency runs family -> core, never the other way round."; \
+			FAILED=1; \
+		fi; \
+	done; \
+	if grep -rn 'skolldire/go-engine/provider/' pkg/engine/ 2>/dev/null | grep -v '_test\.go'; then \
 		echo ""; \
-		echo "VIOLATION: gorm.io/gorm imported in pkg/"; \
-		echo "GORM must only be used in the database/sql sub-module."; \
-		echo "Inject a *gormsql.DBClient via WithCustomClient instead."; \
+		echo "VIOLATION: pkg/engine imports a provider."; \
+		echo "The core must not know any adapter; invert the dependency with engine.Provider."; \
+		FAILED=1; \
+	fi; \
+	if grep -rn 'skolldire/go-engine/preset/' pkg/engine/ 2>/dev/null | grep -v '_test\.go'; then \
+		echo ""; \
+		echo "VIOLATION: pkg/engine imports a preset."; \
+		FAILED=1; \
+	fi; \
+	if grep -rn '"go.opentelemetry.io/otel/sdk' pkg/engine/ 2>/dev/null | grep -v '_test\.go'; then \
+		echo ""; \
+		echo "VIOLATION: pkg/engine imports the OTel SDK."; \
+		echo "It belongs behind provider/otel."; \
+		FAILED=1; \
+	fi; \
+	[ $$FAILED -eq 0 ] || (echo ""; echo "FAIL: architectural violations found"; exit 1)
+	@echo "==> OK: no architectural violations found"
+
+# The figure README.md quotes for a router-only consumer. Kept here so the
+# claim and the check that enforces it cannot drift apart.
+HTTP_ONLY_MODULES = 19
+
+## lint-deps: reports the external dependency footprint of every module
+lint-deps:
+	@# Counting uses each package's real Module.Path, never a prefix of the
+	@# import path. Truncating to two segments merges distinct modules that
+	@# share an owner: spf13/{viper,afero,cast,pflag} collapsed into one, as did
+	@# golang.org/x/{sync,sys,text} and go-chi/{chi,cors}. That heuristic
+	@# under-reported the HTTP-only footprint as 13 when it is 19.
+	@#
+	@# $(SELF_MODULES) drops this repository's own modules and nothing else.
+	@# A bare prefix would also drop a third-party module that merely started
+	@# with the same string; anchoring on "/" or end-of-line cannot.
+	@#
+	@# No -test flag: these are the dependencies a consumer resolves, so test-only
+	@# imports are deliberately out of scope. Adding -test raises the root module
+	@# from 49 to 55 and answers a different question.
+	@printf "%-26s %10s %10s\n" "MODULE" "PACKAGES" "MODULES"
+	@for m in $(MODULES); do \
+		pkgs=$$(cd $$m && go list -deps ./... 2>/dev/null | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -vcE '^github\.com/skolldire/go-engine(/|$$)'); \
+		mods=$$(cd $$m && go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./... 2>/dev/null | grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | grep -c .); \
+		printf "%-26s %10s %10s\n" "$$m" "$$pkgs" "$$mods"; \
+	done
+	@echo ""
+	@echo "==> An HTTP-only consumer (pkg/engine + pkg/router) resolves:"
+	@go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router \
+		| grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | sed 's/^/   /'
+	@printf "    ---> %s external Go modules\n" \
+		"$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router | grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | grep -c .)"
+	@# Guard the filter itself. An over-broad pattern silently drops third-party
+	@# modules and under-reports the footprint; a broken one leaks our own
+	@# modules in and over-reports it. Both have happened.
+	@internal=$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router \
+		| grep -v '^$$' | grep -cE '^github\.com/skolldire/go-engine(/|$$)' || true); \
+	if [ "$$internal" -eq 0 ]; then \
+		echo "FAIL: the filter matched none of this repository's own modules, so it is not doing its job"; \
 		exit 1; \
 	fi
-	@echo "==> OK: no architectural violations found"
+	@count=$$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./pkg/engine ./pkg/router \
+		| grep -v '^$$' | grep -vE '^github\.com/skolldire/go-engine(/|$$)' | sort -u | grep -c .); \
+	if [ "$$count" -ne $(HTTP_ONLY_MODULES) ]; then \
+		echo "FAIL: the HTTP-only footprint is $$count, but README.md states $(HTTP_ONLY_MODULES)."; \
+		echo "      Update both, or explain the change in CHANGELOG.md."; \
+		exit 1; \
+	fi

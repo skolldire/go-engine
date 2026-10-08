@@ -12,16 +12,16 @@ import (
 
 type mockLogger struct{}
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{})     {}
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{})      {}
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{})      {}
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
-func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any)     {}
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any)      {}
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any)      {}
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any)      {}
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
+func (m *mockLogger) WrapError(err error, msg string) error                            { return err }
+func (m *mockLogger) WithField(key string, value any) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                              { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                   { return nil }
 
 func TestNewRetryer(t *testing.T) {
 	config := &Config{
@@ -150,11 +150,40 @@ func TestValidateConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validateConfig(tt.config)
-			assert.Equal(t, tt.expected.InitialWaitTime, tt.config.InitialWaitTime)
-			assert.Equal(t, tt.expected.MaxRetries, tt.config.MaxRetries)
+			got := normalizeConfig(tt.config)
+			assert.Equal(t, tt.expected.InitialWaitTime, got.InitialWaitTime)
+			assert.Equal(t, tt.expected.MaxRetries, got.MaxRetries)
 		})
 	}
+}
+
+func TestNormalizeConfigNilIsSafe(t *testing.T) {
+	got := normalizeConfig(nil)
+	assert.Equal(t, DefaultInitialWaitTime, got.InitialWaitTime)
+	assert.Equal(t, DefaultMaxWaitTime, got.MaxWaitTime)
+	assert.Equal(t, DefaultMaxRetries, got.MaxRetries)
+}
+
+func TestNormalizeConfigDoesNotMutateInput(t *testing.T) {
+	in := &Config{}
+	_ = normalizeConfig(in)
+	assert.Equal(t, time.Duration(0), in.InitialWaitTime, "input config must not be mutated")
+	assert.Equal(t, 0, in.MaxRetries, "input config must not be mutated")
+}
+
+// TestNewRetryerAppliesDurationsExactly guards against the double time-unit
+// multiplication bug: a 100ms initial wait must stay 100ms, not 100ms*time.Millisecond.
+func TestNewRetryerAppliesDurationsExactly(t *testing.T) {
+	r := NewRetryer(Dependencies{
+		RetryConfig: &Config{
+			InitialWaitTime: 100 * time.Millisecond,
+			MaxWaitTime:     10 * time.Second,
+			MaxRetries:      3,
+			BackoffFactor:   2.0,
+		},
+	})
+	assert.Equal(t, 100*time.Millisecond, r.config.InitialWaitTime)
+	assert.Equal(t, 10*time.Second, r.config.MaxWaitTime)
 }
 
 func TestRetryer_CalculateWaitTime(t *testing.T) {

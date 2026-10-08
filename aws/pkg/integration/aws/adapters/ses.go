@@ -58,13 +58,13 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 	}
 
 	// Parse body as JSON email message
-	var emailMsg map[string]interface{}
+	var emailMsg map[string]any
 	if err := json.Unmarshal(req.Body, &emailMsg); err != nil {
 		return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, fmt.Sprintf("invalid JSON body: %v", err))
 	}
 
 	// Extract from address
-	from, ok := emailMsg["from"].(map[string]interface{})
+	from, ok := emailMsg["from"].(map[string]any)
 	if !ok {
 		return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, "from address is required")
 	}
@@ -80,30 +80,30 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 
 	// Extract destination - only append non-empty emails
 	destination := &types.Destination{}
-	if to, ok := emailMsg["to"].([]interface{}); ok {
+	if to, ok := emailMsg["to"].([]any); ok {
 		destination.ToAddresses = make([]string, 0)
 		for _, addr := range to {
-			if addrMap, ok := addr.(map[string]interface{}); ok {
+			if addrMap, ok := addr.(map[string]any); ok {
 				if email, ok := addrMap["email"].(string); ok && email != "" {
 					destination.ToAddresses = append(destination.ToAddresses, email)
 				}
 			}
 		}
 	}
-	if cc, ok := emailMsg["cc"].([]interface{}); ok {
+	if cc, ok := emailMsg["cc"].([]any); ok {
 		destination.CcAddresses = make([]string, 0)
 		for _, addr := range cc {
-			if addrMap, ok := addr.(map[string]interface{}); ok {
+			if addrMap, ok := addr.(map[string]any); ok {
 				if email, ok := addrMap["email"].(string); ok && email != "" {
 					destination.CcAddresses = append(destination.CcAddresses, email)
 				}
 			}
 		}
 	}
-	if bcc, ok := emailMsg["bcc"].([]interface{}); ok {
+	if bcc, ok := emailMsg["bcc"].([]any); ok {
 		destination.BccAddresses = make([]string, 0)
 		for _, addr := range bcc {
-			if addrMap, ok := addr.(map[string]interface{}); ok {
+			if addrMap, ok := addr.(map[string]any); ok {
 				if email, ok := addrMap["email"].(string); ok && email != "" {
 					destination.BccAddresses = append(destination.BccAddresses, email)
 				}
@@ -140,10 +140,10 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 
 	// Extract reply-to addresses - only append non-empty emails
 	var replyTo []string
-	if replyToAddrs, ok := emailMsg["reply_to"].([]interface{}); ok {
+	if replyToAddrs, ok := emailMsg["reply_to"].([]any); ok {
 		replyTo = make([]string, 0)
 		for _, addr := range replyToAddrs {
-			if addrMap, ok := addr.(map[string]interface{}); ok {
+			if addrMap, ok := addr.(map[string]any); ok {
 				if email, ok := addrMap["email"].(string); ok && email != "" {
 					replyTo = append(replyTo, email)
 				}
@@ -168,7 +168,7 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 		Headers: map[string]string{
 			"ses.message_id": aws.ToString(result.MessageId),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"ses.message_id": aws.ToString(result.MessageId),
 		},
 	}, nil
@@ -176,7 +176,7 @@ func (a *sesAdapter) sendEmail(ctx context.Context, req *cloud.Request) (*cloud.
 
 func (a *sesAdapter) sendRawEmail(ctx context.Context, req *cloud.Request) (*cloud.Response, error) {
 	// Parse body as JSON with raw_message and destinations
-	var rawEmailMsg map[string]interface{}
+	var rawEmailMsg map[string]any
 	if err := json.Unmarshal(req.Body, &rawEmailMsg); err != nil {
 		return nil, cloud.NewError(cloud.ErrCodeInvalidRequest, fmt.Sprintf("invalid JSON body: %v", err))
 	}
@@ -187,7 +187,7 @@ func (a *sesAdapter) sendRawEmail(ctx context.Context, req *cloud.Request) (*clo
 	}
 
 	var destinations []string
-	if dests, ok := rawEmailMsg["destinations"].([]interface{}); ok {
+	if dests, ok := rawEmailMsg["destinations"].([]any); ok {
 		destinations = make([]string, len(dests))
 		for i, dest := range dests {
 			destinations[i] = fmt.Sprintf("%v", dest)
@@ -211,7 +211,7 @@ func (a *sesAdapter) sendRawEmail(ctx context.Context, req *cloud.Request) (*clo
 		Headers: map[string]string{
 			"ses.message_id": aws.ToString(result.MessageId),
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"ses.message_id": aws.ToString(result.MessageId),
 		},
 	}, nil
@@ -223,7 +223,7 @@ func (a *sesAdapter) getSendQuota(ctx context.Context, req *cloud.Request) (*clo
 		return nil, normalizeSESError(err, "ses.get_send_quota")
 	}
 
-	quota := map[string]interface{}{
+	quota := map[string]any{
 		"max_24_hour_send":   result.Max24HourSend,
 		"max_send_rate":      result.MaxSendRate,
 		"sent_last_24_hours": result.SentLast24Hours,
@@ -243,9 +243,9 @@ func (a *sesAdapter) getSendStatistics(ctx context.Context, req *cloud.Request) 
 		return nil, normalizeSESError(err, "ses.get_send_statistics")
 	}
 
-	dataPoints := make([]map[string]interface{}, len(result.SendDataPoints))
+	dataPoints := make([]map[string]any, len(result.SendDataPoints))
 	for i, dp := range result.SendDataPoints {
-		dataPoints[i] = map[string]interface{}{
+		dataPoints[i] = map[string]any{
 			"timestamp":         dp.Timestamp,
 			"delivery_attempts": dp.DeliveryAttempts,
 			"bounces":           dp.Bounces,

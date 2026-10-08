@@ -61,8 +61,14 @@ redis_clients:
 ## Usage
 
 ```go
-rc := engine.GetRedisClientByName("cache")
-// or legacy: engine.GetRedisClient()
+import redisprovider "github.com/skolldire/go-engine/database/redis/provider/redis"
+
+// The provider is registered at build time:
+//   engine.New(ctx, engine.WithProvider(redisprovider.New("cache")))
+rc, err := redisprovider.From(eng, "cache")
+if err != nil {
+	return err
+}
 
 // Strings
 err := rc.Set(ctx, "user:42", data, time.Hour)

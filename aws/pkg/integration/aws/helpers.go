@@ -10,7 +10,7 @@ import (
 // SQSSendMessage sends a message to SQS queue (convenience wrapper)
 // Uses WithJSONBody() internally for ergonomic JSON serialization
 // AWS SDK equivalent: SendMessage
-func SQSSendMessage(ctx context.Context, client Client, queueURL string, v interface{}) (messageID string, err error) {
+func SQSSendMessage(ctx context.Context, client Client, queueURL string, v any) (messageID string, err error) {
 	req := &cloud.Request{
 		Operation: "sqs.send_message",
 		Path:      queueURL,
@@ -126,7 +126,7 @@ func SQSGetQueueURL(ctx context.Context, client Client, queueName string) (queue
 
 // SNSPublish publishes a message to SNS topic (convenience wrapper)
 // AWS SDK equivalent: Publish
-func SNSPublish(ctx context.Context, client Client, topicARN string, v interface{}) (messageID string, err error) {
+func SNSPublish(ctx context.Context, client Client, topicARN string, v any) (messageID string, err error) {
 	req := &cloud.Request{
 		Operation: "sns.publish",
 		Path:      topicARN,
@@ -143,7 +143,7 @@ func SNSPublish(ctx context.Context, client Client, topicARN string, v interface
 
 // LambdaInvoke invokes a Lambda function (convenience wrapper)
 // AWS SDK equivalent: Invoke
-func LambdaInvoke(ctx context.Context, client Client, functionName string, v interface{}) (*cloud.Response, error) {
+func LambdaInvoke(ctx context.Context, client Client, functionName string, v any) (*cloud.Response, error) {
 	req := &cloud.Request{
 		Operation: "lambda.invoke",
 		Path:      functionName,
@@ -244,7 +244,7 @@ func S3CopyObject(ctx context.Context, client Client, sourceBucket, sourceKey, d
 // SESSendEmail sends an email via SES
 // AWS SDK equivalent: SendEmail
 // emailMessage should be a map with: from, to, subject, body_html, body_text, cc, bcc, reply_to
-func SESSendEmail(ctx context.Context, client Client, emailMessage map[string]interface{}) (messageID string, err error) {
+func SESSendEmail(ctx context.Context, client Client, emailMessage map[string]any) (messageID string, err error) {
 	req := &cloud.Request{
 		Operation: "ses.send_email",
 	}
@@ -264,7 +264,7 @@ func SESSendRawEmail(ctx context.Context, client Client, rawMessage []byte, dest
 	req := &cloud.Request{
 		Operation: "ses.send_raw_email",
 	}
-	body := map[string]interface{}{
+	body := map[string]any{
 		"raw_message":  string(rawMessage),
 		"destinations": destinations,
 	}
@@ -344,7 +344,7 @@ func SSMPutParameter(ctx context.Context, client Client, name, value, paramType,
 		Operation: "ssm.put_parameter",
 		Path:      name,
 	}
-	body := map[string]interface{}{
+	body := map[string]any{
 		"value":     value,
 		"type":      paramType,
 		"overwrite": overwrite,

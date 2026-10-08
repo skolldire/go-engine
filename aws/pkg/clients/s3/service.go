@@ -16,7 +16,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 )
 
-func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, log logger.Service) Service {
 	s3Client := s3.NewFromConfig(acf, func(o *s3.Options) {
 		if cfg.Region != "" {
 			o.Region = cfg.Region
@@ -44,14 +44,6 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 		region:          cfg.Region,
 	}
 
-	if c.IsLoggingEnabled() {
-		log.Debug(context.Background(), "S3 client initialized",
-			map[string]interface{}{
-				"region": cfg.Region,
-				"bucket": cfg.Bucket,
-			})
-	}
-
 	return c
 }
 
@@ -71,7 +63,7 @@ func (c *S3Client) PutObject(ctx context.Context, key string, body io.Reader, co
 		input.Metadata = metadata
 	}
 
-	_, err := c.Execute(ctx, "PutObject", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "PutObject", func(ctx context.Context) (any, error) {
 		return c.transferManager.UploadObject(ctx, input)
 	})
 
@@ -87,7 +79,7 @@ func (c *S3Client) GetObject(ctx context.Context, key string) (io.ReadCloser, er
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "GetObject", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -114,7 +106,7 @@ func (c *S3Client) DeleteObject(ctx context.Context, key string) error {
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeleteObject", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "DeleteObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -133,7 +125,7 @@ func (c *S3Client) HeadObject(ctx context.Context, key string) (*ObjectMetadata,
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "HeadObject", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "HeadObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -171,11 +163,14 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 	const pageSize int32 = 1000 // Fixed page size for S3 API calls
 
 	for {
-		// Calculate how many keys we still need
-		remaining := maxKeys - int32(len(allObjects))
-		if remaining <= 0 {
+		// Calculate how many keys we still need. The comparison is done in int
+		// so the narrowing conversion below is provably in range.
+		collected := len(allObjects)
+		if collected >= int(maxKeys) {
 			break // We've reached the requested limit
 		}
+		//nolint:gosec // G115: collected < maxKeys (int32) is guaranteed above
+		remaining := maxKeys - int32(collected)
 
 		// Use the smaller of pageSize or remaining keys as the MaxKeys for this request
 		requestMaxKeys := pageSize
@@ -183,7 +178,7 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 			requestMaxKeys = remaining
 		}
 
-		result, err := c.Execute(ctx, "ListObjects", func() (interface{}, error) {
+		result, err := c.Execute(ctx, "ListObjects", func(ctx context.Context) (any, error) {
 			input := &s3.ListObjectsV2Input{
 				Bucket:  aws.String(c.bucket),
 				Prefix:  aws.String(prefix),
@@ -212,14 +207,15 @@ func (c *S3Client) ListObjects(ctx context.Context, prefix string, maxKeys int32
 				ETag:         aws.ToString(obj.ETag),
 			})
 
-			// Stop if we've reached the requested limit
-			if int32(len(allObjects)) >= maxKeys {
+			// Stop if we've reached the requested limit. Widen maxKeys instead
+			// of narrowing len(), which cannot overflow.
+			if len(allObjects) >= int(maxKeys) {
 				break
 			}
 		}
 
 		// Stop if there are no more pages or we've reached the limit
-		if response.NextContinuationToken == nil || int32(len(allObjects)) >= maxKeys {
+		if response.NextContinuationToken == nil || len(allObjects) >= int(maxKeys) {
 			break
 		}
 		continuationToken = response.NextContinuationToken
@@ -234,7 +230,7 @@ func (c *S3Client) CopyObject(ctx context.Context, sourceKey, destKey string) er
 	}
 
 	source := fmt.Sprintf("%s/%s", c.bucket, url.PathEscape(sourceKey))
-	_, err := c.Execute(ctx, "CopyObject", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "CopyObject", func(ctx context.Context) (any, error) {
 		return c.s3Client.CopyObject(ctx, &s3.CopyObjectInput{
 			Bucket:     aws.String(c.bucket),
 			CopySource: aws.String(source),
@@ -263,7 +259,7 @@ func (c *S3Client) GetPresignedURL(ctx context.Context, key string, expiration t
 	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
-	result, err := c.Execute(ctx, "GetPresignedURL", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetPresignedURL", func(ctx context.Context) (any, error) {
 		request, err := c.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),
@@ -301,7 +297,7 @@ func (c *S3Client) GetPresignedPutURL(ctx context.Context, key, contentType stri
 	ctx, cancel := c.ContextWithTimeout(ctx)
 	defer cancel()
 
-	result, err := c.Execute(ctx, "GetPresignedPutURL", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetPresignedPutURL", func(ctx context.Context) (any, error) {
 		input := &s3.PutObjectInput{
 			Bucket: aws.String(c.bucket),
 			Key:    aws.String(key),

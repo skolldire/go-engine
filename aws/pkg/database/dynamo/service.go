@@ -8,9 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/skolldire/go-engine/pkg/core/client"
+	baseclient "github.com/skolldire/go-engine/pkg/core/client"
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
-	"github.com/skolldire/go-engine/pkg/utilities/resilience"
 )
 
 func (dc *DynamoClient) TableName(name string) string {
@@ -20,77 +19,31 @@ func (dc *DynamoClient) TableName(name string) string {
 	return fmt.Sprintf("%s-%s", dc.tablePrefix, name)
 }
 
-func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, log logger.Service) Service {
+	// Construction emits no log line: a library must not write entries the
+	// application did not ask for, and these were the last two that did. They
+	// also used a fabricated context.Background() while the constructor had a
+	// real one, which is exactly the defect the ctx propagation removed.
 	client := dynamodb.NewFromConfig(acf, func(o *dynamodb.Options) {
 		if cfg.Endpoint != "" {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
-			log.Debug(context.Background(), "connecting to external endpoint", map[string]interface{}{"endpoint": cfg.Endpoint})
-		} else {
-			log.Debug(context.Background(), "connecting to AWS", nil)
 		}
 	})
 
-	dc := &DynamoClient{
+	return &DynamoClient{
 		client:      client,
-		logger:      log,
-		logging:     cfg.EnableLogging,
 		tablePrefix: cfg.TablePrefix,
+		BaseClient: baseclient.NewBaseClientWithName(baseclient.BaseConfig{
+			EnableLogging:  cfg.EnableLogging,
+			WithResilience: cfg.WithResilience,
+			Resilience:     cfg.Resilience,
+			Timeout:        DefaultTimeout,
+		}, log, "DynamoDB"),
 	}
-
-	if cfg.WithResilience {
-		resilienceService := resilience.NewResilienceService(cfg.Resilience, log)
-		dc.resilience = resilienceService
-	}
-
-	return dc
-}
-
-func (dc *DynamoClient) execute(ctx context.Context, operationName string, operation func() (interface{}, error)) (interface{}, error) {
-	ctx, cancel := dc.ensureContextWithTimeout(ctx)
-	defer cancel()
-
-	logFields := map[string]interface{}{"operation": operationName}
-
-	if dc.resilience != nil {
-		if dc.logging {
-			dc.logger.Debug(ctx, fmt.Sprintf("starting DynamoDB operation with resilience: %s", operationName), logFields)
-		}
-
-		result, err := dc.resilience.Execute(ctx, operation)
-
-		if err != nil && dc.logging {
-			dc.logger.Error(ctx, fmt.Errorf("error in DynamoDB operation: %w", err), logFields)
-		} else if dc.logging {
-			dc.logger.Debug(ctx, fmt.Sprintf("DynamoDB operation completed with resilience: %s", operationName), logFields)
-		}
-
-		return result, err
-	}
-
-	if dc.logging {
-		dc.logger.Debug(ctx, fmt.Sprintf("starting DynamoDB operation: %s", operationName), logFields)
-	}
-
-	result, err := operation()
-
-	if err != nil && dc.logging {
-		dc.logger.Error(ctx, err, logFields)
-	} else if dc.logging {
-		dc.logger.Debug(ctx, fmt.Sprintf("DynamoDB operation completed: %s", operationName), logFields)
-	}
-
-	return result, err
-}
-
-func (dc *DynamoClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if _, hasDeadline := ctx.Deadline(); hasDeadline {
-		return context.WithCancel(ctx)
-	}
-	return context.WithTimeout(ctx, DefaultTimeout)
 }
 
 func (dc *DynamoClient) GetItem(ctx context.Context, input *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
-	result, err := dc.execute(ctx, "GetItem", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "GetItem", func(ctx context.Context) (any, error) {
 		return dc.client.GetItem(ctx, input, optFns...)
 	})
 
@@ -98,7 +51,7 @@ func (dc *DynamoClient) GetItem(ctx context.Context, input *dynamodb.GetItemInpu
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.GetItemOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.GetItemOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected GetItem result: %w", err)
 	}
@@ -110,7 +63,7 @@ func (dc *DynamoClient) GetItem(ctx context.Context, input *dynamodb.GetItemInpu
 	return output, nil
 }
 
-func (dc *DynamoClient) GetItemTyped(ctx context.Context, tableName string, key map[string]types.AttributeValue, item interface{}, optFns ...func(*dynamodb.Options)) error {
+func (dc *DynamoClient) GetItemTyped(ctx context.Context, tableName string, key map[string]types.AttributeValue, item any, optFns ...func(*dynamodb.Options)) error {
 	input := &dynamodb.GetItemInput{
 		TableName: aws.String(dc.TableName(tableName)),
 		Key:       key,
@@ -123,14 +76,14 @@ func (dc *DynamoClient) GetItemTyped(ctx context.Context, tableName string, key 
 
 	err = attributevalue.UnmarshalMap(output.Item, item)
 	if err != nil {
-		return dc.logger.WrapError(err, ErrUnmarshal.Error())
+		return dc.GetLogger().WrapError(err, ErrUnmarshal.Error())
 	}
 
 	return nil
 }
 
 func (dc *DynamoClient) PutItem(ctx context.Context, input *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
-	result, err := dc.execute(ctx, "PutItem", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "PutItem", func(ctx context.Context) (any, error) {
 		return dc.client.PutItem(ctx, input, optFns...)
 	})
 
@@ -138,17 +91,17 @@ func (dc *DynamoClient) PutItem(ctx context.Context, input *dynamodb.PutItemInpu
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.PutItemOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.PutItemOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected PutItem result: %w", err)
 	}
 	return output, nil
 }
 
-func (dc *DynamoClient) PutItemTyped(ctx context.Context, tableName string, item interface{}, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+func (dc *DynamoClient) PutItemTyped(ctx context.Context, tableName string, item any, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
 	av, err := attributevalue.MarshalMap(item)
 	if err != nil {
-		return nil, dc.logger.WrapError(err, ErrMarshal.Error())
+		return nil, dc.GetLogger().WrapError(err, ErrMarshal.Error())
 	}
 
 	input := &dynamodb.PutItemInput{
@@ -160,7 +113,7 @@ func (dc *DynamoClient) PutItemTyped(ctx context.Context, tableName string, item
 }
 
 func (dc *DynamoClient) DeleteItem(ctx context.Context, input *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
-	result, err := dc.execute(ctx, "DeleteItem", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "DeleteItem", func(ctx context.Context) (any, error) {
 		return dc.client.DeleteItem(ctx, input, optFns...)
 	})
 
@@ -168,7 +121,7 @@ func (dc *DynamoClient) DeleteItem(ctx context.Context, input *dynamodb.DeleteIt
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.DeleteItemOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.DeleteItemOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected DeleteItem result: %w", err)
 	}
@@ -185,7 +138,7 @@ func (dc *DynamoClient) DeleteItemByKey(ctx context.Context, tableName string, k
 }
 
 func (dc *DynamoClient) UpdateItem(ctx context.Context, input *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
-	result, err := dc.execute(ctx, "UpdateItem", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "UpdateItem", func(ctx context.Context) (any, error) {
 		return dc.client.UpdateItem(ctx, input, optFns...)
 	})
 
@@ -193,7 +146,7 @@ func (dc *DynamoClient) UpdateItem(ctx context.Context, input *dynamodb.UpdateIt
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.UpdateItemOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.UpdateItemOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected UpdateItem result: %w", err)
 	}
@@ -205,7 +158,7 @@ func (dc *DynamoClient) Query(ctx context.Context, input *dynamodb.QueryInput, o
 		input.Limit = aws.Int32(DefaultQueryLimit)
 	}
 
-	result, err := dc.execute(ctx, "Query", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "Query", func(ctx context.Context) (any, error) {
 		return dc.client.Query(ctx, input, optFns...)
 	})
 
@@ -213,14 +166,14 @@ func (dc *DynamoClient) Query(ctx context.Context, input *dynamodb.QueryInput, o
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.QueryOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.QueryOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected Query result: %w", err)
 	}
 	return output, nil
 }
 
-func (dc *DynamoClient) QueryTyped(ctx context.Context, input *dynamodb.QueryInput, items interface{}, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+func (dc *DynamoClient) QueryTyped(ctx context.Context, input *dynamodb.QueryInput, items any, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	output, err := dc.Query(ctx, input, optFns...)
 	if err != nil {
 		return nil, err
@@ -228,7 +181,7 @@ func (dc *DynamoClient) QueryTyped(ctx context.Context, input *dynamodb.QueryInp
 
 	err = attributevalue.UnmarshalListOfMaps(output.Items, items)
 	if err != nil {
-		return nil, dc.logger.WrapError(err, ErrUnmarshal.Error())
+		return nil, dc.GetLogger().WrapError(err, ErrUnmarshal.Error())
 	}
 
 	return output, nil
@@ -239,7 +192,7 @@ func (dc *DynamoClient) Scan(ctx context.Context, input *dynamodb.ScanInput, opt
 		input.Limit = aws.Int32(DefaultQueryLimit)
 	}
 
-	result, err := dc.execute(ctx, "Scan", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "Scan", func(ctx context.Context) (any, error) {
 		return dc.client.Scan(ctx, input, optFns...)
 	})
 
@@ -247,14 +200,14 @@ func (dc *DynamoClient) Scan(ctx context.Context, input *dynamodb.ScanInput, opt
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.ScanOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.ScanOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected Scan result: %w", err)
 	}
 	return output, nil
 }
 
-func (dc *DynamoClient) ScanTyped(ctx context.Context, input *dynamodb.ScanInput, items interface{}, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
+func (dc *DynamoClient) ScanTyped(ctx context.Context, input *dynamodb.ScanInput, items any, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
 	output, err := dc.Scan(ctx, input, optFns...)
 	if err != nil {
 		return nil, err
@@ -262,7 +215,7 @@ func (dc *DynamoClient) ScanTyped(ctx context.Context, input *dynamodb.ScanInput
 
 	err = attributevalue.UnmarshalListOfMaps(output.Items, items)
 	if err != nil {
-		return nil, dc.logger.WrapError(err, ErrUnmarshal.Error())
+		return nil, dc.GetLogger().WrapError(err, ErrUnmarshal.Error())
 	}
 
 	return output, nil
@@ -278,7 +231,7 @@ func (dc *DynamoClient) BatchWriteItem(ctx context.Context, input *dynamodb.Batc
 		return nil, ErrBatchSizeExceed
 	}
 
-	result, err := dc.execute(ctx, "BatchWriteItem", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "BatchWriteItem", func(ctx context.Context) (any, error) {
 		return dc.client.BatchWriteItem(ctx, input, optFns...)
 	})
 
@@ -286,7 +239,7 @@ func (dc *DynamoClient) BatchWriteItem(ctx context.Context, input *dynamodb.Batc
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.BatchWriteItemOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.BatchWriteItemOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected BatchWriteItem result: %w", err)
 	}
@@ -303,7 +256,7 @@ func (dc *DynamoClient) BatchGetItem(ctx context.Context, input *dynamodb.BatchG
 		return nil, ErrBatchSizeExceed
 	}
 
-	result, err := dc.execute(ctx, "BatchGetItem", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "BatchGetItem", func(ctx context.Context) (any, error) {
 		return dc.client.BatchGetItem(ctx, input, optFns...)
 	})
 
@@ -311,7 +264,7 @@ func (dc *DynamoClient) BatchGetItem(ctx context.Context, input *dynamodb.BatchG
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.BatchGetItemOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.BatchGetItemOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected BatchGetItem result: %w", err)
 	}
@@ -323,7 +276,7 @@ func (dc *DynamoClient) TransactWriteItems(ctx context.Context, input *dynamodb.
 		return nil, ErrBatchSizeExceed
 	}
 
-	result, err := dc.execute(ctx, "TransactWriteItems", func() (interface{}, error) {
+	result, err := dc.Execute(ctx, "TransactWriteItems", func(ctx context.Context) (any, error) {
 		return dc.client.TransactWriteItems(ctx, input, optFns...)
 	})
 
@@ -331,17 +284,17 @@ func (dc *DynamoClient) TransactWriteItems(ctx context.Context, input *dynamodb.
 		return nil, err
 	}
 
-	output, err := client.SafeTypeAssert[*dynamodb.TransactWriteItemsOutput](result)
+	output, err := baseclient.SafeTypeAssert[*dynamodb.TransactWriteItemsOutput](result)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected TransactWriteItems result: %w", err)
 	}
 	return output, nil
 }
 
-func (dc *DynamoClient) CreateKeyAttribute(keyName string, value interface{}) (map[string]types.AttributeValue, error) {
+func (dc *DynamoClient) CreateKeyAttribute(keyName string, value any) (map[string]types.AttributeValue, error) {
 	av, err := attributevalue.Marshal(value)
 	if err != nil {
-		return nil, dc.logger.WrapError(err, ErrMarshal.Error())
+		return nil, dc.GetLogger().WrapError(err, ErrMarshal.Error())
 	}
 
 	return map[string]types.AttributeValue{
@@ -349,7 +302,7 @@ func (dc *DynamoClient) CreateKeyAttribute(keyName string, value interface{}) (m
 	}, nil
 }
 
-func (dc *DynamoClient) CreateCompositeKey(partitionKey, partitionValue, sortKey, sortValue interface{}) (map[string]types.AttributeValue, error) {
+func (dc *DynamoClient) CreateCompositeKey(partitionKey, partitionValue, sortKey, sortValue any) (map[string]types.AttributeValue, error) {
 	pkName, ok := partitionKey.(string)
 	if !ok {
 		return nil, ErrInvalidKey
@@ -362,12 +315,12 @@ func (dc *DynamoClient) CreateCompositeKey(partitionKey, partitionValue, sortKey
 
 	pkAV, err := attributevalue.Marshal(partitionValue)
 	if err != nil {
-		return nil, dc.logger.WrapError(err, ErrMarshal.Error())
+		return nil, dc.GetLogger().WrapError(err, ErrMarshal.Error())
 	}
 
 	skAV, err := attributevalue.Marshal(sortValue)
 	if err != nil {
-		return nil, dc.logger.WrapError(err, ErrMarshal.Error())
+		return nil, dc.GetLogger().WrapError(err, ErrMarshal.Error())
 	}
 
 	return map[string]types.AttributeValue{

@@ -13,7 +13,7 @@ import (
 	"github.com/skolldire/go-engine/pkg/utilities/validation"
 )
 
-func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
+func NewClient(ctx context.Context, acf aws.Config, cfg Config, log logger.Service) Service {
 	sesClient := ses.NewFromConfig(acf, func(o *ses.Options) {
 		if cfg.Region != "" {
 			o.Region = cfg.Region
@@ -38,13 +38,6 @@ func NewClient(acf aws.Config, cfg Config, log logger.Service) Service {
 		region:     cfg.Region,
 	}
 
-	if c.IsLoggingEnabled() {
-		log.Debug(context.Background(), "SES client initialized",
-			map[string]interface{}{
-				"region": cfg.Region,
-			})
-	}
-
 	return c
 }
 
@@ -54,30 +47,30 @@ func (c *SESClient) SendEmail(ctx context.Context, message EmailMessage) (*SendE
 	}
 
 	if err := validation.GetGlobalValidator().Var(message.From.Email, "required,email"); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidAddress, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidAddress, err)
 	}
 
 	for _, to := range message.To {
 		if err := validation.GetGlobalValidator().Var(to.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidAddress, err)
 		}
 	}
 
 	for _, cc := range message.Cc {
 		if err := validation.GetGlobalValidator().Var(cc.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: invalid Cc address: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: invalid Cc address: %w", ErrInvalidAddress, err)
 		}
 	}
 
 	for _, bcc := range message.Bcc {
 		if err := validation.GetGlobalValidator().Var(bcc.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: invalid Bcc address: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: invalid Bcc address: %w", ErrInvalidAddress, err)
 		}
 	}
 
 	for _, replyTo := range message.ReplyTo {
 		if err := validation.GetGlobalValidator().Var(replyTo.Email, "required,email"); err != nil {
-			return nil, fmt.Errorf("%w: invalid ReplyTo address: %v", ErrInvalidAddress, err)
+			return nil, fmt.Errorf("%w: invalid ReplyTo address: %w", ErrInvalidAddress, err)
 		}
 	}
 
@@ -136,7 +129,7 @@ func (c *SESClient) SendEmail(ctx context.Context, message EmailMessage) (*SendE
 		ReplyToAddresses: replyTo,
 	}
 
-	result, err := c.Execute(ctx, "SendEmail", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "SendEmail", func(ctx context.Context) (any, error) {
 		return c.sesClient.SendEmail(ctx, input)
 	})
 
@@ -161,7 +154,7 @@ func (c *SESClient) SendRawEmail(ctx context.Context, rawMessage []byte, destina
 		return nil, ErrInvalidInput
 	}
 
-	result, err := c.Execute(ctx, "SendRawEmail", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "SendRawEmail", func(ctx context.Context) (any, error) {
 		return c.sesClient.SendRawEmail(ctx, &ses.SendRawEmailInput{
 			RawMessage: &types.RawMessage{
 				Data: rawMessage,
@@ -192,7 +185,7 @@ func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subjec
 	}
 
 	if err := validation.GetGlobalValidator().Var(from.Email, "required,email"); err != nil {
-		return nil, fmt.Errorf("%w: invalid sender email: %v", ErrInvalidAddress, err)
+		return nil, fmt.Errorf("%w: invalid sender email: %w", ErrInvalidAddress, err)
 	}
 
 	result := &BulkSendResult{
@@ -212,7 +205,7 @@ func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subjec
 			result.FailedRecipients = append(result.FailedRecipients, dest.Email)
 
 			if c.IsLoggingEnabled() {
-				c.GetLogger().Warn(ctx, "skipping invalid email address", map[string]interface{}{
+				c.GetLogger().Warn(ctx, "skipping invalid email address", map[string]any{
 					"email": dest.Email,
 					"error": err.Error(),
 				})
@@ -246,7 +239,7 @@ func (c *SESClient) SendBulkEmail(ctx context.Context, from EmailAddress, subjec
 }
 
 func (c *SESClient) GetSendQuota(ctx context.Context) (*SendQuota, error) {
-	result, err := c.Execute(ctx, "GetSendQuota", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetSendQuota", func(ctx context.Context) (any, error) {
 		return c.sesClient.GetSendQuota(ctx, &ses.GetSendQuotaInput{})
 	})
 
@@ -266,7 +259,7 @@ func (c *SESClient) GetSendQuota(ctx context.Context) (*SendQuota, error) {
 }
 
 func (c *SESClient) GetSendStatistics(ctx context.Context) ([]SendDataPoint, error) {
-	result, err := c.Execute(ctx, "GetSendStatistics", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "GetSendStatistics", func(ctx context.Context) (any, error) {
 		return c.sesClient.GetSendStatistics(ctx, &ses.GetSendStatisticsInput{})
 	})
 
@@ -302,7 +295,7 @@ func (c *SESClient) VerifyEmailAddress(ctx context.Context, email string) error 
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "VerifyEmailAddress", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "VerifyEmailAddress", func(ctx context.Context) (any, error) {
 		return c.sesClient.VerifyEmailAddress(ctx, &ses.VerifyEmailAddressInput{
 			EmailAddress: aws.String(email),
 		})
@@ -320,7 +313,7 @@ func (c *SESClient) DeleteVerifiedEmailAddress(ctx context.Context, email string
 		return ErrInvalidInput
 	}
 
-	_, err := c.Execute(ctx, "DeleteVerifiedEmailAddress", func() (interface{}, error) {
+	_, err := c.Execute(ctx, "DeleteVerifiedEmailAddress", func(ctx context.Context) (any, error) {
 		return c.sesClient.DeleteVerifiedEmailAddress(ctx, &ses.DeleteVerifiedEmailAddressInput{
 			EmailAddress: aws.String(email),
 		})
@@ -334,7 +327,7 @@ func (c *SESClient) DeleteVerifiedEmailAddress(ctx context.Context, email string
 }
 
 func (c *SESClient) ListVerifiedEmailAddresses(ctx context.Context) ([]string, error) {
-	result, err := c.Execute(ctx, "ListVerifiedEmailAddresses", func() (interface{}, error) {
+	result, err := c.Execute(ctx, "ListVerifiedEmailAddresses", func(ctx context.Context) (any, error) {
 		return c.sesClient.ListVerifiedEmailAddresses(ctx, &ses.ListVerifiedEmailAddressesInput{})
 	})
 

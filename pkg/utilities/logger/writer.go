@@ -10,15 +10,15 @@ import "github.com/sirupsen/logrus"
 // LogWriter. A thin adapter wrapping *logrus.Logger provides full satisfaction
 // without modifying logrus itself.
 type LogWriter interface {
-	Info(args ...interface{})
-	Warn(args ...interface{})
-	Error(args ...interface{})
-	Debug(args ...interface{})
-	Fatal(args ...interface{})
-	Infof(format string, args ...interface{})
-	Warnf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
-	Debugf(format string, args ...interface{})
-	WithField(key string, value interface{}) LogWriter
+	Info(args ...any)
+	Warn(args ...any)
+	Error(args ...any)
+	Debug(args ...any)
+	Fatal(args ...any)
+	Infof(format string, args ...any)
+	Warnf(format string, args ...any)
+	Errorf(format string, args ...any)
+	Debugf(format string, args ...any)
+	WithField(key string, value any) LogWriter
 	WithFields(fields logrus.Fields) LogWriter
 }

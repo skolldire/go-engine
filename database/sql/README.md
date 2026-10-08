@@ -3,46 +3,77 @@
 GORM wrapper (`gormsql.DBClient`) for go-engine. Exposes a method-level API that hides GORM from the domain layer.
 
 ```bash
-go get github.com/skolldire/go-engine
+go get github.com/skolldire/go-engine/database/sql
 ```
 
-**Important:** `DBClient` is NOT auto-initialized by the engine. Build the GORM connection yourself and inject it via `WithCustomClient`.
+The engine builds and owns the connection through `provider/sql`, like any
+other adapter — it is registered, closed on shutdown and health-checked. What
+differs is the driver: GORM needs a `gorm.Dialector`, which no YAML file can
+name, so the caller passes it in.
+
+```go
+import (
+    "gorm.io/driver/postgres"
+
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "github.com/skolldire/go-engine/pkg/engine"
+)
+
+eng, err := engine.New(ctx,
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
+
+db, err := sqlprovider.From(eng, "main")
+```
+
+Importing only the dialect you use is the point: resolving it from a string
+would make every consumer link Postgres, MySQL, SQLite and SQL Server to use
+one of them.
 
 ---
 
 ## Configuration
 
+The `sql_clients` section carries pool and behaviour settings; the DSN travels
+with the dialector, because no YAML file can name a Go value.
+
+```yaml
+sql_clients:
+  - main:
+      type: "postgres"
+      max_idle_connections: 10
+      max_open_connections: 100
+      conn_max_lifetime: 5m
+      enable_logging: true
+      log_level: "warn"
+      table_prefix: "app_"
+      auto_migrate: false
+```
+
 ```go
 import (
-    gormsql "github.com/skolldire/go-engine/database/sql/pkg/database/gormsql"
     "gorm.io/driver/postgres"
-    "gorm.io/gorm"
+
+    sqlprovider "github.com/skolldire/go-engine/database/sql/provider/sql"
+    "github.com/skolldire/go-engine/pkg/engine"
 )
 
-dialector := postgres.Open("host=localhost user=app password=secret dbname=mydb port=5432 sslmode=disable")
+dsn := "host=localhost user=app password=secret dbname=mydb port=5432 sslmode=disable"
 
-client, err := gormsql.New(gormsql.Config{
-    Type:               "postgres",
-    MaxIdleConnections: 10,
-    MaxOpenConnections: 100,
-    ConnMaxLifetime:    5 * time.Minute,
-    EnableLogging:      true,
-    LogLevel:           "warn",
-    TablePrefix:        "app_",
-    AutoMigrate:        false,
-    WithResilience:     false,
-}, dialector, log)
+eng, err := engine.New(ctx,
+    engine.WithHealth(),
+    engine.WithProvider(sqlprovider.New("main", postgres.Open(dsn))),
+)
+if err != nil {
+    return err
+}
 
-engine, _ := app.NewAppBuilder().
-    WithDynamicConfig().
-    WithCustomClient("main-db", client).
-    WithRouter().
-    Build()
-
-// Retrieve:
-raw := engine.GetCustomClient("main-db")
-db, _ := client.SafeTypeAssert[*gormsql.DBClient](raw)
+db, err := sqlprovider.From(eng, "main")
 ```
+
+The engine owns the connection: it is closed in LIFO order on shutdown and
+contributes a health check, so a database outage shows on `/ready` without the
+application wiring anything.
 
 ---
 

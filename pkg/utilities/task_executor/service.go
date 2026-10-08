@@ -19,7 +19,7 @@ func (t Task[I, O]) Priority() int {
 	return t.priority
 }
 
-func (t Task[I, O]) Execute(ctx context.Context) (interface{}, int, error) {
+func (t Task[I, O]) Execute(ctx context.Context) (any, int, error) {
 	if ctx.Err() != nil {
 		return nil, 0, ctx.Err()
 	}
@@ -84,7 +84,7 @@ func distributeTasksByPriority(ctx context.Context, tasks map[string]Tasker, tas
 
 	for _, item := range taskItems {
 		if cfg.logger != nil {
-			cfg.logger.Debug(ctx, "Encolando tarea", map[string]interface{}{
+			cfg.logger.Debug(ctx, "Encolando tarea", map[string]any{
 				"taskID":   item.id,
 				"priority": item.task.Priority(),
 			})
@@ -93,7 +93,7 @@ func distributeTasksByPriority(ctx context.Context, tasks map[string]Tasker, tas
 		select {
 		case taskChan <- item:
 			if cfg.logger != nil {
-				cfg.logger.Debug(ctx, "Tarea enviada a worker", map[string]interface{}{
+				cfg.logger.Debug(ctx, "Tarea enviada a worker", map[string]any{
 					"taskID":   item.id,
 					"priority": item.task.Priority(),
 				})
@@ -169,7 +169,7 @@ func collectResults(ctx context.Context, resultChan <-chan Result, tasks map[str
 func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
 		cfg.logger.Warn(ctx, "timeout exceeded for result collection",
-			map[string]interface{}{
+			map[string]any{
 				"totalTasks":       len(tasks),
 				"collectedResults": len(results),
 			})
@@ -179,7 +179,7 @@ func logTimeoutWarning(ctx context.Context, cfg *config, tasks map[string]Tasker
 func logCancellationWarning(ctx context.Context, cfg *config, tasks map[string]Tasker, results map[string]Result) {
 	if cfg.logger != nil {
 		cfg.logger.Warn(ctx, "result collection cancelled",
-			map[string]interface{}{
+			map[string]any{
 				"totalTasks":       len(tasks),
 				"collectedResults": len(results),
 			})
@@ -191,28 +191,32 @@ func BatchWorkPool(ctx context.Context, tasks map[string]Tasker, numWorkers int,
 		batchSize = 100
 	}
 
-	allResults := make(map[string]Result)
+	allResults := make(map[string]Result, len(tasks))
 	batchTasks := make(map[string]Tasker, batchSize)
-	count := 0
+
+	runBatch := func() {
+		for id, result := range WorkerPool(ctx, batchTasks, numWorkers, options...) {
+			allResults[id] = result
+		}
+		batchTasks = make(map[string]Tasker, batchSize)
+	}
 
 	for id, task := range tasks {
 		batchTasks[id] = task
-		count++
 
-		if count >= batchSize || count == len(tasks) {
-			results := WorkerPool(ctx, batchTasks, numWorkers, options...)
-
-			for id, result := range results {
-				allResults[id] = result
-			}
-
-			batchTasks = make(map[string]Tasker, batchSize)
-			count = 0
+		if len(batchTasks) >= batchSize {
+			runBatch()
 
 			if ctx.Err() != nil {
-				break
+				return allResults
 			}
 		}
+	}
+
+	// Flush the remainder. The last batch is only full when len(tasks) is an
+	// exact multiple of batchSize, so skipping this drops work silently.
+	if len(batchTasks) > 0 {
+		runBatch()
 	}
 
 	return allResults
@@ -244,7 +248,7 @@ func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <
 			case <-ctx.Done():
 				if cfg.logger != nil {
 					cfg.logger.Debug(ctx, "discarding result due to cancellation",
-						map[string]interface{}{
+						map[string]any{
 							"taskID":   taskItem.id,
 							"workerID": workerID,
 						})
@@ -259,6 +263,28 @@ func worker(workerID string, ctx context.Context, wg *sync.WaitGroup, taskChan <
 	}
 }
 
+// taskOutcome carries the immutable result of a single task execution from the
+// task goroutine back to safeExecuteTask over a channel. It is never shared
+// mutably, so there is no data race between the task and the timeout paths.
+type taskOutcome struct {
+	res any
+	err error
+}
+
+// safeExecuteTask runs task under ctx and returns a Result. It guarantees:
+//
+//   - Panic containment: the recover runs in the SAME goroutine that invokes
+//     task.Execute. A recover in a parent goroutine cannot catch a panic raised
+//     in a child goroutine, so recovering here is what keeps a panicking task
+//     from crashing the whole process.
+//   - No data race: the task goroutine only writes to a channel; the Result is
+//     assembled by this goroutine after it either receives the outcome or the
+//     context is done.
+//   - Bounded leak: the outcome channel is buffered (cap 1) so the task
+//     goroutine can always send and exit even after we returned on timeout.
+//     Go cannot forcibly stop a task that ignores ctx; such a task keeps
+//     running until it returns, but it never blocks on the send and never
+//     writes to shared state. Callers must make long-running tasks honour ctx.
 func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, workerID string) Result {
 	startTime := time.Now()
 
@@ -270,42 +296,40 @@ func safeExecuteTask(ctx context.Context, task Tasker, id string, cfg *config, w
 		Priority:  task.Priority(),
 	}
 
-	func() {
+	outcomeCh := make(chan taskOutcome, 1)
+
+	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				errMsg := fmt.Sprintf("panic during task execution: %v", r)
 				if cfg.logger != nil {
-					cfg.logger.Error(ctx, ErrTaskPanic, map[string]interface{}{
+					cfg.logger.Error(ctx, ErrTaskPanic, map[string]any{
 						"taskID":   id,
 						"workerID": workerID,
 						"panic":    r,
 						"priority": task.Priority(),
 					})
 				}
-				result.Err = fmt.Errorf("%w: %s", ErrTaskPanic, errMsg)
+				outcomeCh <- taskOutcome{
+					err: fmt.Errorf("%w: panic during task execution: %v", ErrTaskPanic, r),
+				}
 			}
 		}()
 
-		doneCh := make(chan struct{})
-
-		go func() {
-			defer close(doneCh)
-			res, _, err := task.Execute(ctx)
-			result.Res = res
-			result.Err = err
-		}()
-
-		select {
-		case <-doneCh:
-		case <-ctx.Done():
-			result.Err = ctx.Err()
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				result.Err = fmt.Errorf("%w: %v", ErrTaskTimeout, ctx.Err())
-			} else {
-				result.Err = fmt.Errorf("%w: %v", ErrPoolCancelled, ctx.Err())
-			}
-		}
+		res, _, err := task.Execute(ctx)
+		outcomeCh <- taskOutcome{res: res, err: err}
 	}()
+
+	select {
+	case outcome := <-outcomeCh:
+		result.Res = outcome.res
+		result.Err = outcome.err
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			result.Err = fmt.Errorf("%w: %w", ErrTaskTimeout, ctx.Err())
+		} else {
+			result.Err = fmt.Errorf("%w: %w", ErrPoolCancelled, ctx.Err())
+		}
+	}
 
 	result.EndTime = time.Now()
 	result.Time = int(result.EndTime.Sub(startTime).Milliseconds())

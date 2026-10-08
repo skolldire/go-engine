@@ -26,24 +26,24 @@ import (
 
 type mockLogger struct{ mock.Mock }
 
-func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]interface{}) {
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
 	m.Called(ctx, msg, fields)
 }
-func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]interface{}) {
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any) {
 	m.Called(ctx, err, fields)
 }
-func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]interface{}) {}
-func (m *mockLogger) WrapError(err error, msg string) error                                    { return err }
-func (m *mockLogger) WithField(key string, value interface{}) logger.Service                   { return m }
-func (m *mockLogger) WithFields(fields map[string]interface{}) logger.Service                  { return m }
-func (m *mockLogger) GetLogLevel() string                                                      { return "info" }
-func (m *mockLogger) SetLogLevel(level string) error                                           { return nil }
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
+func (m *mockLogger) WrapError(err error, msg string) error                            { return err }
+func (m *mockLogger) WithField(key string, value any) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                              { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                   { return nil }
 
 type mockS3API struct{ mock.Mock }
 
@@ -179,7 +179,7 @@ func sampleObjects(n int) []types.Object {
 func TestNewClient(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{Region: "us-east-1", Bucket: "test-bucket"}
-	c := NewClient(acf, cfg, &mockLogger{})
+	c := NewClient(context.Background(), acf, cfg, &mockLogger{})
 	assert.NotNil(t, c)
 	assert.IsType(t, &S3Client{}, c)
 }
@@ -187,7 +187,7 @@ func TestNewClient(t *testing.T) {
 func TestNewClient_DefaultTimeout(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{Region: "us-east-1", Bucket: "test-bucket", Timeout: 0}
-	c := NewClient(acf, cfg, &mockLogger{})
+	c := NewClient(context.Background(), acf, cfg, &mockLogger{})
 	assert.NotNil(t, c)
 	s3c := c.(*S3Client)
 	assert.NotNil(t, s3c.s3Client)
@@ -198,10 +198,11 @@ func TestNewClient_WithLogging(t *testing.T) {
 	acf := aws.Config{Region: "us-east-1"}
 	cfg := Config{Region: "us-east-1", Bucket: "test-bucket", EnableLogging: true}
 	log := &mockLogger{}
-	log.On("Debug", mock.Anything, "S3 client initialized", mock.Anything).Return()
-	c := NewClient(acf, cfg, log)
+	c := NewClient(context.Background(), acf, cfg, log)
 	assert.NotNil(t, c)
-	log.AssertExpectations(t)
+	// Constructing a client emits nothing: operations are logged, construction
+	// is not. A library must not write log lines the application did not ask for.
+	log.AssertNotCalled(t, "Debug", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestNewClient_WithResilience(t *testing.T) {
@@ -215,7 +216,7 @@ func TestNewClient_WithResilience(t *testing.T) {
 			CircuitBreakerConfig: &circuit_breaker.Config{Name: "test-cb"},
 		},
 	}
-	c := NewClient(acf, cfg, &mockLogger{})
+	c := NewClient(context.Background(), acf, cfg, &mockLogger{})
 	assert.NotNil(t, c)
 	s3c := c.(*S3Client)
 	assert.NotNil(t, s3c.s3Client)

@@ -30,12 +30,12 @@ type Response struct {
 	Headers map[string]string
 
 	// Metadata contains AWS-specific response metadata
-	Metadata map[string]interface{}
+	Metadata map[string]any
 }
 
 // UnmarshalBody unmarshals Body as JSON into the given value
 // This is a helper method, not an implementation of json.Unmarshaler
-func (r *Response) UnmarshalBody(v interface{}) error {
+func (r *Response) UnmarshalBody(v any) error {
 	if len(r.Body) == 0 {
 		return fmt.Errorf("response body is empty")
 	}

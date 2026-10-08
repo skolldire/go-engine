@@ -2,32 +2,32 @@ package circuit_breaker
 
 import (
 	"context"
-	"time"
+	"errors"
 
 	"github.com/skolldire/go-engine/pkg/utilities/logger"
 	"github.com/sony/gobreaker"
 )
 
 func NewCircuitBreaker(d Dependencies) *CircuitBreaker {
-	validateCBConfig(d.Config)
+	cfg := normalizeCBConfig(d.Config)
 	settings := gobreaker.Settings{
-		Name:          d.Config.Name,
-		MaxRequests:   d.Config.MaxRequests,
-		Interval:      d.Config.Interval * time.Second,
-		Timeout:       d.Config.Timeout * time.Second,
-		ReadyToTrip:   createReadyToTripFunc(d.Config, d.Log),
-		OnStateChange: createOnStateChangeFunc(d.Config, d.Log),
+		Name:          cfg.Name,
+		MaxRequests:   cfg.MaxRequests,
+		Interval:      cfg.Interval,
+		Timeout:       cfg.Timeout,
+		ReadyToTrip:   createReadyToTripFunc(cfg, d.Log),
+		OnStateChange: createOnStateChangeFunc(cfg, d.Log),
 	}
 
 	return &CircuitBreaker{
 		cb:     gobreaker.NewCircuitBreaker(settings),
-		config: d.Config,
+		config: cfg,
 		log:    d.Log,
 	}
 }
 
-func (cb *CircuitBreaker) Execute(ctx context.Context, operation func() (interface{}, error)) (interface{}, error) {
-	result, err := cb.cb.Execute(func() (interface{}, error) {
+func (cb *CircuitBreaker) Execute(ctx context.Context, operation func() (any, error)) (any, error) {
+	result, err := cb.cb.Execute(func() (any, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -36,10 +36,12 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, operation func() (interfa
 	})
 
 	if err != nil {
-		if err == gobreaker.ErrOpenState {
+		// errors.Is, not ==: gobreaker is free to start wrapping these sentinels,
+		// and a direct comparison would silently stop emitting our own errors.
+		if errors.Is(err, gobreaker.ErrOpenState) {
 			return nil, ErrCircuitOpen
 		}
-		if err == gobreaker.ErrTooManyRequests {
+		if errors.Is(err, gobreaker.ErrTooManyRequests) {
 			return nil, ErrTooManyCalls
 		}
 		return nil, err
@@ -64,7 +66,7 @@ func createReadyToTripFunc(config *Config, log logger.Service) func(counts gobre
 
 			if shouldTrip && log != nil {
 				log.Warn(context.Background(), "circuit breaker changing to open state",
-					map[string]interface{}{"circuit": config.Name,
+					map[string]any{"circuit": config.Name,
 						"requests":    counts.Requests,
 						"failures":    counts.TotalFailures,
 						"failureRate": failureRate,
@@ -81,7 +83,7 @@ func createOnStateChangeFunc(config *Config, log logger.Service) func(name strin
 	return func(name string, from gobreaker.State, to gobreaker.State) {
 		if log != nil {
 			log.Warn(context.Background(), "circuit breaker state changed",
-				map[string]interface{}{"circuit": name,
+				map[string]any{"circuit": name,
 					"from": stateToString(from),
 					"to":   stateToString(to)})
 		}
@@ -101,28 +103,38 @@ func stateToString(state gobreaker.State) string {
 	}
 }
 
-func validateCBConfig(cfg *Config) {
-	if cfg.Name == "" {
-		cfg.Name = DefaultCBName
+// normalizeCBConfig returns a Config with defaults applied for any missing or
+// invalid field. It never mutates the caller-supplied config and tolerates a
+// nil input, in which case a fully defaulted config is returned.
+func normalizeCBConfig(cfg *Config) *Config {
+	out := &Config{}
+	if cfg != nil {
+		*out = *cfg
 	}
 
-	if cfg.MaxRequests == 0 {
-		cfg.MaxRequests = DefaultCBMaxRequests
+	if out.Name == "" {
+		out.Name = DefaultCBName
 	}
 
-	if cfg.Interval <= 0 {
-		cfg.Interval = DefaultCBInterval
+	if out.MaxRequests == 0 {
+		out.MaxRequests = DefaultCBMaxRequests
 	}
 
-	if cfg.Timeout <= 0 {
-		cfg.Timeout = DefaultCBTimeout
+	if out.Interval <= 0 {
+		out.Interval = DefaultCBInterval
 	}
 
-	if cfg.RequestThreshold == 0 {
-		cfg.RequestThreshold = DefaultCBRequestThreshold
+	if out.Timeout <= 0 {
+		out.Timeout = DefaultCBTimeout
 	}
 
-	if cfg.FailureRateThreshold <= 0 || cfg.FailureRateThreshold > 1.0 {
-		cfg.FailureRateThreshold = DefaultCBFailureRateThreshold
+	if out.RequestThreshold == 0 {
+		out.RequestThreshold = DefaultCBRequestThreshold
 	}
+
+	if out.FailureRateThreshold <= 0 || out.FailureRateThreshold > 1.0 {
+		out.FailureRateThreshold = DefaultCBFailureRateThreshold
+	}
+
+	return out
 }

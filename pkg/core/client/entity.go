@@ -37,9 +37,11 @@ type BaseConfig struct {
 	Timeout time.Duration `mapstructure:"timeout" json:"timeout"`
 }
 
-// Operation is a unit of work passed to BaseClient.Execute.
-// It must be idempotent when resilience (retry) is enabled.
-type Operation func() (interface{}, error)
+// Operation is a unit of work passed to BaseClient.Execute. It receives the
+// timeout-bounded context that Execute manages and MUST use it for any I/O so
+// the configured timeout actually cancels the underlying call. It must be
+// idempotent when resilience (retry) is enabled.
+type Operation func(ctx context.Context) (any, error)
 
 // BaseClient is an embeddable struct that provides logging, timeout management,
 // and optional resilience (retry + circuit breaker) to any client implementation.
@@ -52,8 +54,8 @@ type Operation func() (interface{}, error)
 //	}
 //
 //	func (c *MyClient) DoSomething(ctx context.Context) (string, error) {
-//	    result, err := c.Execute(ctx, "my-service.do-something", func() (interface{}, error) {
-//	        return callExternalAPI()
+//	    result, err := c.Execute(ctx, "my-service.do-something", func(ctx context.Context) (any, error) {
+//	        return callExternalAPI(ctx)
 //	    })
 //	    if err != nil {
 //	        return "", err
@@ -69,7 +71,13 @@ type BaseClient struct {
 	resilience  *resilience.Service
 	timeout     time.Duration
 	serviceName string
-	mu          sync.RWMutex // Protects logging and serviceName fields
+
+	// chain is the composed middleware. Cross-cutting concerns live here rather
+	// than as conditionals inside Execute, so adding metrics or tracing is a
+	// composition change instead of an edit to every client package.
+	chain Handler
+
+	mu sync.RWMutex // Protects logging, serviceName and chain
 }
 
 // NewBaseClient creates a BaseClient with service name "base".
@@ -97,9 +105,18 @@ func NewBaseClientWithName(config BaseConfig, log logger.Service, serviceName st
 		bc.timeout = DefaultTimeout
 	}
 
+	// The default chain reproduces the previous behaviour exactly: logging when
+	// EnableLogging is set, resilience when WithResilience is set. Callers that
+	// want metrics or tracing replace it with Use.
+	var mw []Middleware
+	if log != nil {
+		mw = append(mw, WithLogging(log, bc.IsLoggingEnabled))
+	}
 	if config.WithResilience {
 		bc.resilience = resilience.NewResilienceService(config.Resilience, log)
+		mw = append(mw, WithResilienceService(bc.resilience))
 	}
+	bc.chain = Chain(mw...)(baseHandler)
 
 	return bc
 }
@@ -111,66 +128,34 @@ func NewBaseClientWithName(config BaseConfig, log logger.Service, serviceName st
 //   - If ctx already has a deadline, Execute respects it unchanged.
 //   - If ctx has no deadline, Execute applies bc.timeout.
 //
+// The resulting bounded context is passed to the operation, so operations must
+// use it for their I/O for the timeout to actually cancel the underlying call.
+//
 // Resilience: when BaseConfig.WithResilience was true at construction, Execute
 // delegates to the resilience.Service (retry + circuit breaker). The operation
 // must be idempotent in that case.
 //
-// Return value: the raw interface{} returned by op. Use SafeTypeAssert[T] to
+// Return value: the raw any returned by op. Use SafeTypeAssert[T] to
 // convert it to a concrete type without a panic.
-func (bc *BaseClient) Execute(ctx context.Context, operationName string, operation Operation) (interface{}, error) {
+func (bc *BaseClient) Execute(ctx context.Context, operationName string, operation Operation) (any, error) {
 	ctx, cancel := bc.ensureContextWithTimeout(ctx)
 	defer cancel()
 
-	logFields := map[string]interface{}{
-		"operation": operationName,
-		"service":   bc.getServiceName(),
-	}
-
-	if bc.resilience != nil {
-		return bc.executeWithResilience(ctx, operationName, operation, logFields)
-	}
-
-	return bc.executeDirectly(ctx, operationName, operation, logFields)
+	return bc.chain(ctx, Invocation{
+		Client:    bc.getServiceName(),
+		Operation: operationName,
+	}, operation)
 }
 
-func (bc *BaseClient) executeWithResilience(ctx context.Context, operationName string, operation Operation, logFields map[string]interface{}) (interface{}, error) {
-	bc.mu.RLock()
-	logging := bc.logging
-	bc.mu.RUnlock()
-
-	if logging {
-		bc.logger.Debug(ctx, "starting operation with resilience: "+operationName, logFields)
-	}
-
-	result, err := bc.resilience.Execute(ctx, operation)
-
-	if err != nil && logging {
-		bc.logger.Error(ctx, err, logFields)
-	} else if logging {
-		bc.logger.Debug(ctx, "operation completed with resilience: "+operationName, logFields)
-	}
-
-	return result, err
-}
-
-func (bc *BaseClient) executeDirectly(ctx context.Context, operationName string, operation Operation, logFields map[string]interface{}) (interface{}, error) {
-	bc.mu.RLock()
-	logging := bc.logging
-	bc.mu.RUnlock()
-
-	if logging {
-		bc.logger.Debug(ctx, "starting operation: "+operationName, logFields)
-	}
-
-	result, err := operation()
-
-	if err != nil && logging {
-		bc.logger.Error(ctx, err, logFields)
-	} else if logging {
-		bc.logger.Debug(ctx, "operation completed: "+operationName, logFields)
-	}
-
-	return result, err
+// Use replaces the middleware chain. The default chain is built from
+// BaseConfig; this is for clients that need to add metrics, tracing, or their
+// own concern without every client package growing its own conditional.
+//
+// Middleware is applied outermost-first.
+func (bc *BaseClient) Use(mw ...Middleware) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+	bc.chain = Chain(mw...)(baseHandler)
 }
 
 func (bc *BaseClient) ensureContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -185,10 +170,9 @@ func (bc *BaseClient) ensureContextWithTimeout(ctx context.Context) (context.Con
 // a deadline, that deadline is respected as-is. The caller must invoke the
 // returned cancel function.
 //
-// Use this when an operation needs to pass the timeout-managed context into an
-// SDK call: Operation receives no context, so the closure would otherwise close
-// over an unbounded context. Bounding it before Execute keeps the operation's
-// context consistent with the one Execute manages.
+// Execute already passes the bounded context to the operation, so most code
+// does not need this. It remains available for callers that must bound a
+// context outside of an Execute call.
 func (bc *BaseClient) ContextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	return bc.ensureContextWithTimeout(ctx)
 }

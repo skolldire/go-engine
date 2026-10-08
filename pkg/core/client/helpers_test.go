@@ -46,7 +46,7 @@ func TestSafeTypeAssert_TypeMismatch(t *testing.T) {
 }
 
 func TestSafeTypeAssert_Nil(t *testing.T) {
-	var result interface{} = nil
+	var result any = nil
 	value, err := SafeTypeAssert[string](result)
 
 	assert.Error(t, err)

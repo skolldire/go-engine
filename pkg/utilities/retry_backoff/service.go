@@ -9,40 +9,43 @@ import (
 )
 
 func NewRetryer(d Dependencies) *Retryer {
-	validateConfig(d.RetryConfig)
-	settings := &Config{
-		InitialWaitTime: d.RetryConfig.InitialWaitTime * time.Millisecond,
-		MaxWaitTime:     d.RetryConfig.MaxWaitTime * time.Second,
-		MaxRetries:      d.RetryConfig.MaxRetries,
-		BackoffFactor:   d.RetryConfig.BackoffFactor,
-		JitterFactor:    d.RetryConfig.JitterFactor,
-	}
+	settings := normalizeConfig(d.RetryConfig)
 	return &Retryer{
 		config: settings,
 		logger: d.Logger,
 	}
 }
 
-func validateConfig(cfg *Config) {
-	if cfg.InitialWaitTime <= 0 {
-		cfg.InitialWaitTime = DefaultInitialWaitTime
+// normalizeConfig returns a Config with defaults applied for any missing or
+// invalid field. It never mutates the caller-supplied config and tolerates a
+// nil input, in which case a fully defaulted config is returned.
+func normalizeConfig(cfg *Config) *Config {
+	out := &Config{}
+	if cfg != nil {
+		*out = *cfg
 	}
 
-	if cfg.MaxWaitTime <= 0 {
-		cfg.MaxWaitTime = DefaultMaxWaitTime
+	if out.InitialWaitTime <= 0 {
+		out.InitialWaitTime = DefaultInitialWaitTime
 	}
 
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = DefaultMaxRetries
+	if out.MaxWaitTime <= 0 {
+		out.MaxWaitTime = DefaultMaxWaitTime
 	}
 
-	if cfg.BackoffFactor <= 0 {
-		cfg.BackoffFactor = DefaultBackoffFactor
+	if out.MaxRetries <= 0 {
+		out.MaxRetries = DefaultMaxRetries
 	}
 
-	if cfg.JitterFactor < 0 {
-		cfg.JitterFactor = DefaultJitterFactor
+	if out.BackoffFactor <= 0 {
+		out.BackoffFactor = DefaultBackoffFactor
 	}
+
+	if out.JitterFactor < 0 {
+		out.JitterFactor = DefaultJitterFactor
+	}
+
+	return out
 }
 
 func (r *Retryer) Do(ctx context.Context, operation func() error) error {
@@ -56,14 +59,14 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 
 		if attempt == r.config.MaxRetries {
-			return err
+			break
 		}
 
 		waitTime := r.calculateWaitTime(attempt)
 
 		if r.logger != nil {
 			r.logger.Debug(ctx, "retrying operation after error",
-				map[string]interface{}{"attempt": attempt + 1,
+				map[string]any{"attempt": attempt + 1,
 					"maxRetries": r.config.MaxRetries,
 					"waitTime":   waitTime,
 					"error":      err.Error()})
@@ -76,7 +79,10 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 		}
 	}
 
-	// Always wrap error with consistent message regardless of logger configuration
+	// Wrap the exhausted-retries failure so callers can distinguish it from a
+	// first-attempt error. This used to be unreachable: the loop returned the
+	// raw error directly, so the documented wrapping never happened.
+	// errors.Is/errors.As still reach the underlying error through %w.
 	wrappedErr := fmt.Errorf("error executing operation after all retries: %w", err)
 	if r.logger != nil {
 		// Log the error if logger is available
@@ -88,6 +94,9 @@ func (r *Retryer) Do(ctx context.Context, operation func() error) error {
 func (r *Retryer) calculateWaitTime(attempt int) time.Duration {
 	baseWaitTime := r.config.InitialWaitTime * time.Duration(math.Pow(r.config.BackoffFactor, float64(attempt)))
 
+	// Jitter only needs to decorrelate retry storms between peers, not to be
+	// unpredictable to an attacker, so math/rand is the right tool here.
+	//nolint:gosec // G404: non-cryptographic randomness is intentional for backoff jitter
 	jitter := time.Duration(rand.Float64() * r.config.JitterFactor * float64(baseWaitTime))
 	waitTime := baseWaitTime + jitter
 
