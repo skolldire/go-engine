@@ -25,7 +25,7 @@ jobs:
       # NOTE: no `go clean -modcache` here. It ran before actions/cache and
       # deleted exactly what the cache was about to restore.
       - name: Cache Go modules
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build
