@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/skolldire/go-engine/pkg/engine"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -186,7 +185,7 @@ func terminate(t *testing.T, c testcontainers.Container) {
 
 // hostPort returns the host address and port a test can dial for a container
 // port such as "6379/tcp".
-func hostPort(t *testing.T, c testcontainers.Container, port nat.Port) (string, int) {
+func hostPort(t *testing.T, c testcontainers.Container, port string) (string, int) {
 	t.Helper()
 
 	ctx := ctxWithTimeout(t, 30*time.Second)
@@ -197,11 +196,11 @@ func hostPort(t *testing.T, c testcontainers.Container, port nat.Port) (string, 
 	mapped, err := c.MappedPort(ctx, port)
 	require.NoError(t, err)
 
-	return host, mapped.Int()
+	return host, int(mapped.Num())
 }
 
 // hostAddr is hostPort formatted as host:port.
-func hostAddr(t *testing.T, c testcontainers.Container, port nat.Port) string {
+func hostAddr(t *testing.T, c testcontainers.Container, port string) string {
 	t.Helper()
 
 	host, p := hostPort(t, c, port)
