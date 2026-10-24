@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/moby/moby/api v1.56.1
-	github.com/rabbitmq/amqp091-go v1.15.0
+	github.com/rabbitmq/amqp091-go v1.16.0
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/skolldire/go-engine v0.30.0
 	github.com/skolldire/go-engine/aws v0.0.0-00010101000000-000000000000
