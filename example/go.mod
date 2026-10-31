@@ -15,7 +15,7 @@ require (
 	github.com/skolldire/go-engine/messaging v0.30.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
-	google.golang.org/grpc v1.84.0
+	google.golang.org/grpc v1.85.0
 	gorm.io/driver/postgres v1.6.3
 )
 
