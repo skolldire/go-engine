@@ -20,7 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sns v1.47.4
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.3
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.2
-	github.com/aws/smithy-go v1.28.4
+	github.com/aws/smithy-go v1.28.7
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/lestrrat-go/jwx/v2 v2.1.7
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
