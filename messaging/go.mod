@@ -11,7 +11,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/skolldire/go-engine v0.30.0
 	github.com/stretchr/testify v1.12.1
-	google.golang.org/grpc v1.84.0
+	google.golang.org/grpc v1.85.0
 )
 
 require (
