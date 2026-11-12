@@ -1,0 +1,7 @@
+# Overlay used by the test suite. Merged on top of application.yaml, so it only
+# needs to state what differs.
+log:
+  level: "error"
+
+router:
+  port: "0"

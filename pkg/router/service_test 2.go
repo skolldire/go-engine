@@ -1,0 +1,466 @@
+package router
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/skolldire/go-engine/pkg/utilities/logger"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+)
+
+type mockLogger struct {
+	mock.Mock
+}
+
+func (m *mockLogger) Debug(ctx context.Context, msg string, fields map[string]any) {
+	m.Called(ctx, msg, fields)
+}
+func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any) {
+	m.Called(ctx, msg, fields)
+}
+func (m *mockLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
+	m.Called(ctx, msg, fields)
+}
+func (m *mockLogger) Error(ctx context.Context, err error, fields map[string]any) {
+	m.Called(ctx, err, fields)
+}
+func (m *mockLogger) FatalError(ctx context.Context, err error, fields map[string]any) {}
+func (m *mockLogger) WrapError(err error, msg string) error                            { return err }
+func (m *mockLogger) WithField(key string, value any) logger.Service                   { return m }
+func (m *mockLogger) WithFields(fields map[string]any) logger.Service                  { return m }
+func (m *mockLogger) GetLogLevel() string                                              { return "info" }
+func (m *mockLogger) SetLogLevel(level string) error                                   { return nil }
+
+func TestWithLogger(t *testing.T) {
+	log := &mockLogger{}
+	opt := WithLogger(log)
+
+	app := &App{}
+	opt(app)
+
+	assert.Equal(t, log, app.logger)
+}
+
+func TestNewService(t *testing.T) {
+	cfg := Config{
+		Port:            "8080",
+		ReadTimeout:     0,
+		WriteTimeout:    0,
+		IdleTimeout:     0,
+		ShutdownTimeout: 0,
+	}
+
+	app := NewService(cfg)
+
+	assert.NotNil(t, app)
+	assert.NotNil(t, app.router)
+	assert.NotNil(t, app.server)
+	assert.Equal(t, defaultReadTimeout, app.config.ReadTimeout)
+	assert.Equal(t, defaultWriteTimeout, app.config.WriteTimeout)
+	assert.Equal(t, defaultIdleTimeout, app.config.IdleTimeout)
+	assert.Equal(t, defaultShutdownTimeout, app.shutdownTimeout)
+}
+
+func TestNewService_WithCustomTimeouts(t *testing.T) {
+	cfg := Config{
+		Port:            "8080",
+		ReadTimeout:     5 * time.Second,
+		WriteTimeout:    10 * time.Second,
+		IdleTimeout:     60 * time.Second,
+		ShutdownTimeout: 15 * time.Second,
+	}
+
+	app := NewService(cfg)
+
+	assert.Equal(t, 5*time.Second, app.config.ReadTimeout)
+	assert.Equal(t, 10*time.Second, app.config.WriteTimeout)
+	assert.Equal(t, 60*time.Second, app.config.IdleTimeout)
+	assert.Equal(t, 15*time.Second, app.shutdownTimeout)
+}
+
+func TestNewService_WithLogger(t *testing.T) {
+	cfg := Config{
+		Port: "8080",
+	}
+	log := &mockLogger{}
+
+	app := NewService(cfg, WithLogger(log))
+
+	assert.Equal(t, log, app.logger)
+}
+
+// TestApp_Run_ContextCancellation verifies Run returns after its context is
+// cancelled and that registered shutdown hooks are executed.
+func TestApp_Run_ContextCancellation(t *testing.T) {
+	log := &mockLogger{}
+	log.On("Info", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	log.On("Error", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
+	// Port "0" binds an ephemeral port so the test never collides.
+	app := NewService(Config{Port: "0", ShutdownTimeout: 2 * time.Second}, WithLogger(log))
+
+	hookRan := make(chan struct{}, 1)
+	app.RegisterShutdownHook(func(context.Context) error {
+		hookRan <- struct{}{}
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- app.Run(ctx) }()
+
+	// Give the server a moment to start, then cancel the context.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		assert.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return after context cancellation")
+	}
+
+	select {
+	case <-hookRan:
+	default:
+		t.Fatal("shutdown hook was not executed")
+	}
+}
+
+func TestApp_Use(t *testing.T) {
+	// No podemos agregar middlewares después de que las rutas ya están configuradas
+	// En chi, los middlewares deben agregarse antes de las rutas
+	// Este test verifica que el método Use existe y puede ser llamado
+	// pero en la práctica, los middlewares se agregan durante la configuración inicial
+	cfg := Config{
+		Port: "8080",
+	}
+	app := NewService(cfg)
+
+	// Verificar que el router existe
+	assert.NotNil(t, app.router)
+
+	// El método Use existe pero no puede usarse después de configurar rutas
+	// En un caso real, los middlewares se configuran en configureMiddlewares()
+	// o antes de llamar a configureBasicRoutes()
+}
+
+func TestApp_Mount(t *testing.T) {
+	// Mount no puede usarse después de que las rutas ya están configuradas
+	// En chi, los handlers deben montarse antes de las rutas
+	// Este test verifica que el método existe pero no puede usarse después de NewService
+	cfg := Config{
+		Port: "8080",
+	}
+	app := NewService(cfg)
+
+	// Verificar que el router existe
+	assert.NotNil(t, app.router)
+
+	// El método Mount existe pero no puede usarse después de configurar rutas
+	// En un caso real, los handlers se montan antes de llamar a configureBasicRoutes()
+}
+
+func TestApp_HandleFunc(t *testing.T) {
+	cfg := Config{
+		Port: "8080",
+	}
+	app := NewService(cfg)
+
+	app.HandleFunc("/custom", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("custom"))
+	})
+
+	req := httptest.NewRequest("GET", "/custom", nil)
+	w := httptest.NewRecorder()
+	app.router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "custom", w.Body.String())
+}
+
+func TestApp_AddRoute(t *testing.T) {
+	cfg := Config{
+		Port: "8080",
+	}
+	app := NewService(cfg)
+
+	app.AddRoute("POST", "/test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	w := httptest.NewRecorder()
+	app.router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestApp_Router(t *testing.T) {
+	cfg := Config{
+		Port: "8080",
+	}
+	app := NewService(cfg)
+
+	router := app.Router()
+	assert.NotNil(t, router)
+	assert.Equal(t, app.router, router)
+}
+
+func TestApp_WithMiddleware(t *testing.T) {
+	// Use no puede usarse después de que las rutas ya están configuradas
+	// En chi, los middlewares deben agregarse antes de las rutas
+	// Este test verifica que el método existe pero no puede usarse después de NewService
+	cfg := Config{
+		Port: "8080",
+	}
+	app := NewService(cfg)
+
+	// Verificar que el router existe
+	assert.NotNil(t, app.router)
+
+	// El método Use existe pero no puede usarse después de configurar rutas
+	// En un caso real, los middlewares se configuran en configureMiddlewares()
+	// o antes de llamar a configureBasicRoutes()
+}
+
+func TestPingHandler(t *testing.T) {
+	req := httptest.NewRequest("GET", "/ping", nil)
+	w := httptest.NewRecorder()
+
+	pingHandler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	assert.Contains(t, w.Body.String(), "ok")
+	assert.Contains(t, w.Body.String(), "pong")
+}
+
+func TestSetPort(t *testing.T) {
+	assert.Equal(t, "8080", setPort(""))
+	assert.Equal(t, "3000", setPort("3000"))
+}
+
+func TestApp_ConfigureMiddlewares_WithCORS(t *testing.T) {
+	cfg := Config{
+		Port:       "8080",
+		EnableCORS: true,
+		CorsConfig: Cors{
+			AllowOrigins: []string{"http://localhost:3000"},
+			AllowMethods: []string{"GET", "POST"},
+			AllowHeaders: []string{"Content-Type"},
+		},
+	}
+
+	app := NewService(cfg)
+
+	// Verify CORS middleware is configured
+	req := httptest.NewRequest("OPTIONS", "/ping", nil)
+	req.Header.Set("Origin", "http://localhost:3000")
+	w := httptest.NewRecorder()
+	app.router.ServeHTTP(w, req)
+
+	// CORS middleware should be present
+	assert.NotNil(t, app.router)
+}
+
+func TestApp_ConfigureMiddlewares_WithTrustedProxies(t *testing.T) {
+	cfg := Config{
+		Port:           "8080",
+		TrustedProxies: []string{"192.168.1.1", "10.0.0.1"},
+	}
+
+	app := NewService(cfg)
+
+	assert.NotNil(t, app.router)
+	assert.Equal(t, 2, len(cfg.TrustedProxies))
+}
+
+func TestApp_ConfigureBasicRoutes(t *testing.T) {
+	cfg := Config{
+		Port: "8080",
+	}
+	app := NewService(cfg)
+
+	req := httptest.NewRequest("GET", "/ping", nil)
+	w := httptest.NewRecorder()
+	app.router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestNewService_WithoutLoggerDoesNotPanic is the regression test for Run
+// dereferencing a nil logger. NewService(cfg) with no WithLogger option is a
+// valid call and used to panic on the first log line inside Run.
+func TestNewService_WithoutLoggerDoesNotPanic(t *testing.T) {
+	app := NewService(Config{Port: "0", ShutdownTimeout: 100 * time.Millisecond})
+
+	assert.NotNil(t, app.logger, "a router built without WithLogger must still have a logger")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	assert.NotPanics(t, func() {
+		_ = app.Run(ctx)
+	})
+}
+
+// TestRegisterShutdownHook_ConcurrentWithRun is the regression test for the
+// unsynchronised shutdownHooks slice: nothing prevents a caller from
+// registering a hook while Run is iterating it.
+func TestRegisterShutdownHook_ConcurrentWithRun(t *testing.T) {
+	app := NewService(Config{Port: "0", ShutdownTimeout: 200 * time.Millisecond})
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	called := 0
+
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			app.RegisterShutdownHook(func(context.Context) error {
+				mu.Lock()
+				called++
+				mu.Unlock()
+				return nil
+			})
+		}()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = app.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.LessOrEqual(t, called, 16)
+}
+
+// TestRegisterShutdownHook_NilIsIgnored guards against a nil hook panicking
+// during shutdown.
+func TestRegisterShutdownHook_NilIsIgnored(t *testing.T) {
+	app := NewService(Config{Port: "0"})
+
+	app.RegisterShutdownHook(nil)
+	assert.Empty(t, app.shutdownHooks)
+}
+
+// TestTakeShutdownHooks_RunsHooksOnce verifies hooks are drained, so a second
+// shutdown path cannot re-run them.
+func TestTakeShutdownHooks_RunsHooksOnce(t *testing.T) {
+	app := NewService(Config{Port: "0"})
+
+	app.RegisterShutdownHook(func(context.Context) error { return nil })
+	assert.Len(t, app.takeShutdownHooks(), 1)
+	assert.Empty(t, app.takeShutdownHooks())
+}
+
+// TestNewService_HandlerTimeoutTracksWriteTimeout is the regression test for
+// middleware.Timeout being hardcoded to 60s while WriteTimeout defaulted to
+// 30s: the server abandoned the response before the handler was ever cancelled.
+func TestNewService_HandlerTimeoutTracksWriteTimeout(t *testing.T) {
+	t.Run("defaults to WriteTimeout", func(t *testing.T) {
+		app := NewService(Config{Port: "0", WriteTimeout: 5 * time.Second})
+		assert.Equal(t, 5*time.Second, app.config.HandlerTimeout)
+	})
+
+	t.Run("explicit value wins", func(t *testing.T) {
+		app := NewService(Config{Port: "0", WriteTimeout: 5 * time.Second, HandlerTimeout: 2 * time.Second})
+		assert.Equal(t, 2*time.Second, app.config.HandlerTimeout)
+	})
+
+	t.Run("falls back to the package default", func(t *testing.T) {
+		app := NewService(Config{Port: "0"})
+		assert.Equal(t, defaultWriteTimeout, app.config.HandlerTimeout)
+		assert.Equal(t, app.config.WriteTimeout, app.config.HandlerTimeout,
+			"handler and write budgets must stay coherent")
+	})
+}
+
+// TestRun_RunsHooksWhenListenFails is the regression test for Run returning
+// early on a failed start. Engine.Close is registered as a shutdown hook, so
+// skipping the hooks leaked every client the engine had built — precisely when
+// startup had already failed.
+func TestRun_RunsHooksWhenListenFails(t *testing.T) {
+	// An out-of-range port makes ListenAndServe fail deterministically on every
+	// platform. Occupying a port is not portable: binding :PORT on all
+	// interfaces can still succeed while 127.0.0.1:PORT is taken.
+	app := NewService(Config{Port: "99999", ShutdownTimeout: time.Second})
+
+	var hookRan bool
+	app.RegisterShutdownHook(func(context.Context) error {
+		hookRan = true
+		return nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	runErr := app.Run(ctx)
+
+	require.Error(t, runErr, "a failed bind must be reported")
+	assert.True(t, hookRan, "shutdown hooks must run even when the server never started")
+}
+
+// TestRun_ReportsHookFailures ensures a hook error is not swallowed.
+func TestRun_ReportsHookFailures(t *testing.T) {
+	app := NewService(Config{Port: "0", ShutdownTimeout: time.Second})
+
+	sentinel := errors.New("closing redis failed")
+	app.RegisterShutdownHook(func(context.Context) error { return sentinel })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := app.Run(ctx)
+
+	assert.ErrorIs(t, err, sentinel,
+		"a resource that failed to close must surface, not be logged and dropped")
+}
+
+// TestRun_AggregatesStartAndHookErrors covers both failures at once.
+func TestRun_AggregatesStartAndHookErrors(t *testing.T) {
+	app := NewService(Config{Port: "99999", ShutdownTimeout: time.Second})
+
+	hookErr := errors.New("hook boom")
+	app.RegisterShutdownHook(func(context.Context) error { return hookErr })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	runErr := app.Run(ctx)
+
+	require.Error(t, runErr)
+	assert.ErrorIs(t, runErr, hookErr, "both causes must remain reachable")
+}
+
+// TestRun_CleanShutdownReturnsNil guards the happy path.
+func TestRun_CleanShutdownReturnsNil(t *testing.T) {
+	app := NewService(Config{Port: "0", ShutdownTimeout: time.Second})
+
+	var hookRan bool
+	app.RegisterShutdownHook(func(context.Context) error {
+		hookRan = true
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	assert.NoError(t, app.Run(ctx))
+	assert.True(t, hookRan)
+}

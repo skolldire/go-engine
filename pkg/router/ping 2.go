@@ -1,0 +1,24 @@
+package router
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+type PingResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	response := PingResponse{
+		Status:  "ok",
+		Message: "pong",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
