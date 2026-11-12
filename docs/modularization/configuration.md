@@ -1,11 +1,15 @@
 # Configuración, utilidades y construcción
 
-Estado: contrato de diseño. Los nombres y el YAML son ilustrativos, no una API
+Estado: semántica subordinada a [decisiones](decisions.md). Los nombres y el YAML son ilustrativos, no una API
 implementada ni un archivo compatible con el motor actual. Para firmas, campos
 y defaults exactos prevalecen [public-contracts](public-contracts.md) y
 [concurrency-api](concurrency-api.md).
 
 ## Separación de responsabilidades
+
+D27: config/yaml usa go.yaml.in/yaml/v3. Mientras no esté disponible en main
+con consumidor passing, usar config/json para validación compuesta. Defaults
+seeded sin punteros/metadata y valores explícitos 0/false respetados.
 
 `config` conoce fuentes, mezcla, snapshots, secciones, resolución y decoding;
 no conoce drivers, routers, brokers o SDKs. Cada herramienta posee una estructura

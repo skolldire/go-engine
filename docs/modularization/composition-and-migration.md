@@ -1,6 +1,6 @@
 # Composición, lifecycle y plan de migración
 
-Estado: estrategia previa a implementación. Firmas/configuración exactas en
+Estado: semántica subordinada a [decisiones](decisions.md). Firmas/configuración en
 [public-contracts](public-contracts.md) y [concurrency-api](concurrency-api.md).
 Las cadenas y contratos son diseño,
 no nombres de funciones que ya se puedan invocar en la nueva API.
@@ -21,8 +21,10 @@ Un registry de backends en el ensamblador no forma parte de `database/atomic`.
 
 ## Decorator como mecanismo principal
 
-Usar funciones/pequeñas interfaces compatibles con contexto para envolver una
-operación o un cliente específico. No forzar todos los transportes a retornar
+Usar funciones/pequeñas interfaces compatibles con contexto para envolver I/O
+o un cliente específico. client no envuelve funciones puras, tareas del pool ni
+sentencias dentro de Tx. La función entregada al pool puede realizar I/O y usar
+sus adaptadores decorados; eso no convierte al scheduler en dependencia de client. No forzar todos los transportes a retornar
 `any`, ni intentar implementar SQL, broker y HTTP mediante una única interfaz
 universal. Adaptadores de conveniencia pueden conservar `Client.Do` de la
 fachada existente para quien elija usarla.
@@ -153,28 +155,23 @@ contratos, compatibilidad, consumer guard y pruebas relevantes, no solo un move.
 
 ## Compatibilidad y publicación
 
-Antes de cambiar paths, inventariar símbolos públicos y su semántica, mapearlos
-a nuevas firmas y preparar una tabla old → new con ejemplos. Aliases solo donde
-los tipos sean realmente equivalentes. Wrappers donde haga falta adaptar firma;
-una ruptura explícita donde cambien garantías, como el timeout del executor.
+Antes de cambiar paths, inventariar símbolos y garantías. Si cambia una
+garantía hay ruptura explícita sin bridge: aliases/wrappers no deben simular
+equivalencia. task_executor queda congelado, marcado Deprecated con reemplazo y
+retirado en la release de migración. La deprecación y retirada se implementan en
+su tarea específica, no como efecto de aceptar estas decisiones documentales.
 
-**Riesgo Go específico:** introducir módulos nuevos debajo de paths que ya
-contienen paquetes de la raíz puede causar ambiguous imports para consumidores
-que todavía resuelven una versión vieja de esa raíz. No confiar en `go.work` o
-replaces para ocultarlo. Usar paths nuevos no superpuestos o coordinar una
-versión/raíz de compatibilidad que retire los paquetes antiguos; probar el caso
-con versiones publicables de consumidores antes de fijar los nombres definitivos.
-`pkg/utilities/retry_backoff` y el destino nuevo `retry` ilustran la diferencia.
-
-El puente heredado puede depender de herramientas; las herramientas no del
-puente. No crear require de ida y vuelta raíz → tool → raíz. Mantener la API
-vieja no obliga a que los consumidores nuevos instalen el puente.
+**Riesgo Go:** módulos nuevos sobre paths de paquetes publicados de raíz pueden
+producir ambiguous imports. Elegir paths sin superposición o transición de versión
+coordinada y probar consumers con tags resolubles. No usar go.work/replaces para
+ocultar el problema ni crear un require inverso tool→root.
 
 Conservar releases coordinados para módulos 0.x y tags `directorio/vX.Y.Z`;
 concurrency v1 usará versión propia declarada en manifiesto por módulo. Definir
 versión de ruptura y mínimos soportados de PostgreSQL/MySQL antes de publicar;
 no aumentar floors ni actualizar dependencias por accidente al mover paquetes.
-Catálogo de módulos único para checks/release con publicables explícitos,
+D29: sin manifiesto de versiones no hay tag independiente. El responsable
+propone versión y el usuario la aprueba. Catálogo de módulos único para checks/release con publicables explícitos,
 incluidos nuevos módulos y excluidos ejemplos/harness.
 
 La rama actual ya tiene un prototipo concurrency y cambios de CI de una
@@ -204,7 +201,17 @@ Una revisión documental ordinaria no requiere suites runtime. Esta revisión
 ejecuta solo los tests existentes del prototipo para contrastar sus capacidades,
 sin atribuir esos resultados a la API nueva todavía no implementada.
 Al implementar, cada módulo debe demostrar aislamiento real y equivalencia o
-ruptura documentada. Una suite verde del monorepo no sustituye el test externo.
+ruptura documentada. Una suite verde del monorepo no sustituye el test externo. minimal usa solo API
+base; composed agrega únicamente dependencias declaradas. Replaces solo módulo
+y deps autorizadas; YAML por config/yaml con go.yaml.in/yaml/v3, o config/json
+mientras ese módulo no exista.
+
+Integración pesada a cargo del implementador en modulo/integration con go.mod
+propio; las revisiones validan independencia. D28 excluye goleak de módulos
+stdlib-only: usar perfil goroutineleak. Los fakes de adapters pertenecen a testkit,
+no subpaquete fake universal. Lista de siete evidencias v1 definida en decisions.md (E1–E7), con gorelease
+y consumer contra tag real. No publicar antes de E1–E6 y autorización; verificar
+E7 tras publicación sin sustituirla por pruebas con replaces.
 
 ## Fuentes técnicas consultadas
 

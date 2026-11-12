@@ -50,40 +50,20 @@ están en [public-contracts](public-contracts.md) y
 | façade AWS → todos los servicios | Consumidor S3 descarga SDK no elegidos | Per-service facade; agregado integration/aws opt-in |
 | config/ssm → cliente SSM → config | Ciclo si cliente lee config desde dentro | Cliente solo Config tipado, sin lector/config dependency |
 | shared common → todos | Tipos genéricos se convierten en dependencia transversal | Interfaces del consumidor; wire types solo compartidos donde hay protocolo real |
-| root compatibility ↔ nuevos tools | Ciclo o ambiguous imports | Tools sin root require; paths nuevos; bridges dirigidos hacia tools |
+| root compatibility ↔ nuevos tools | Ciclo o ambiguous imports | Tools sin root require; paths nuevos; ruptura sin puente cuando cambian garantías |
 
-## Decisiones cerradas en esta revisión
+## Decisiones normativas
 
-| ID | Decisión vinculante para la implementación |
-|---|---|
-| D01 | Configs locales sin map[string]any para clientes base; application root puede tener secciones raw |
-| D02 | DefaultConfig explícito, decoder seeded; cero no se transforma en default cuando cero tiene significado |
-| D03 | Context nil inválido; métodos con error lo retornan; utilidades puras no reciben ctx artificial |
-| D04 | New puro salvo pool/limiter/rate limiter que administran sincronización local; Open para I/O, Run para loops/listeners |
-| D05 | Sin hot reload en v1; cambios se aplican recreando recursos mediante aplicación |
-| D06 | Parser profile estricto y stdlib; entorno y compatibilidad fuera del parser |
-| D07 | Neutral API no expone SDK. Native adapters sí exponen tipos nativos donde aporta funcionalidad actual |
-| D08 | Single SQL Tx se pasa explícitamente; no Tx escondida en context ni transacciones anidadas implícitas |
-| D09 | Reintentos apagados en base; classifier requerido al habilitar retry; stop por defecto ante error desconocido |
-| D10 | Fallos de cancelación/admisión no cuentan como fallo de dependencia del breaker |
-| D11 | Pool tiene Future por aceptado; no callbacks ni cola de resultados obligatoria; ledger vivo únicamente |
-| D12 | Peso lógico ponderado en admisión; output/heap arbitrario no están bajo un hard cap ofrecido por la biblioteca |
-| D13 | Keyed pool local, round-robin por key lista, failure policy explícita; distributed ordering fuera de alcance |
-| D14 | Stats pull, métricas externas, sin SDK/hook obligatorio dentro del scheduler |
-| D15 | Idempotency/outbox/inbox/audit DBTX atómico; store fuera de Tx y lease worker usan API distinta |
-| D16 | Reloj DB para leases; expiración de retención no permite borrar ejecuciones activas |
-| D17 | TLS activado por defaults de transporte; modo insecure/desactivado solo explícito, sin inferir seguridad por profile |
-| D18 | Hosts desconocidos se rechazan con 421, JWT inválido 401/permiso 403; no CORS como control de host |
-| D19 | Migrations explícitas, ni auto-migrate ni cleanup destructivo en constructor |
-| D20 | PostgreSQL y MySQL se prueban por separado; versión mínima establecida por matriz real de integración antes de publicar |
-| D21 | Una sola política dueña del retry budget; wrappers/SDK no multiplican intentos ocultamente |
-| D22 | concurrency estable implica v1.0.0 propio; versión del resto no cambia por ello |
-| D23 | Mantener Go 1.27.4 declarado durante esta extracción; no elevarlo como efecto secundario |
-| D24 | No hay nuevos paquetes vacíos ni APIs sin comportamiento para aparentar avance |
+La fuente de decisiones es [decisions.md](decisions.md), con D01–D24 y las
+aclaraciones posteriores del arquitecto recibidas en esta conversación. Este
+informe no duplica la tabla para evitar divergencia. Notion y ADR 0002 no son
+normativos; D32 obliga a corregir un documento en conflicto antes de implementar.
 
 ## Pendientes reales y quién los resuelve
 
-No quedan alternativas de arquitectura abiertas para concurrency v1. Quedan
+No quedan alternativas de arquitectura abiertas para concurrency v1; su archivo
+no se modifica por las respuestas recibidas. Las firmas client, categorías y evidencias fueron concretadas con autorización
+del usuario; la ausencia de answers.md no es bloqueo. Quedan
 comprobaciones que no pueden cerrarse con prosa:
 
 | Pendiente | Dueño | Evidencia necesaria / efecto |
@@ -133,3 +113,27 @@ presentes antes de la revisión no cambiaron; los cambios de esta iteración son
 documentales. Inventario cubierto 69/69, índice de contratos con 110 entradas
 concretas (incluye paquetes/proveedores/testkits, no 110 implementaciones ni
 necesariamente 110 go.mod). Referencias locales y formato diff revisados.
+
+
+## Reconciliación con respuestas del arquitecto
+
+Se retiran core obligatorio, constructor universal e IsRetryable. Se confirma
+DefaultConfig con decoder seeded, cliente solo I/O, observación por wrappers y
+ErrCommitOutcomeUnknown. Se corrige la compatibilidad que pretendía conservar
+garantías diferentes: task_executor se congela/depreca y se elimina en la release
+de migración, sin bridge. La ejecución de esa deprecación es trabajo de código
+posterior; esta actualización solo modifica documentos.
+
+No se modificó concurrency-api.md. Las referencias históricas a bridges/harness
+en sus notas de migración no autorizan nuevos puentes semánticos ni dependencias
+externas en tests: A10/D28 concretan cómo se ejecuta la migración. El legado se
+conserva congelado hasta retirarlo, no como bridge nuevo.
+
+
+## Cierre de dependencias documentales
+
+El usuario confirmó que las respuestas suministradas bastan para validar y tomar
+decisiones. Se concretaron las firmas de client en public-contracts y la matriz
+de once categorías/evidencias E1–E7 en decisions. No se atribuyen esos detalles
+a un archivo externo ni se requiere recibirlo. Quedan trabajo de implementación,
+pruebas y autorización de release, no preguntas pendientes por answers.md.

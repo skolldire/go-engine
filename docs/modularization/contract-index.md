@@ -45,25 +45,25 @@ El catálogo no obliga a desarrollar módulos vacíos por adelantado.
 | `database/postgres` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `database/redis` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `engine` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
-| `engine/providers/aws/cognito` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/aws/dynamodb` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/aws/s3` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/aws/ses` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/aws/sns` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/aws/sqs` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/aws/ssm` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/awsbase` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/database/atomic` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/database/gorm` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/database/memcached` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/database/mongodb` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/database/redis` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/httpclient/resty` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/messaging/kafka` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/messaging/rabbitmq` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/rpc/grpcclient` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/rpc/grpcserver` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
-| `engine/providers/telemetry/otel` | [Factory de provider](public-contracts.md#engine-mínimo-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/aws/cognito` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/aws/dynamodb` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/aws/s3` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/aws/ses` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/aws/sns` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/aws/sqs` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/aws/ssm` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/awsbase` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/database/atomic` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/database/gorm` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/database/memcached` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/database/mongodb` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/database/redis` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/httpclient/resty` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/messaging/kafka` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/messaging/rabbitmq` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/rpc/grpcclient` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/rpc/grpcserver` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
+| `engine/providers/telemetry/otel` | [Factory de provider](public-contracts.md#ensamblado-y-factories) | Config tipado de herramienta + referencias solo en ensamblado |
 | `health` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `httpclient` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `httpclient/resty` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
@@ -91,9 +91,9 @@ El catálogo no obliga a desarrollar módulos vacíos por adelantado.
 | `outbox` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `outbox/mysql` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `outbox/postgres` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
-| `presets/aws` | [Composición explícita](public-contracts.md#engine-mínimo-y-factories) | Lista explícita de providers; no activa por YAML desconocido |
-| `presets/full` | [Composición explícita](public-contracts.md#engine-mínimo-y-factories) | Lista explícita de providers; no activa por YAML desconocido |
-| `presets/http` | [Composición explícita](public-contracts.md#engine-mínimo-y-factories) | Lista explícita de providers; no activa por YAML desconocido |
+| `presets/aws` | [Composición explícita](public-contracts.md#ensamblado-y-factories) | Lista explícita de providers; no activa por YAML desconocido |
+| `presets/full` | [Composición explícita](public-contracts.md#ensamblado-y-factories) | Lista explícita de providers; no activa por YAML desconocido |
+| `presets/http` | [Composición explícita](public-contracts.md#ensamblado-y-factories) | Lista explícita de providers; no activa por YAML desconocido |
 | `ratelimit` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `resilience` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `retry` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
@@ -110,13 +110,13 @@ El catálogo no obliga a desarrollar módulos vacíos por adelantado.
 | `telemetry/otlpgrpc` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `telemetry/otlphttp` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 | `telemetry/prometheus` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
-| `testkit/aws/dynamodb` | [Fixtures de prueba](public-contracts.md#engine-mínimo-y-factories) | Sin Config runtime ni startup implícito |
-| `testkit/aws/s3` | [Fixtures de prueba](public-contracts.md#engine-mínimo-y-factories) | Sin Config runtime ni startup implícito |
-| `testkit/aws/sqs` | [Fixtures de prueba](public-contracts.md#engine-mínimo-y-factories) | Sin Config runtime ni startup implícito |
-| `testkit/context` | [Fixtures de prueba](public-contracts.md#engine-mínimo-y-factories) | Sin Config runtime ni startup implícito |
-| `testkit/database/redis` | [Fixtures de prueba](public-contracts.md#engine-mínimo-y-factories) | Sin Config runtime ni startup implícito |
-| `testkit/httpclient/resty` | [Fixtures de prueba](public-contracts.md#engine-mínimo-y-factories) | Sin Config runtime ni startup implícito |
-| `testkit/logging` | [Fixtures de prueba](public-contracts.md#engine-mínimo-y-factories) | Sin Config runtime ni startup implícito |
+| `testkit/aws/dynamodb` | [Fixtures de prueba](public-contracts.md#ensamblado-y-factories) | Sin Config runtime ni startup implícito |
+| `testkit/aws/s3` | [Fixtures de prueba](public-contracts.md#ensamblado-y-factories) | Sin Config runtime ni startup implícito |
+| `testkit/aws/sqs` | [Fixtures de prueba](public-contracts.md#ensamblado-y-factories) | Sin Config runtime ni startup implícito |
+| `testkit/context` | [Fixtures de prueba](public-contracts.md#ensamblado-y-factories) | Sin Config runtime ni startup implícito |
+| `testkit/database/redis` | [Fixtures de prueba](public-contracts.md#ensamblado-y-factories) | Sin Config runtime ni startup implícito |
+| `testkit/httpclient/resty` | [Fixtures de prueba](public-contracts.md#ensamblado-y-factories) | Sin Config runtime ni startup implícito |
+| `testkit/logging` | [Fixtures de prueba](public-contracts.md#ensamblado-y-factories) | Sin Config runtime ni startup implícito |
 | `utilities` | [Contrato de familia](public-contracts.md) | Sin Config: funciones puras |
 | `validation` | [Contrato de familia](public-contracts.md) | Config local, defaults/required y validación definidos |
 

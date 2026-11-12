@@ -10,6 +10,15 @@ aprobada ni cubren todavía todos los contratos de producción definidos aquí.
 Los cambios anteriores se conservan para revisión; esta iteración modifica solo
 documentación.
 
+## Precedencia normativa confirmada
+
+Prevalecen [decisiones D25+ y D01–D24](modularization/decisions.md), luego
+public-contracts/concurrency-api, este resumen, documentos de semántica y
+finalmente inventario/índice descriptivos. Notion y ADR 0002 no son normativos.
+D32: corregir documentos en conflicto, no elegir interpretación al implementar.
+No existe módulo core. client solo stdlib, opt-in para decorators I/O; no
+lifecycle compartido y concurrency/utilities/config no importan client.
+
 ## Resultado esperado
 
 Una aplicación puede importar solo configuración, solo utilidades, solo un
@@ -29,6 +38,8 @@ pasa a v1 solo con versión propia en manifiesto, después de cumplir sus gates.
 
 | Documento | Decisiones que contiene |
 |---|---|
+| [Decisiones del arquitecto](modularization/decisions.md) | Precedencia, respuestas recibidas y datos de fuente todavía faltantes |
+| [Prompt de implementación](modularization/implementation-prompt.md) | Procedimiento de trabajo alineado con decisiones, integración y consumidores minimal/composed |
 | [Revisión integral](modularization/review.md) | Funcionalidades faltantes, acoplamientos, decisiones cerradas y pendientes con dueño |
 | [Contratos públicos](modularization/public-contracts.md) | Superficie pública, tipos, configuración/defaults/validación, errores y ownership por módulo |
 | [Índice de contratos](modularization/contract-index.md) | Cobertura explícita de todos los módulos del catálogo y sus integraciones |
@@ -121,8 +132,11 @@ provisional introduzca dependencias que luego sea difícil retirar.
    requieren atomicidad. La concurrencia local no ofrece exclusión entre réplicas.
 7. Ninguna herramienta importa engine, presets o un agregador que reúna todos
    los backends. Los SDK no aparecen en contratos de módulos neutrales.
-8. No se cambia el comportamiento de producción solamente por mover código:
-   cambios semánticos necesitan contrato, migración y validación propios.
+8. Si cambian garantías hay ruptura explícita, sin puente de compatibilidad.
+   task_executor queda congelado/obsoleto y se retira en la release de migración.
+9. Stdlib-only incluye tests sin deps externas; integración pesada en
+   modulo/integration con go.mod propio. Leaks con goroutineleak; testkits solo
+   adaptadores. Versiones independientes requieren manifiesto y aprobación del usuario.
 
 ```mermaid
 flowchart TD
@@ -159,8 +173,9 @@ coordinados en módulos actuales y v1 independiente para concurrency. Parámetro
 presupuestos, orden y política de admisión pertenecen a cada aplicación, con
 validación y defaults documentados, no a valores financieros inventados.
 
-Los contratos públicos y matrices de configuración/defaults quedan definidos
-en los documentos normativos enlazados. Implementar exige probar esos contratos,
+Los contratos se rigen por los documentos normativos enlazados. El usuario autorizó concretar los detalles a partir de las respuestas recibidas:
+firmas client, once categorías y evidencias E1–E7 ya están definidas en
+public-contracts/decisions. La existencia de answers.md no es precondición. Implementar exige probar esos contratos,
 no volver a elegir entre alternativas omitidas. Los límites que pertenecen a
 la aplicación se declaran requeridos, sin defaults financieros inventados. Los mínimos de versiones de
 PostgreSQL/MySQL, esquema de release y versión de ruptura deben publicarse al

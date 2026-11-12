@@ -1,7 +1,10 @@
 # Contratos públicos y configuración por módulo
 
 Estado: especificación para implementación; no declara APIs disponibles hoy.
-Es normativa junto con [concurrency-api](concurrency-api.md). Las firmas Go
+Prevalecen las [decisiones del arquitecto](decisions.md); este documento y
+[concurrency-api](concurrency-api.md) ocupan el siguiente nivel. Notion y ADR 0002
+no son normativos. Antes de implementar un contrato en conflicto se corrige aquí
+(D32); no se elige una alternativa por cuenta propia. Las firmas Go
 incluidas son declaraciones de API (sin cuerpos), no código de implementación.
 En tablas, `R`=requerido; `D:x`=valor de DefaultConfig; `O`=opcional sin efecto
 si se omite. Un campo O de duración/int tiene cero literal permitido, salvo
@@ -94,7 +97,9 @@ entorno se snapshottea una vez por Load, no vuelve a consultar env por campo.
 ### Fuentes config/json, config/yaml, config/viper, config/env, config/ssm
 
 Cada fuente produce `config.Source` con `New(cfg Config,deps Dependencies)
-(Source,error)`. JSON/env forman paquetes del módulo config (stdlib); **no son
+(Source,error)`. YAML usa exclusivamente go.yaml.in/yaml/v3 dentro del módulo opcional
+config/yaml (D27). Mientras no exista se usa config/json en consumers.
+JSON/env forman paquetes del módulo config (stdlib); **no son
 go.mod adicionales**. YAML/Viper/SSM sí son módulos opcionales. El decoder base
 no necesita Viper. Dependencies FS=fs.FS o reader proporcionado y Env=func(string)
 (string,bool); nunca cwd/env global implícitos. Interfaces FS/SSM inyectadas hacen
@@ -135,19 +140,55 @@ original opcional; no convierte automáticamente errores a HTTP.
 <!-- contract: client/resilience -->
 ### client y decorators separados
 
-`type Operation[T any] func(context.Context)(T,error)` y
-`type Middleware[T any] func(Operation[T]) Operation[T]`;
-`Chain[T](Operation[T], ...Middleware[T]) Operation[T]`, outermost primero.
-`WithTimeout[T](duration time.Duration,next Operation[T]) (Operation[T],error)`: min(deadline caller, timeout),
-0 no añade deadline y negativo es error al construir (factory retorna error).
-No BaseClient que construya retry/logger/metrics por default. Metadata pública
-`Invocation{Client,Operation string}` solo etiquetas estáticas/baja cardinalidad.
+D26: `client` solo usa stdlib y no existe `core/call` ni `core/lifecycle`.
+Solo importa client quien usa sus decorators. No lo importan concurrency,
+utilities ni config. Operation[T] conserva T, contexto y causa de error;
+Invocation solo etiquetas estáticas de baja cardinalidad. Se envuelven llamadas
+I/O, no operaciones puras, tareas del pool o sentencias dentro de una Tx.
+Retry apagado por defecto; si se habilita requiere classifier del caller.
+
+Concreción técnica autorizada por el usuario, coherente con las respuestas:
+
+```go
+// package client; imports: context
+
+type Invocation struct {
+    Component string
+    Operation string
+}
+type Operation[T any] func(context.Context) (T,error)
+type Handler[T any] func(context.Context,Invocation,Operation[T]) (T,error)
+type Middleware[T any] func(Handler[T]) Handler[T]
+
+func Chain[T any](next Handler[T], middleware ...Middleware[T]) (Handler[T],error)
+func Do[T any](ctx context.Context, info Invocation, operation Operation[T],
+    middleware ...Middleware[T]) (T,error)
+```
+
+No Config ni lifecycle: funciones puras de composición. Chain aplica outermost
+primero; sin middleware devuelve next. next nil, middleware nil o que produzca
+handler nil devuelve ErrInvalidCall local antes de invocar operación. Do valida
+ctx/op no-nil y Component/Operation no vacíos de máximo 128 bytes cada uno;
+invoca chain sobre un handler base que retorna exactamente operation(ctx).
+Invocation se copia, sin metadata mutable ni payload. No normaliza nombres ni
+introduce contexto background; sin middleware transmite el mismo ctx y error
+original. Un wrapper que derive deadline conserva cancelación/valores del ctx
+y causa de error; no debe sustituir un error de dominio por otro sin preservarlo.
+No se capturan panics aquí ni se generan goroutines/retries/logs automáticamente.
+
+Los nombres deben ser fijos/baja cardinalidad por contrato del caller; no IDs,
+rutas resueltas, tenants o secretos. Cambiar Component respecto del campo Client
+de la Invocation heredada se documenta como migración de tipos, no alias falso.
+No se incorpora client a concurrency/utilities/config para probar esta cadena.
 
 client/logging construye wrapper con *slog.Logger prestado y Config{Level string
 D:debug, IncludeDuration bool D:true}; client/otel con tracer/meter nativos
 prestados y Config{InstrumentationName string R}; client/resilience con policies
 concretas y Config de composición descrito abajo. Cada wrapper SDK en módulo
-propio; no un import de todos dentro del go.mod de client.
+propio; no un import de todos dentro del go.mod de client. El logger directo
+solo registra eventos internos donde el contrato lo lista. Un componente no
+registra un error que también devuelve; la observabilidad por operación pertenece
+al wrapper, y errores de negocio no se elevan a nivel error.
 
 <!-- contract: retry -->
 <!-- contract: circuitbreaker -->
@@ -193,7 +234,8 @@ ambos existen, TotalTimeout D:0, AttemptTimeout D:0, AdmissionTimeout D:0 todos
 >=0. Dependencies contiene RetryConfig opcional + classifier, Breaker opcional,
 Limiter opcional y Weight >0 cuando exista, sin SDK. Admite orden único inicial:
 retry exterior, breaker después, limiter por intento, attempt timeout al ejecutar.
-Legacy breaker exterior se conserva solo en bridge de compatibilidad. Métricas
+Cambiar el orden del breaker respecto del legado es ruptura explícita; no
+crear bridge que prometa las mismas garantías. Métricas
 no entran en la librería base. Sin todos los decorators es fn con total deadline.
 
 Rate limiter: `New(Config) (*Limiter,error)`, `Wait(ctx,n int) error`,
@@ -243,7 +285,11 @@ MaxOpen R>0, MaxIdle D:0 en [0,MaxOpen], MaxLifetime/MaxIdleTime D:0 >=0,
 OperationTimeout R>0. Open hace PingContext con deadline startup; error cierra
 DB abierto. Borrow no reconfigura ni cierra db: no tiene ownership. Tx usa
 *sql.Tx explícita, rollback error/panic (repropaga panic), commit solo en éxito.
-No raw Begin SQL, nested transactions ni retry implícito. Queries devuelven rows
+No raw Begin SQL, nested transactions ni retry implícito. D30: un commit de
+resultado incierto devuelve ErrCommitOutcomeUnknown local a database/atomic,
+envolviendo la causa de driver con Unwrap. El caller decide reconcile; jamás
+retry ciego. No se traduce cualquier error SQL a incertidumbre, solo cuando
+no se puede determinar si el commit ocurrió. Queries devuelven rows
 cuyo Close corresponde al caller; no cancelar un contexto derivado al devolver
 Rows antes de que termine su consumo: el wrapper debe asociar cancelación a
 Rows.Close o delegar ese presupuesto al caller. La v1 usa contexto del caller
@@ -653,7 +699,7 @@ su módulo. No todos retornan el mismo any.
 
 Las firmas exactas de las operaciones existentes se trasladan desde los Service
 interfaces y métodos listados en [inventario](inventory.md), salvo toggles de
-logging/resilience que quedan en bridge. Los DTO específicos AWS permanecen
+logging/resilience retirados mediante ruptura explícita cuando cambien garantías. Los DTO específicos AWS permanecen
 nativos; no se requieren nuevos métodos públicos para reflejar cada campo de
 Config. Lambda cliente dedicado es nuevo: Request{FunctionName,Qualifier string;
 Payload []byte; InvocationType string}; Response{StatusCode int; Payload []byte;
@@ -686,8 +732,8 @@ Config de fachada anterior, Endpoint no duplicado (ya está en cliente), solo
 operaciones soportadas por ese servicio. El agregado integration/aws recibe
 `map[string]cloud.Client` y Config{MaxBodyBytes R>0,RequestTimeout D:10s}; se
 registran nombres únicos, operación desconocida ErrUnsupportedOperation; no
-construye todos los SDK desde un aws.Config implícito. Para compatibilidad se
-puede conservar constructor antiguo en bridge explícito, con footprint visible.
+construye todos los SDK desde un aws.Config implícito. Si cambia las garantías del constructor antiguo, se documenta una ruptura
+explícita; no se crea bridge de compatibilidad para ocultarla.
 
 integration/aws/events `NormalizeSQS/NormalizeSNS/NormalizeAPIGateway(event)
 ([]cloud.Request,error)` con Config MaxEventBytes R>0, MaxRecords R>0;
@@ -746,7 +792,7 @@ propagan trace/span IDs con contexto y redactan antes de exportar.
 <!-- contract: engine/providers/* -->
 <!-- contract: presets/* -->
 <!-- contract: testkit/* -->
-### Engine mínimo y factories
+### Ensamblado y factories
 
 `engine.New(Config,[]Provider)(*Engine,error)`, `Start(ctx) error`,
 `Shutdown(ctx) error`, `Component(name)(any,bool)` y helper genérico libre
@@ -781,7 +827,9 @@ operativo respectivamente, nunca como dependencia obligatoria del motor.
 - Existing APIs que exponen SDK conservan sus capacidades en native adapters;
   neutral interfaces no adquieren esos tipos para evitar ruptura accidental.
 - Alias solo si identidad y semántica coinciden; métodos de logging toggles,
-  globals, unbounded executor y defaults cero→tres requieren bridge o ruptura.
+  globals, executor desacoplado y defaults cero→tres que cambien garantías
+  requieren ruptura explícita, sin puente. task_executor queda congelado y
+  obsoleto hasta retirarse en la release de migración.
 - Toda firma en tablas se convierte a una declaración compilable con doc comment
   y consumer fixture al implementar el módulo; no inventar overloads. Referencias
   a firmas históricas se resuelven contra el inventario y Service de origen.
@@ -832,3 +880,25 @@ Cada adapter real deberá generar su declaración Service exacta desde el métod
 set de origen enumerado en inventory; esta revisión fija que capacidades nativas
 se conservan, no permite eliminarlas al moverlas. Funciones sin Config (helpers,
 DTO, normalización pura con límites fijados por constructor) no leen globals.
+
+
+## Requisitos de implementación y evidencia posteriores
+
+Disponible significa merge en main con consumidor externo pasando; las
+dependencias se realizan antes como tareas separadas. Para etiquetar, cada
+dependencia necesita versión resoluble mediante go get. No crear core como
+prerrequisito ni reimplementar una dependencia faltante dentro de una herramienta.
+
+Los permisos de once categorías están fijados en decisions.md por concreción
+técnica autorizada sobre las respuestas recibidas.
+Se confirman los bordes store→capacidad+atomic+driver, exporter→OTel+transporte,
+provider→engine+herramienta+config y resilience→herramientas que compone. No se
+usa una allowlist universal stdlib+SDK+core.
+
+Stdlib-only incluye tests sin dependencias externas; fugas con goroutineleak
+(D28), no goleak. Harness pesado en modulo/integration, go.mod propio, fuera
+del grafo mínimo; fakes solo de adaptadores en testkit/adaptador. Dos consumers:
+minimal y composed, replaces únicamente al módulo y sus dependencias declaradas.
+No manifest de versiones => no tag independiente. Responsable propone versión
+y usuario aprueba. Las siete evidencias E1–E7 están fijadas en decisions.md, incluyendo tag real
+y gorelease; no queda una dependencia documental de answers.md.

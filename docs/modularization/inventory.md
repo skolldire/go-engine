@@ -1,6 +1,8 @@
 # Inventario de funcionalidades y mapa de migración
 
-Estado: revisión estática del árbol de trabajo, no migración ejecutada.
+Estado: inventario descriptivo, no normativo. Prevalecen [decisiones](decisions.md)
+y contratos corregidos. No se preservan garantías cambiadas mediante bridges.
+Revisión estática del árbol, no migración ejecutada.
 Se contabilizan **69 directorios con archivos Go no-test**, incluyendo providers,
 mocks distribuidos y ejemplos. Los paquetes solo-test y benchmarks se trasladan
 con su código dueño. Los paths destino son propuestos bajo
@@ -72,7 +74,7 @@ con su código dueño. Los paths destino son propuestos bajo
 | `pkg/utilities/helpers` | Checks, coalesce/defaults, maps/slices/strings, pointers y wrappers errors | utilities/{collections,strings,pointers,defaults}; errores estándar | Separar paquetes puros dentro de un módulo stdlib; revisar nil/zero, orden de mapas y nombres antes de retirar wrappers redundantes |
 | `pkg/utilities/logger` | Logger logrus, nivel/formato/writers, contexto, redacción de secretos y logs | logging, logging/logrus | Slog base; conservar redacción y contextualización; salida fatal/os.Exit no forma parte del contrato de herramientas |
 | `pkg/utilities/logger/logrusadapter` | Adaptación bidireccional de interfaz logger y tipos logrus | logging/logrus | Conservar como puente opt-in, no dependencia de la nueva abstracción |
-| `pkg/utilities/resilience` | Composición breaker exterior/retry interior y estado del breaker | resilience | Preservar ordering heredado mediante puente; documentar orden nuevo, clasificación de fallos e intentos; sin logger propio obligatorio |
+| `pkg/utilities/resilience` | Composición breaker exterior/retry interior y estado del breaker | resilience | Cambio de ordering documentado como ruptura explícita, sin puente; clasificación de fallos e intentos; sin logger propio obligatorio |
 | `pkg/utilities/retry_backoff` | Normalización/defaults, retry, backoff exponencial y jitter aditivo, logging | retry | Adaptar a ctx por intento, full jitter, cap seguro y cero retries real; son cambios semánticos, no mero rename |
 | `pkg/utilities/task_executor` | Task/Tasker, prioridades, WorkerPool/BatchWorkPool, timeouts, callbacks y métricas | concurrency; compatibilidad task_executor aparte | Rediseñar: map y buffers de tamaño total, any y goroutine por tarea no equivalen al pool acotado; preservar ID/prioridad mediante contratos explícitos |
 | `pkg/utilities/validation` | Validator custom not_empty, nombres JSON y singleton global | validation | Extraer instancia explícita; reemplazar dependencia en helpers por regla local pequeña; globals solo compatibilidad |
@@ -118,7 +120,7 @@ con su código dueño. Los paths destino son propuestos bajo
 - **Auth:** existen JWKS en router y Cognito; comparar reglas de validación,
   caché y fallback antes de consolidar. No degradar issuer/audience/algoritmo.
 - **Globals:** perfil lee SCOPE, validator tiene singleton y OTel puede registrar
-  providers globales. Mantener globals solo en bridges opt-in de compatibilidad.
+  providers globales. No trasladar globals al nuevo diseño; el legado se congela y se migra mediante ruptura explícita si cambian garantías.
 - **Kafka:** revisar implementación completa de commit por partición: dejar un
   mensaje sin commit y seguir leyendo no demuestra por sí solo que un commit
   posterior no adelante el offset de uno fallido. Este es un riesgo a validar,
