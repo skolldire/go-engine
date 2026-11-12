@@ -8,18 +8,18 @@ The library is no longer a single module, and the old builder is gone. This is
 the largest break so far, released without a deprecation window: nothing under
 `pkg/app` or `pkg/config/viper` still exists.
 
-### 1. Move to Go 1.26.6
+### 1. Move to Go 1.27.4
 
-Every module now declares `go 1.26.6`. Older toolchains are refused:
+Every module now declares `go 1.27.4`. Older toolchains are refused:
 
 ```
-go: module github.com/skolldire/go-engine requires go >= 1.26.6
+go: module github.com/skolldire/go-engine requires go >= 1.27.4
 ```
 
 The floor is set to a patched release on purpose. A `toolchain` directive is
 ignored in a dependency, so declaring a lower floor would let you build against
-a Go with the six vulnerabilities `govulncheck` reports as reachable in 1.26.5
-(`net/http`, `encoding/asn1`, `golang.org/x/net/idna`). See
+a Go with known vulnerabilities — `govulncheck` reported six as reachable in
+1.26.5 (`net/http`, `encoding/asn1`, `golang.org/x/net/idna`). See
 [`COMPATIBILITY.md`](COMPATIBILITY.md#go-version-policy).
 
 ### 2. Add the modules you actually use

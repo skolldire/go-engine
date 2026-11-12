@@ -42,7 +42,7 @@ family, bound together for local development by the `go.work` at the root.
 | `github.com/skolldire/go-engine/aws` | `/aws` | AWS clients + providers + `aws/preset` |
 | `github.com/skolldire/go-engine/messaging` | `/messaging` | Kafka, RabbitMQ, gRPC + providers |
 | `github.com/skolldire/go-engine/http` | `/http` | REST client + provider |
-| `github.com/skolldire/go-engine/database/{sql,redis,mongodb,memcached}` | `/database/*` | one module per engine; their drivers share no dependency |
+| `github.com/skolldire/go-engine/database/{sql,sqlc,redis,mongodb,memcached}` | `/database/*` | one module per engine; their drivers share no dependency. `sql` is GORM, `sqlc` is plain `database/sql` for sqlc-generated code |
 | `github.com/skolldire/go-engine/preset/full` | `/preset/full` | the everything preset |
 
 **The rule:** the core knows no adapter; adapters know the core. It is enforced
@@ -106,6 +106,7 @@ Presets bundle them: `preset/http` (core only), `aws/preset` (AWS only),
 | `messaging/pkg/integration/{kafka,rabbitmq,grpc}`, `messaging/pkg/server/grpc` | brokers and gRPC |
 | `http/pkg/rest` | HTTP client via go-resty, with retry and circuit breaker composed in |
 | `database/sql/pkg/database/gormsql` | GORM (Postgres/MySQL/SQLite/SQLServer) |
+| `database/sqlc/pkg/database/sqlcdb` | `database/sql` pool for sqlc-generated code; no ORM |
 | `database/{redis,mongodb,memcached}/pkg/database/*` | the remaining stores |
 
 Each family also holds `<module>/provider/<name>` and, where useful, its own
@@ -114,6 +115,11 @@ Each family also holds `<module>/provider/<name>` and, where useful, its own
 Multiple named instances of a client are declared as `[]map[string]Config` in
 the YAML (`sqs_clients`, `redis_clients`, …). The singular form is not read by
 any provider.
+
+The two SQL adapters coexist: `provider/sql` (GORM, `sql_clients`, component
+`sql:<name>`) and `provider/sqlc` (`database/sql`, `sqlc_clients`, component
+`sqlc:<name>`). An application chooses by registering one provider or the other;
+neither is in `preset/full`.
 
 ### Conventions
 

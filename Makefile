@@ -6,7 +6,7 @@ MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/nul
 # every family without a tagged release in between.
 MODULES := . aws messaging http \
     database/sql database/sqlc database/redis database/mongodb database/memcached \
-    preset/full
+    preset/full example
 
 # Modules that ship an adapter family. The core is deliberately absent: its
 # whole point is that it resolves none of their dependencies.
@@ -43,7 +43,7 @@ lint:
 
 ## tidy: go mod tidy in every module, then re-sync the workspace
 tidy:
-	@for m in $(MODULES); do echo "==> tidy $$m"; (cd $$m && GOWORK=off go mod tidy); done
+	@set -e; for m in $(MODULES); do echo "==> tidy $$m"; (cd $$m && GOWORK=off go mod tidy); done
 	@go work sync
 
 COVERAGE_THRESHOLD := 80
