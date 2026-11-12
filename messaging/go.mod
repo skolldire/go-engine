@@ -7,7 +7,7 @@ go 1.27.2
 replace github.com/skolldire/go-engine => ../
 
 require (
-	github.com/rabbitmq/amqp091-go v1.15.0
+	github.com/rabbitmq/amqp091-go v1.16.0
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/skolldire/go-engine v0.30.0
 	github.com/stretchr/testify v1.12.1
