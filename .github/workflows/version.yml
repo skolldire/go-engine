@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Required to fetch all tags
 
@@ -42,7 +42,7 @@ jobs:
           check-latest: true
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
           # Only the binary is wanted here: `make lint` walks every module
@@ -175,7 +175,7 @@ jobs:
       # but never published. Doing it inline removes the cross-workflow event
       # dependency instead of working around it.
       - name: Create the GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.next_version.outputs.new_version }}
           name: Release ${{ steps.next_version.outputs.new_version }}

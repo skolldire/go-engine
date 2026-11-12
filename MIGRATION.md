@@ -8,12 +8,12 @@ The library is no longer a single module, and the old builder is gone. This is
 the largest break so far, released without a deprecation window: nothing under
 `pkg/app` or `pkg/config/viper` still exists.
 
-### 1. Move to Go 1.27.2
+### 1. Move to Go 1.27.4
 
-Every module now declares `go 1.27.2`. Older toolchains are refused:
+Every module now declares `go 1.27.4`. Older toolchains are refused:
 
 ```
-go: module github.com/skolldire/go-engine requires go >= 1.27.2
+go: module github.com/skolldire/go-engine requires go >= 1.27.4
 ```
 
 The floor is set to a patched release on purpose. A `toolchain` directive is

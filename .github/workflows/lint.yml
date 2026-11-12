@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -25,7 +25,7 @@ jobs:
       # NOTE: no `go clean -modcache` here. It ran before actions/cache and
       # deleted exactly what the cache was about to restore.
       - name: Cache Go modules
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build
@@ -37,7 +37,7 @@ jobs:
       # One job per module: golangci-lint resolves packages within a single
       # module, so a matrix is what actually covers the repository.
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           # Pinned, not `latest`: a linter that changes under us turns CI into a
           # non-reproducible gate.

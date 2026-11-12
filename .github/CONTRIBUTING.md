@@ -32,7 +32,7 @@ Thank you for your interest in improving **go-engine**. This guide covers everyt
 
 | Tool | Version |
 |---|---|
-| Go | whatever `go.mod` declares — currently 1.27.2, and it is a hard floor |
+| Go | whatever `go.mod` declares — currently 1.27.4, and it is a hard floor |
 | Make | any |
 | golangci-lint | v2.14.0, pinned in `.github/workflows/lint.yml` |
 

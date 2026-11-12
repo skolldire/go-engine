@@ -9,16 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Removed
+- Removed duplicate files with ` 2` and ` 3` suffixes introduced during integration; duplicate Go declarations prevented compilation.
 - **`pkg/app` and `pkg/config/viper` (BREAKING)**: deleted outright, with no deprecation window. `app.NewAppBuilder()` and the 39 `Engine` getters are replaced by `engine.New(ctx, opts...)` and `engine.Get[T]` / the per-provider `From` helpers. `pkg/app/build` went with them (it was dead API).
 - **`pkg/utilities/telemetry` (BREAKING)**: the deprecated facade is merged into `pkg/telemetry/otel`. `Metrics`, `Tracer`, `Telemetry`, `NewTelemetry`, `NewOperation` moved verbatim; the constructor now takes `otel.OTELConfig` (keys `exporter_endpoint`/`sampling_rate`) instead of the old `telemetry.Config`. New `otel.NewTelemetryFrom(provider, cfg)` wraps a provider owned by someone else.
 - **`rest.Config.WithResilience` / `rest.Config.Resilience` (BREAKING)**: the deprecated flag and its `resolveResilience` shim are gone. Use the `Retry` and `CircuitBreaker` blocks; a nil block means that decorator is not installed. Other clients keep `WithResilience` — it belongs to `client.BaseConfig` and is unchanged.
 
 ### Changed
+- Resolved integration conflict markers across module manifests, checksums, workflows and documentation; refreshed dependencies across all workspace modules. `make test`, `make lint` and `make tidy` now also cover the example module, and tidy stops on the first failure.
 - **Multi-module repository (BREAKING — module layout)**: go-engine is split into nine modules, one per adapter family: the core at the root plus `aws`, `messaging`, `http`, `database/{sql,redis,mongodb,memcached}` and `preset/full`. A consumer downloads only what it imports — a pure HTTP service goes from 115 `require` lines to 55. `go.work` and relative `replace` directives cover local development; the release pipeline now pushes a directory-prefixed tag per sub-module.
 - **Import paths moved (BREAKING)**: `pkg/app/router` → `pkg/router` (it was core, not legacy); `pkg/clients/rest` → `http/pkg/rest`; `provider/*` → `<family>/provider/*`; `preset/aws` → `aws/preset`. `provider/otel` and `preset/http` stay in the core module.
 - **`pkg/testutil` split (BREAKING)**: it keeps `MockLogger` and the context helpers. The adapter mocks move to the module of the adapter they imitate — `aws/pkg/testutil` (S3, SQS), `http/pkg/testutil` (REST), `database/redis/pkg/testutil` (Redis). Keeping them in the core forced every consumer to resolve the AWS SDK just to get a logger double.
 - **`make lint-arch` is now structural**: it reads the core module's `go.mod` for adapter SDKs and family modules, rather than grepping for import strings. `make test`, `make lint`, `make lint-deps` and the new `make tidy` walk every module.
-- **Go 1.27.2 floor (BREAKING)**: every module and `go.work` now declare `go 1.27.2`. golangci-lint is pinned to v2.14.0, the first release built with Go 1.27 — older binaries refuse a module that targets a newer Go.
+- **Go 1.27.4 floor (BREAKING)**: every module and `go.work` now declare `go 1.27.4`. golangci-lint is pinned to v2.14.0, the first release built with Go 1.27 — older binaries refuse a module that targets a newer Go.
 - **Dependencies refreshed**: every module upgraded to its latest compatible versions (AWS SDK v2, OpenTelemetry v1.47.0, gRPC v1.84.0, `golang.org/x/*`, go-redis v9.23.0, amqp091-go v1.15.0, GORM v1.31.2, testify v1.12.1, among others).
 
 ### Security
