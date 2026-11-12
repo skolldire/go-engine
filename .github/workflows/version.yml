@@ -119,19 +119,20 @@ jobs:
           make lint-arch
           make lint-docs
           make check-modules
+          make check-concurrency
           make test
           make coverage-check
           make example
           make smoke
 
           # Never publish a version with a known reachable vulnerability.
-          for m in . aws messaging http database/sql database/sqlc database/redis \
+          for m in . concurrency aws messaging http database/sql database/sqlc database/redis \
                    database/mongodb database/memcached preset/full; do
             echo "==> govulncheck $m"
             (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
           done
 
-          for m in "" aws messaging http database/sql database/sqlc database/redis \
+          for m in "" concurrency aws messaging http database/sql database/sqlc database/redis \
                    database/mongodb database/memcached preset/full; do
             tag="${m:+$m/}$NEW_VERSION"
             if git rev-parse "$tag" >/dev/null 2>&1; then
@@ -149,7 +150,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           TAGS=()
-          for m in "" aws messaging http database/sql database/sqlc database/redis \
+          for m in "" concurrency aws messaging http database/sql database/sqlc database/redis \
                    database/mongodb database/memcached preset/full; do
             # Go resolves a sub-module only through a tag prefixed with its
             # directory, so each module needs its own.
@@ -184,7 +185,7 @@ jobs:
 
             Every module is tagged at this version:
             `go-engine`, `aws`, `messaging`, `http`,
-            `database/{sql,redis,mongodb,memcached}` and `preset/full`.
+            `database/{sql,sqlc,redis,mongodb,memcached}`, `concurrency` and `preset/full`.
 
             ```bash
             go get github.com/skolldire/go-engine@${{ steps.next_version.outputs.new_version }}

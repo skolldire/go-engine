@@ -38,6 +38,7 @@ import (
 	_ "github.com/skolldire/go-engine/messaging/provider/kafka"
 	_ "github.com/skolldire/go-engine/pkg/engine"
 	_ "github.com/skolldire/go-engine/preset/full"
+	_ "github.com/skolldire/go-engine/concurrency"
 )
 
 func main() {}
@@ -67,6 +68,7 @@ github.com/skolldire/go-engine/database/redis:$REPO/database/redis
 github.com/skolldire/go-engine/database/mongodb:$REPO/database/mongodb
 github.com/skolldire/go-engine/database/memcached:$REPO/database/memcached
 github.com/skolldire/go-engine/preset/full:$REPO/preset/full
+github.com/skolldire/go-engine/concurrency:$REPO/concurrency
 "
 
 if [[ -z "$VERSION" ]]; then

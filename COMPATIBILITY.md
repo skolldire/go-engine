@@ -9,6 +9,7 @@ The repository is a set of modules, released together under one tag:
 | Module path | Directory |
 |---|---|
 | `github.com/skolldire/go-engine` | `/` |
+| `github.com/skolldire/go-engine/concurrency` | `/concurrency` |
 | `github.com/skolldire/go-engine/aws` | `/aws` |
 | `github.com/skolldire/go-engine/messaging` | `/messaging` |
 | `github.com/skolldire/go-engine/http` | `/http` |

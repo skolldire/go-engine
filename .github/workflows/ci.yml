@@ -32,10 +32,10 @@ jobs:
       # against every family in the same run.
       - name: Build every module
         run: |
-          for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
+          for m in . concurrency aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
 
       - name: Check architectural constraints
-        run: make lint-arch && make lint-docs
+        run: make lint-arch && make lint-docs && make check-concurrency
 
       # Catches a submodule requiring a core version that was never published.
       # Nothing else can: go.work and the replace directives make it build fine
@@ -94,7 +94,7 @@ jobs:
 
       - name: Run govulncheck
         run: |
-          for m in . aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do
+          for m in . concurrency aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do
             echo "==> govulncheck $m"
             (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
           done

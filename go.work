@@ -6,6 +6,7 @@ go 1.27.4
 use (
 	.
 	./aws
+	./concurrency
 	./database/memcached
 	./database/mongodb
 	./database/redis

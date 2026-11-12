@@ -4,7 +4,7 @@ MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/nul
 # adapter families, then the preset that composes all of them. `go.work` binds
 # them together for local development, so a change to the core is visible to
 # every family without a tagged release in between.
-MODULES := . aws messaging http \
+MODULES := . concurrency aws messaging http \
     database/sql database/sqlc database/redis database/mongodb database/memcached \
     preset/full example
 
@@ -16,7 +16,7 @@ FAMILY_MODULES := aws messaging http \
 .PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
 
 ## all: the checks a change must pass before it is pushed
-all: lint lint-arch lint-docs check-modules test example
+all: lint lint-arch lint-docs check-modules check-concurrency test example
 
 
 clean:
@@ -242,3 +242,9 @@ lint-deps:
 		echo "      Update both, or explain the change in CHANGELOG.md."; \
 		exit 1; \
 	fi
+
+.PHONY: check-concurrency
+
+## check-concurrency: verifies the standalone module has zero dependencies
+check-concurrency:
+	@./scripts/check-concurrency-module.sh

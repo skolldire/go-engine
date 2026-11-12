@@ -18,6 +18,13 @@ Not a runnable binary — consumed via `go get`.
 
 ## Modules
 
+The experimental [`concurrency`](concurrency/README.md) prototype provides bounded
+pools, pipelines, fan-out/fan-in, batching and shared concurrency limits using
+only the standard library. It imports none of the framework. It is not yet the
+approved production API. The [modularization strategy](docs/modularization.md)
+defines configuration, utilities, concurrency guarantees, composition and the
+complete package migration inventory before further implementation.
+
 `go-engine` is a **set of Go modules**, one per adapter family. A consumer
 downloads the core plus only the families it imports, so an HTTP-only service
 never fetches the AWS SDK, a Mongo driver or a Kafka client.
@@ -45,6 +52,7 @@ exists and nothing in this repository can recompute it.
 | Module | Import path | Contains |
 |---|---|---|
 | **core** | `github.com/skolldire/go-engine` | `pkg/engine` (Provider core), `pkg/router`, `pkg/health`, `pkg/core`, `pkg/utilities`, `pkg/telemetry/otel`, `pkg/integration/{cloud,observability}`, `pkg/testutil`, `provider/otel`, `preset/http` |
+| **concurrency** | `github.com/skolldire/go-engine/concurrency` | Bounded pools, channel pipelines, fan-out/fan-in, batches and shared concurrency limits; standard library only |
 | **aws** | `github.com/skolldire/go-engine/aws` | Cognito, SQS, SNS, SES, S3, SSM, DynamoDB, the AWS facade, their providers and `aws/preset` |
 | **messaging** | `github.com/skolldire/go-engine/messaging` | Kafka, RabbitMQ, gRPC client/server and their providers |
 | **http** | `github.com/skolldire/go-engine/http` | REST client (`http/pkg/rest`) and its provider |
@@ -53,7 +61,7 @@ exists and nothing in this repository can recompute it.
 | **database/redis** | `github.com/skolldire/go-engine/database/redis` | Redis client (go-redis/v9) and its provider |
 | **database/mongodb** | `github.com/skolldire/go-engine/database/mongodb` | MongoDB client and its provider |
 | **database/memcached** | `github.com/skolldire/go-engine/database/memcached` | Memcached client and its provider |
-| **preset/full** | `github.com/skolldire/go-engine/preset/full` | The everything preset; depends on every module above **except `database/sql` and `database/sqlc`** (see below) |
+| **preset/full** | `github.com/skolldire/go-engine/preset/full` | The everything preset; depends on every module above **except `concurrency`, `database/sql` and `database/sqlc`** (see below) |
 
 The database engines are separate modules rather than one because their drivers
 share no dependency: a service using Redis has no reason to resolve GORM's
