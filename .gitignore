@@ -42,4 +42,5 @@ _cgo_export.*
 
 # Custom folders
 /coverage
-/docs
+/docs/.*
+docs/.*
