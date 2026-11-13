@@ -5,6 +5,7 @@ use (
 	.
 	./aws
 	./client
+	./logging
 	./circuitbreaker
 	./retry
 	./ratelimit

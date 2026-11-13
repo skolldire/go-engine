@@ -335,3 +335,7 @@ Circuitbreaker candidate: see [circuitbreaker/MIGRATION.md](circuitbreaker/MIGRA
 Ratelimit candidate: see [ratelimit/MIGRATION.md](ratelimit/MIGRATION.md). Local rate admission is distinct from concurrency limits and SDK throttling policies.
 
 Resilience candidate: see [resilience/MIGRATION.md](resilience/MIGRATION.md). The approved composition uses retry outside per-attempt rate, concurrency and breaker; legacy behavior is unchanged.
+
+## Experimental logging candidate (not released)
+
+The independent `github.com/skolldire/go-engine/logging` uses native slog and a caller-owned writer. Legacy logger behavior is unchanged. See [logging migration](logging/MIGRATION.md) for explicit construction, materialization and the deliberate change from regex sanitization to structural key redaction. No compatibility bridge or stable tag is introduced.

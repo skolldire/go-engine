@@ -18,3 +18,4 @@ ratelimit	github.com/skolldire/go-engine/ratelimit	tool	unreleased	-	production	
 resilience	github.com/skolldire/go-engine/resilience	composition	unreleased	-	production	client,retry,ratelimit,concurrency,circuitbreaker
 config/viper	github.com/skolldire/go-engine/config/viper	source	unreleased	-	production	config,github.com/spf13/viper
 example	github.com/skolldire/go-engine/example	harness	none	-	basic	-
+logging	github.com/skolldire/go-engine/logging	tool	unreleased	-	production	stdlib
