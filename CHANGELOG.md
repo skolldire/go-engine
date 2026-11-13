@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Experimental (not released)
+
+- Add independent retry candidate with approved D36 semantics; see retry/RELEASE_NOTES.md.
 - Experimental standalone client candidate: generic I/O middleware composition, D35 validation, stdlib-only consumers and evidence; legacy BaseClient unchanged, no release.
 
 - D34 revised config candidate: strict mapstructure/v2 v2.5.0, env.Resolver, independent config/viper with Viper v1.21.0, accepted native limitations and comparative engine validation; not released.

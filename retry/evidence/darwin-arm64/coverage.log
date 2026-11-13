@@ -1,0 +1,11 @@
+ok  	github.com/skolldire/go-engine/retry	0.185s	coverage: 97.3% of statements
+github.com/skolldire/go-engine/retry/retry.go:31:	Error		100.0%
+github.com/skolldire/go-engine/retry/retry.go:32:	Unwrap		100.0%
+github.com/skolldire/go-engine/retry/retry.go:45:	DefaultConfig	100.0%
+github.com/skolldire/go-engine/retry/retry.go:48:	Validate	100.0%
+github.com/skolldire/go-engine/retry/retry.go:66:	Do		97.6%
+github.com/skolldire/go-engine/retry/retry.go:130:	cancellation	100.0%
+github.com/skolldire/go-engine/retry/retry.go:141:	backoff		100.0%
+github.com/skolldire/go-engine/retry/retry.go:151:	fullJitter	66.7%
+github.com/skolldire/go-engine/retry/retry.go:158:	wait		100.0%
+total:							(statements)	97.3%

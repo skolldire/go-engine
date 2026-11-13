@@ -1,0 +1,32 @@
+goos: linux
+goarch: arm64
+pkg: github.com/skolldire/go-engine/retry
+BenchmarkDirect-4       	284036455	         2.105 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDirect-4       	289337890	         2.097 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDirect-4       	288697892	         2.081 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDoSuccess-4    	54828228	        11.00 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDoSuccess-4    	53524918	        10.87 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDoSuccess-4    	54754477	        10.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassified/stop-4         	50637073	        12.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassified/stop-4         	49706325	        12.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassified/stop-4         	50062256	        12.10 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClassified/reconcile-4    	14882094	        39.71 ns/op	      56 B/op	       2 allocs/op
+BenchmarkClassified/reconcile-4    	15857120	        38.85 ns/op	      56 B/op	       2 allocs/op
+BenchmarkClassified/reconcile-4    	16175644	        38.09 ns/op	      56 B/op	       2 allocs/op
+BenchmarkBackoff-4                 	51888628	        11.57 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBackoff-4                 	51820519	        11.66 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBackoff-4                 	52818969	        11.39 ns/op	       0 B/op	       0 allocs/op
+BenchmarkJitter-4                  	100000000	         5.917 ns/op	       0 B/op	       0 allocs/op
+BenchmarkJitter-4                  	100000000	         5.911 ns/op	       0 B/op	       0 allocs/op
+BenchmarkJitter-4                  	100000000	         5.954 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRetries/success-4         	  868026	       619.6 ns/op	     496 B/op	       6 allocs/op
+BenchmarkRetries/success-4         	  957026	       610.2 ns/op	     496 B/op	       6 allocs/op
+BenchmarkRetries/success-4         	  971886	       602.9 ns/op	     496 B/op	       6 allocs/op
+BenchmarkRetries/exhausted-4       	 1000000	       612.2 ns/op	     496 B/op	       6 allocs/op
+BenchmarkRetries/exhausted-4       	  952784	       607.3 ns/op	     496 B/op	       6 allocs/op
+BenchmarkRetries/exhausted-4       	  988108	       605.3 ns/op	     496 B/op	       6 allocs/op
+BenchmarkConcurrent-4              	214990249	         2.792 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrent-4              	214649299	         2.830 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrent-4              	215147342	         2.802 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/retry	17.011s

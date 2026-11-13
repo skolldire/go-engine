@@ -327,3 +327,5 @@ replace any-based calls and SafeTypeAssert in future migrations; Invocation uses
 Component instead of Client. Nil middleware now fails. Context/timeouts/logging/
 retry ownership is explicit; there is no mutable Use or implicit BaseConfig.
 See [client migration](client/MIGRATION.md) for before/after and D35 preconditions.
+
+Retry candidate: see [retry/MIGRATION.md](retry/MIGRATION.md). Legacy retries remain unchanged; typed retry requires explicit replay classification.

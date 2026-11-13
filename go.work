@@ -7,6 +7,7 @@ use (
 	.
 	./aws
 	./client
+	./retry
 	./config
 	./config/viper
 	./concurrency

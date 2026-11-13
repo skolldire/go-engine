@@ -1,0 +1,47 @@
+=== RUN   TestStressConcurrent
+    qualification_test.go:102: goroutineleak profile: total 0
+        
+    qualification_test.go:103: 32000 calls: retry success, reconcile, stop, cancellation; concurrent full jitter
+--- PASS: TestStressConcurrent (0.10s)
+=== RUN   TestStressReleasedContexts
+    qualification_test.go:152: goroutineleak profile: total 0
+        
+    qualification_test.go:153: 960 released hour-deadline contexts with 64KiB payloads; heap baseline=161344 peak=167416
+--- PASS: TestStressReleasedContexts (0.04s)
+=== RUN   TestStressCanceledWaitTimers
+    qualification_test.go:326: goroutineleak profile: total 0
+        
+    qualification_test.go:327: 1280 blocked hour-long waits canceled; timers, contexts and 64KiB payloads released after synctest bubble exit
+--- PASS: TestStressCanceledWaitTimers (0.04s)
+=== RUN   TestStressConcurrent
+    qualification_test.go:102: goroutineleak profile: total 0
+        
+    qualification_test.go:103: 32000 calls: retry success, reconcile, stop, cancellation; concurrent full jitter
+--- PASS: TestStressConcurrent (0.09s)
+=== RUN   TestStressReleasedContexts
+    qualification_test.go:152: goroutineleak profile: total 0
+        
+    qualification_test.go:153: 960 released hour-deadline contexts with 64KiB payloads; heap baseline=290776 peak=290776
+--- PASS: TestStressReleasedContexts (0.05s)
+=== RUN   TestStressCanceledWaitTimers
+    qualification_test.go:326: goroutineleak profile: total 0
+        
+    qualification_test.go:327: 1280 blocked hour-long waits canceled; timers, contexts and 64KiB payloads released after synctest bubble exit
+--- PASS: TestStressCanceledWaitTimers (0.04s)
+=== RUN   TestStressConcurrent
+    qualification_test.go:102: goroutineleak profile: total 0
+        
+    qualification_test.go:103: 32000 calls: retry success, reconcile, stop, cancellation; concurrent full jitter
+--- PASS: TestStressConcurrent (0.10s)
+=== RUN   TestStressReleasedContexts
+    qualification_test.go:152: goroutineleak profile: total 0
+        
+    qualification_test.go:153: 960 released hour-deadline contexts with 64KiB payloads; heap baseline=294808 peak=294808
+--- PASS: TestStressReleasedContexts (0.06s)
+=== RUN   TestStressCanceledWaitTimers
+    qualification_test.go:326: goroutineleak profile: total 0
+        
+    qualification_test.go:327: 1280 blocked hour-long waits canceled; timers, contexts and 64KiB payloads released after synctest bubble exit
+--- PASS: TestStressCanceledWaitTimers (0.04s)
+PASS
+ok  	github.com/skolldire/go-engine/retry	1.576s
