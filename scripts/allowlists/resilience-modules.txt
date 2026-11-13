@@ -1,5 +1,0 @@
-github.com/skolldire/go-engine/circuitbreaker v0.0.0
-github.com/skolldire/go-engine/client v0.0.0
-github.com/skolldire/go-engine/concurrency v0.0.0
-github.com/skolldire/go-engine/ratelimit v0.0.0
-github.com/skolldire/go-engine/retry v0.0.0

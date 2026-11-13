@@ -51,4 +51,4 @@ value, err := retry.Do(ctx, cfg, func(err error) retry.Decision {
 }, operation)
 ```
 
-Run `make check-retry-quick`, `check-retry-stress`, `check-retry-fuzz`, `check-retry-bench` and `check-retry` from the repository root. See RELEASE_NOTES.md for executed evidence; example consumers use GOWORK=off and offline allowlists.
+Run `make check-retry-quick`, `check-retry-stress`, `check-retry-fuzz`, `check-retry-bench` and `check-retry` from the repository root. See RELEASE_NOTES.md for executed evidence; example consumers run offline with GOWORK=off, inside the dependency boundary declared in modules.tsv.

@@ -35,7 +35,16 @@ jobs:
           modules=$(./scripts/modules.sh dirs)
           for m in $modules; do (cd "$m" && go mod download && go build ./...); done
 
+      # Fuzz targets are discovered, not listed (D41). On a pull request the
+      # base branch is the baseline, so removing a target fails here instead of
+      # silently shrinking the fuzz campaign.
+      - name: Fetch the base branch for the fuzz baseline
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+
       - name: Check architectural constraints
+        env:
+          FUZZ_BASELINE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
         run: make catalog-check && make lint-arch && make lint-docs && make check-all-modules
 
       # Catches a submodule requiring a core version that was never published.

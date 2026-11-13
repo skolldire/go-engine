@@ -59,7 +59,7 @@ jobs:
           # nonsense next version from it.
           LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
           LATEST_TAG=${LATEST_TAG:-v0.0.0}
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
           echo "Latest root tag: $LATEST_TAG"
 
       - name: Resolve the release version
@@ -85,7 +85,7 @@ jobs:
             exit 1
           fi
 
-          echo "new_version=$DECLARED" >> $GITHUB_OUTPUT
+          echo "new_version=$DECLARED" >> "$GITHUB_OUTPUT"
           echo "Releasing $DECLARED (previous root tag: $LATEST)"
 
       # A release must publish every module's tag or none of them. Previously
@@ -107,8 +107,6 @@ jobs:
       - name: Preflight
         run: |
           set -euo pipefail
-          NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
-
           # Everything that would make the release unusable is checked before a
           # single tag exists, because a pushed tag is effectively permanent:
           # the module proxy caches it and re-tagging is not a fix.

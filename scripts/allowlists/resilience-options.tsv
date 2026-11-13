@@ -1,4 +1,0 @@
-env-prefix	RESILIENCE
-stress-env	RESILIENCE_STRESS
-fuzz-time	30s
-bench-time	500ms

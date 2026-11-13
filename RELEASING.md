@@ -16,7 +16,10 @@ User-approved clarification: default version preflight remains strictly ahead of
 ## Catalog and daily verification
 
 modules.tsv is the only maintained inventory. Columns are dir, path, kind, track,
-version and checks, separated by tabs. `modules.sh table` renders its live table;
+version, checks and deps, separated by tabs. `deps` is the dependency boundary
+(D41): `stdlib`, or the catalog dirs and external module paths the module may
+import. Imports, graph and replaces are checked against it; there are no
+per-module allowlist files. `modules.sh table` renders its live table;
 `matrix` emits one JSON line decoded in the harness by Go encoding/json.
 
 ```sh
@@ -106,10 +109,12 @@ remain separate work. No independent publication workflow was implemented.
 | E6 version approval | pending user | proposal table only; all new modules remain unreleased |
 | E7 authorized real tags | deferred | no workflow dispatch, real tags or publication in this task |
 
-Workflow actionlint validation is **pending**: actionlint is not installed. It
-was not installed/upgraded or claimed as passed. Catalog/list/JSON tests do not
-substitute for actionlint or actual hosted GitHub Actions execution. No version.yml
-or release.yml was executed.
+Workflow actionlint validation **passed** on macOS ARM64 with actionlint 1.7.12
+and ShellCheck 0.11.0 installed through Homebrew. `actionlint -color=false`
+validated all six workflows with exit code 0 and no diagnostics. Three unquoted
+GITHUB_OUTPUT paths were quoted and one unused preflight variable was removed.
+Evidence: release-evidence/wave0/actionlint.log and actionlint-version.log.
+This is static validation; no hosted workflow, version.yml or release.yml was executed.
 
 Final macOS ARM64 environment: Go1.27.4, Apple system Bash3.2.57, golangci-lint
 2.14.0 already available externally. make all, make test and make example passed.
@@ -144,8 +149,10 @@ scripts remains historical; use this process for current verification.
 
 Preserved exceptions: config/viper shares config's minimal/composed consumers
 (minimal validates core config, composed exercises viper); CONFIG legacy env
-fallback; existing _STRESS names declared as data beside canonical NAMESTRESS;
-config parser import constraints; client/resilience inverse-import boundaries;
+fallback; existing _STRESS names as the default stress variable (D41), set beside
+canonical NAMESTRESS;
+config parser import constraints and client/resilience inverse-import boundaries
+(both implied by the `deps` column since D41);
 concurrency expanded stress hook; root configcomparison test/benchmark aliases.
 The old 43 manual check targets are replaced by generic targets and pattern
 aliases, deprecated for this release. No Go source/tests/consumers, go.mod,

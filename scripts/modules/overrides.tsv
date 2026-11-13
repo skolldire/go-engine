@@ -1,0 +1,10 @@
+# Per-module exceptions to check-module.sh defaults (D41). A module with no row
+# here uses the defaults: fuzz-time 30s, bench-time 500ms, stress variable
+# <PREFIX>_STRESS, consumers in examples/standalone/<dir>.
+# dir	key	value
+concurrency	fuzz-time	60s
+concurrency	bench-time	1s
+concurrency	stress-hook	true
+config/viper	consumers-dir	examples/standalone/config
+config/viper	stress-env	CONFIG_STRESS
+config/viper	env-prefix	CONFIG

@@ -78,4 +78,4 @@ A caller cancellation does not prove a remote failure. DeadlineExceeded may indi
 
 Compose externally: client logical call → retry → circuitbreaker per attempt → I/O. Retry must Stop on ErrOpen/ErrProbeLimit; they are local rejections, not remote attempts. Unknown write/commit outcome belongs to reconciliation policy, not blind retry. This module imports none of those tools.
 
-See MIGRATION.md and RELEASE_NOTES.md. Root targets: check-circuitbreaker, check-circuitbreaker-{quick,stress,fuzz,bench}. Consumers run offline with GOWORK=off and explicit dependency allowlists. Candidate publication/manifests and real-tag verification remain separate tasks.
+See MIGRATION.md and RELEASE_NOTES.md. Root targets: check-circuitbreaker, check-circuitbreaker-{quick,stress,fuzz,bench}. Consumers run offline with GOWORK=off, inside the dependency boundary declared in modules.tsv. Candidate publication/manifests and real-tag verification remain separate tasks.

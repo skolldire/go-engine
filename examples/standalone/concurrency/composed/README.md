@@ -11,4 +11,4 @@ GOWORK=off GOPROXY=off GOTOOLCHAIN=local go run -mod=readonly .
 GOWORK=off GOPROXY=off GOTOOLCHAIN=local go test -race -mod=readonly ./...
 ```
 
-Full dependency allowlist checks: from repository root, make check-concurrency.
+Full dependency boundary checks: from repository root, make check-module M=concurrency MODE=deps.

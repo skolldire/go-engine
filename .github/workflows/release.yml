@@ -84,7 +84,7 @@ jobs:
             exit 1
           fi
 
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "Creating release for tag: $TAG_NAME"
 
       # Tagging happens in version.yml, which pushes every module's tag

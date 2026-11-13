@@ -1,4 +1,0 @@
-FuzzConfig
-FuzzRate
-FuzzTransitions
-FuzzRollover

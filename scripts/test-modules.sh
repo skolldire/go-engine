@@ -37,9 +37,18 @@ func main() { var m struct{Include []struct{Dir,Name string}};if err:=json.Unmar
 GO
  (cd "$workspace" && GOWORK=off GO111MODULE=off go run json.go "$json")
  cp modules.tsv "$workspace/catalog"
- printf '\nunknown\texample.com/unknown\ttool\tunreleased\t-\tbasic\n' >> modules.tsv
+ printf '\nunknown\texample.com/unknown\ttool\tunreleased\t-\tbasic\t-\n' >> modules.tsv
  expect_fail missing-module ./scripts/modules.sh validate
  cp "$workspace/catalog" modules.tsv
+ awk -F '\t' -v OFS='\t' '$1=="retry"{$7="-"}{print}' "$workspace/catalog" > modules.tsv
+ expect_fail production-without-deps ./scripts/modules.sh validate
+ awk -F '\t' -v OFS='\t' '$1=="resilience"{$7=$7 ",nosuchmodule"}{print}' "$workspace/catalog" > modules.tsv
+ expect_fail deps-uncatalogued ./scripts/modules.sh validate
+ cp "$workspace/catalog" modules.tsv
+ cp scripts/modules/overrides.tsv "$workspace/overrides"
+ printf 'retry\tunknown-key\tx\n' >> scripts/modules/overrides.tsv
+ expect_fail override-unknown-key ./scripts/modules.sh validate
+ cp "$workspace/overrides" scripts/modules/overrides.tsv
  printf '# no modules\n' > modules.tsv
  expect_fail empty-matrix ./scripts/modules.sh matrix
  cp "$workspace/catalog" modules.tsv
@@ -91,14 +100,16 @@ GO
   expect_fail "mutation-new-$name-replace" new_run "$new" "$dir" consumers
   if old_run "$old" "$dir" consumers > "$results/mutation-old-$name-replace.log" 2>&1;then echo "IMPROVEMENT: old $dir ignored unused unexpected replace";else echo "PASS old replacement rejection $dir";fi
   for root in "$old" "$new";do cp "$workspace/mod" "$root/$location/go.mod";done
-  cp "$new/scripts/allowlists/$name-fuzz.txt" "$workspace/fuzz"
-  printf 'FuzzWave0Missing\n' > "$new/scripts/allowlists/$name-fuzz.txt"
-  expect_fail "mutation-new-$name-fuzz" new_run "$new" "$dir" fuzz
+  # Fuzz targets are discovered (D41): removing every one must fail.
+  rm -rf "$workspace/tests";rsync -a --include='*/' --include='*_test.go' --exclude='*' "$new/$dir/" "$workspace/tests/"
+  find "$new/$dir" -name '*_test.go' -exec sed -i.bak 's/^func Fuzz/func disabledFuzz/' {} ';' -exec rm -f {}.bak ';'
+  expect_fail "mutation-new-$name-fuzz" new_run "$new" "$dir" deps
+  rsync -a "$workspace/tests/" "$new/$dir/"
   file="$old/scripts/check-$family-production.sh";cp "$file" "$workspace/old-production"
   awk '/^fuzz\(\)[[:space:]]*\{/ {print;print " go test -run '\''^$'\'' -fuzz '\''^FuzzWave0Missing$'\'' -fuzztime=1x; return";next} {print}' "$file" > "$workspace/edited"
   cp "$workspace/edited" "$file"
   if old_run "$old" "$dir" fuzz > "$results/mutation-old-$name-fuzz.log" 2>&1;then echo "IMPROVEMENT: old $dir treats absent fuzz target as success";else echo "PASS old fuzz rejection $dir";fi
-  cp "$workspace/old-production" "$file";cp "$workspace/fuzz" "$new/scripts/allowlists/$name-fuzz.txt"
+  cp "$workspace/old-production" "$file"
  done ;;
  dry-run)
  git clone --quiet --no-hardlinks "$repo" "$workspace/clone"
@@ -147,12 +158,9 @@ GO
  for consumer in minimal composed;do
   printf 'module example.com/wave0fixture-%s\n\ngo 1.27.4\nrequire example.com/wave0fixture v0.0.0\nreplace example.com/wave0fixture => ../../../../wave0fixture\n' "$consumer" > "examples/standalone/wave0fixture/$consumer/go.mod"
   printf 'package main\nimport("example.com/wave0fixture";"fmt")\nfunc main() { fmt.Println(wave0fixture.Value())}\n' > "examples/standalone/wave0fixture/$consumer/main.go"
-  printf 'example.com/wave0fixture v0.0.0\n' > "scripts/allowlists/wave0fixture-$consumer-modules.txt"
-  printf '../../../../wave0fixture\n' > "scripts/allowlists/wave0fixture-$consumer-replaces.txt"
  done
- : > scripts/allowlists/wave0fixture-modules.txt
- : > scripts/allowlists/wave0fixture-fuzz.txt
- printf 'wave0fixture\texample.com/wave0fixture\ttool\tunreleased\t-\tproduction\n' >> modules.tsv
+ printf 'package wave0fixture\nimport "testing"\nfunc FuzzValue(f *testing.F) { f.Fuzz(func(t *testing.T, _ int) { if Value() != 42 { t.Fatal() } }) }\n' > wave0fixture/value_test.go
+ printf 'wave0fixture\texample.com/wave0fixture\ttool\tunreleased\t-\tproduction\tstdlib\n' >> modules.tsv
  go work edit -use ./wave0fixture
  ./scripts/modules.sh validate
  ./scripts/modules.sh lint-lists
@@ -160,5 +168,51 @@ GO
  make check-all-modules
  cmp Makefile "$repo/Makefile"
  echo 'fixture discovered through catalog/data/workspace only; no script, workflow or Makefile edits' ;;
- *)echo 'unit|equivalence|mutation|dry-run|fixture' >&2;exit 2;;
+ boundary)
+ # D41: each rule of the derived boundary rejects the violation it exists for.
+ snapshot "$workspace/repo";cd "$workspace/repo"
+ git init -q;git add -A;git -c user.name=wave0 -c user.email=wave0@example.invalid commit -qm baseline
+ restore(){ git checkout -q -- .;rm -rf "$@"; }
+ mkdir "$workspace/forbidden";printf 'module example.com/forbidden\n\ngo 1.27.4\n' > "$workspace/forbidden/go.mod"
+ for dir in $(./scripts/modules.sh dirs --checks production);do
+  name=${dir//\//-};consumers=$(./scripts/modules.sh override "$dir" consumers-dir);consumers=${consumers:-examples/standalone/$dir}
+  for target in module minimal composed;do
+   location=$dir;check=deps;[[ "$target" == module ]] || { location="$consumers/$target";check=consumers; }
+   (cd "$location" && GOWORK=off go mod edit -require=example.com/forbidden@v0.0.0 -replace="example.com/forbidden=$workspace/forbidden")
+   expect_fail "boundary-$name-$target-undeclared" new_run . "$dir" "$check"
+   restore
+  done
+  (cd "$consumers/minimal" && GOWORK=off go mod edit -replace="example.com/unused=$workspace/forbidden")
+  expect_fail "boundary-$name-unused-replace" new_run . "$dir" consumers
+  restore
+ done
+ # Former forbidden-imports: config/viper may not import the parser viper uses.
+ printf 'package viper\nimport _ "go.yaml.in/yaml/v3"\n' > config/viper/wave0_import.go
+ expect_fail boundary-direct-import new_run . config/viper deps
+ restore config/viper/wave0_import.go
+ # Former forbidden-importers: concurrency may not import client (D26).
+ (cd concurrency && GOWORK=off go mod edit -require=github.com/skolldire/go-engine/client@v0.0.0 -replace=github.com/skolldire/go-engine/client=../client)
+ printf 'package concurrency\nimport _ "github.com/skolldire/go-engine/client"\n' > concurrency/wave0_import.go
+ expect_fail boundary-inverse-import new_run . concurrency deps
+ restore concurrency/wave0_import.go
+ # A replace must point at the catalog dir of its module.
+ cp -R client "$workspace/client-copy"
+ (cd examples/standalone/retry/composed && GOWORK=off go mod edit -replace="github.com/skolldire/go-engine/client=$workspace/client-copy")
+ expect_fail boundary-replace-target new_run . retry consumers
+ restore
+ # The catalog cannot declare a dep the module does not require.
+ awk -F '\t' -v OFS='\t' '$1=="resilience"{$7=$7 ",github.com/spf13/viper"}{print}' modules.tsv > "$workspace/catalog";cp "$workspace/catalog" modules.tsv
+ expect_fail boundary-stale-deps new_run . resilience deps
+ restore
+ # Fuzz: none at all fails; one removed fails only against a baseline.
+ find retry -name '*_test.go' -exec sed -i.bak 's/^func Fuzz/func disabledFuzz/' {} ';' -exec rm -f {}.bak ';'
+ expect_fail boundary-no-fuzz new_run . retry deps
+ restore
+ sed -i.bak 's/^func FuzzBackoff/func disabledFuzzBackoff/' retry/qualification_test.go;rm -f retry/qualification_test.go.bak
+ new_run . retry deps > "$results/boundary-fuzz-removed-no-baseline.log" 2>&1 || { echo 'FAIL: removing one fuzz target without a baseline should pass' >&2;exit 1; }
+ expect_fail boundary-fuzz-removed env FUZZ_BASELINE_REF=HEAD bash scripts/check-module.sh retry deps
+ restore
+ for dir in $(./scripts/modules.sh dirs --checks production);do new_run . "$dir" deps > /dev/null;new_run . "$dir" consumers > /dev/null;done
+ echo 'boundary: every derived rule rejects its violation; the unmodified tree passes' ;;
+ *)echo 'unit|equivalence|mutation|dry-run|fixture|boundary' >&2;exit 2;;
 esac

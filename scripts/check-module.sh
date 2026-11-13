@@ -3,60 +3,120 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 dir=${1:?module directory required};mode=${2:-all}
 module=$("$repo/scripts/modules.sh" get "$dir" path)
+deps_column=$("$repo/scripts/modules.sh" get "$dir" deps)
 name=${dir//\//-}
 export GOWORK=off GOTOOLCHAIN=local GOPROXY=off GOFLAGS=-mod=readonly
 cd "$repo/$dir"
 version=$(go env GOVERSION)
 if [[ ! "$version" =~ ^go1\.27\.([0-9]+)$ ]] || (( ${BASH_REMATCH[1]:-0} < 4 ));then echo "requires Go 1.27.4 or later 1.27 patch: $version" >&2;exit 1;fi
-options="$repo/scripts/allowlists/$name-options.tsv"
-option(){ awk -F '\t' -v k="$1" '$1==k{print $2;exit}' "$options" 2>/dev/null || true; }
+option(){ "$repo/scripts/modules.sh" override "$dir" "$1"; }
 env_value(){ awk -v key="$1" 'BEGIN{printf "%s",ENVIRON[key]}'; }
 prefix=$(printf '%s' "$name" | awk '{gsub(/-/,"");print toupper($0)}')
 legacy=$(option env-prefix);legacy=${legacy:-$prefix}
 setting(){ local value;value=$(env_value "${prefix}_$1");[[ -n "$value" ]] || value=$(env_value "${legacy}_$1");printf '%s' "${value:-$2}"; }
 hook(){ local file="$repo/scripts/modules/$name.sh";[[ ! -f "$file" ]] || bash "$file" "$1" "$dir"; }
-graph(){
- local own=$1 allow=$2 replaces=${3:-} selected packages edges
- selected=$(go list -m -f '{{.Path}} {{.Version}}' all)
- [[ -f "$allow" ]] || allow=/dev/null
- awk -v own="$own" 'FILENAME==ARGV[1]{if(NF && !/^#/){allowed[$1]=$2;expected[$1]=1};next} NF{if($1==own)next;if(!($1 in allowed)){print "forbidden module: " $1 > "/dev/stderr";bad=1}else if(allowed[$1]!="" && $2!=allowed[$1]){print "wrong selected version: " $1 " " $2 > "/dev/stderr";bad=1};delete expected[$1]}END{for(m in expected){print "missing declared dependency: " m > "/dev/stderr";bad=1};exit bad}' "$allow" <(printf '%s\n' "$selected")
- packages=$(go list -deps -test -f '{{with .Module}}{{.Path}}{{end}}' ./...)
- awk -v own="$own" 'FILENAME==ARGV[1]{if(NF && !/^#/)allowed[$1]=1;next} NF && $1!=own && !($1 in allowed){print "forbidden package module: " $1 > "/dev/stderr";bad=1}END{exit bad}' "$allow" <(printf '%s\n' "$packages")
- edges=$(go mod graph)
- awk -v own="$own" 'FILENAME==ARGV[1]{if(NF && !/^#/)allowed[$1]=1;next}{for(i=1;i<=NF;i++){node=$i;sub(/@.*$/,"",node);if(node!=own && node!="go" && node!="toolchain" && !(node in allowed)){print "forbidden graph node: " $i > "/dev/stderr";bad=1}}}END{exit bad}' "$allow" <(printf '%s\n' "$edges")
- if [[ -n "$replaces" ]];then
-  selected=$(awk -f "$repo/scripts/modules/metadata.awk" go.mod | awk -F '\t' '$1=="replace"{print $3}')
-  awk 'FILENAME==ARGV[1]{if(NF && !/^#/)expected[$1]=1;next}NF{if(!($1 in expected)){print "unexpected replace: " $1 > "/dev/stderr";bad=1};delete expected[$1]}END{for(p in expected){print "missing replace: " p > "/dev/stderr";bad=1};exit bad}' "$replaces" <(printf '%s\n' "$selected")
+records(){ awk -F '\t' '!/^#/ && NF' "$repo/modules.tsv"; }
+# dep_paths prints the module paths a deps column allows: a catalog dir is
+# resolved to its path, an external module path is taken as written.
+dep_paths(){
+ local item
+ [[ "$1" != - && "$1" != stdlib ]] || return 0
+ for item in ${1//,/ };do
+  if [[ "${item%%/*}" == *.* ]];then printf '%s\n' "$item";else records | awk -F '\t' -v d="$item" '$1==d{print $2}';fi
+ done
+}
+# The modules a composed consumer may add: the new tools, never the legacy
+# core, its families, presets or the harness (answers §12).
+composable_paths(){ records | awk -F '\t' '$3=="tool"||$3=="composition"||$3=="source"{print $2}'; }
+# boundary OWN ALLOWED checks the module in the current directory against a
+# newline-separated list of allowed module paths. Everything is derived from
+# go.mod and the build graph; there is no per-module list to keep in sync.
+boundary(){
+ local own=$1 allowed=$2 imports owners selected edges bad=0
+ # 1. Direct imports, tests included, come only from stdlib, itself or allowed.
+ imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}{{range .TestImports}}{{println .}}{{end}}{{range .XTestImports}}{{println .}}{{end}}' ./... | awk 'NF && $0!="C"' | sort -u)
+ if [[ -n "$imports" ]];then
+  # shellcheck disable=SC2086 # import paths contain no whitespace
+  owners=$(go list -f '{{.ImportPath}}{{"\t"}}{{with .Module}}{{.Path}}{{end}}' $imports)
+  awk -F '\t' -v own="$own" 'FILENAME==ARGV[1]{if(NF)allowed[$1]=1;next} $2!="" && $2!=own && !($2 in allowed){print "forbidden direct import: " $1 " (module " $2 ")" > "/dev/stderr";bad=1}END{exit bad}' <(printf '%s\n' "$allowed") <(printf '%s\n' "$owners") || bad=1
  fi
+ # 2. Every selected module is reachable from an allowed one, so an undeclared
+ # dependency cannot hide in go.mod as // indirect.
+ selected=$(go list -m -f '{{.Path}}' all)
+ edges=$(go mod graph)
+ awk -v own="$own" '
+ FILENAME==ARGV[1]{if(NF)reached[$1]=1;next}
+ FILENAME==ARGV[2]{from=$1;to=$2;sub(/@.*$/,"",from);sub(/@.*$/,"",to);if(to!="go" && to!="toolchain"){n++;src[n]=from;dst[n]=to};next}
+ FNR==1{do{changed=0;for(i=1;i<=n;i++)if((src[i] in reached) && !(dst[i] in reached)){reached[dst[i]]=1;changed=1}}while(changed)}
+ NF && $1!=own && !($1 in reached){print "undeclared module in graph: " $1 > "/dev/stderr";bad=1}
+ END{exit bad}' <(printf '%s\n' "$allowed") <(printf '%s\n' "$edges") <(printf '%s\n' "$selected") || bad=1
+ # 3. Replaces are exactly the in-repository modules of the graph, each one
+ # pointing at its catalog directory. An unused replace is rejected too.
+ replaces "$own" "$selected" || bad=1
+ return "$bad"
+}
+replaces(){
+ local own=$1 selected=$2 old target dir want expected bad=0
+ expected=$(records | awk -F '\t' -v own="$own" 'FILENAME==ARGV[1]{if(NF)sel[$1]=1;next} $2!=own && ($2 in sel){print $2}' <(printf '%s\n' "$selected") -)
+ while IFS=$'\t' read -r _ old target;do
+  dir=$(records | awk -F '\t' -v p="$old" '$2==p{print $1}')
+  if [[ -z "$dir" ]] || ! printf '%s\n' "$expected" | grep -Fxq "$old";then echo "unexpected replace: $old => $target" >&2;bad=1;continue;fi
+  want=$repo;[[ "$dir" == . ]] || want="$repo/$dir"
+  if [[ "$target" != .* || ! -d "$target" || "$(cd "$target" && pwd)" != "$want" ]];then echo "replace does not point at its catalog dir: $old => $target" >&2;bad=1;fi
+ done < <(awk -f "$repo/scripts/modules/metadata.awk" go.mod | awk -F '\t' '$1=="replace"')
+ while IFS= read -r old;do
+  [[ -n "$old" ]] || continue
+  awk -f "$repo/scripts/modules/metadata.awk" go.mod | awk -F '\t' -v p="$old" '$1=="replace" && $2==p{found=1}END{exit !found}' || { echo "missing replace: $old" >&2;bad=1; }
+ done <<< "$expected"
+ return "$bad"
+}
+# fuzz_targets ROOT prints the Fuzz functions in a module's test files, nested
+# modules, testdata and duplicate " 2" files excluded.
+fuzz_targets(){
+ (cd "$1" && find . \( -type d \( -name testdata -o -name '.?*' \) -prune \) -o \( -type d ! -path . -exec test -f '{}/go.mod' ';' -prune \) -o \( -type f -name '*_test.go' ! -name '* 2*' -print \) | while IFS= read -r file;do grep -hoE '^func Fuzz[A-Za-z0-9_]+' "$file" || true;done) | sed 's/^func //' | sort -u
+}
+baseline_fuzz_targets(){
+ local ref=$1 nested pathspecs=() nest
+ nested=$(git -C "$repo" ls-tree -r --name-only "$ref" -- "$dir" | awk -v d="$dir" '/\/go\.mod$/ && $0!=d "/go.mod"{sub(/\/go\.mod$/,"");print}')
+ while IFS= read -r nest;do [[ -z "$nest" ]] || pathspecs+=(":(exclude)$nest");done <<< "$nested"
+ git -C "$repo" grep -h -oE '^func Fuzz[A-Za-z0-9_]+' "$ref" -- ":(glob)$dir/**/*_test.go" ":(exclude,glob)**/testdata/**" ${pathspecs[@]+"${pathspecs[@]}"} | sed 's/^func //' | sort -u || true
+}
+fuzz_inventory(){
+ local current baseline missing
+ current=$(fuzz_targets "$repo/$dir")
+ [[ -n "$current" ]] || { echo "$dir: a production module needs at least one fuzz target" >&2;return 1; }
+ [[ -n "${FUZZ_BASELINE_REF:-}" ]] || return 0
+ git -C "$repo" rev-parse --verify --quiet "$FUZZ_BASELINE_REF^{commit}" >/dev/null || { echo "FUZZ_BASELINE_REF does not resolve: $FUZZ_BASELINE_REF" >&2;return 1; }
+ baseline=$(baseline_fuzz_targets "$FUZZ_BASELINE_REF")
+ missing=$(comm -23 <(printf '%s\n' "$baseline" | awk NF) <(printf '%s\n' "$current"))
+ [[ -z "$missing" ]] || { printf 'fuzz target removed since %s: %s\n' "$FUZZ_BASELINE_REF" $missing >&2;return 1; }
 }
 deps(){
- graph "$module" "$repo/scripts/allowlists/$name-modules.txt"
- local rules="$repo/scripts/allowlists/$name-forbidden-imports.txt" expression status
- if [[ -f "$rules" ]];then while IFS= read -r expression;do
-  [[ -n "$expression" && "$expression" != \#* ]] || continue
-  if grep -RnE --include='*.go' --exclude='* 2*' "$expression" "$repo/$dir";then echo "forbidden direct import in $dir" >&2;return 1;else status=$?;[[ "$status" == 1 ]] || return "$status";fi
- done < "$rules";fi
- local importer_file="$repo/scripts/allowlists/$name-forbidden-importers.txt" importer dependencies
- if [[ -f "$importer_file" ]];then while IFS= read -r importer;do
-  [[ -f "$repo/$importer/go.mod" ]] || continue
-  dependencies=$(cd "$repo/$importer" && go list -deps -test -f '{{with .Module}}{{.Path}}{{end}}' ./...)
-  if printf '%s\n' "$dependencies" | grep -Fx "$module" >/dev/null;then echo "$importer must not import $module" >&2;return 1;fi
- done < "$importer_file";fi
+ local allowed missing
+ allowed=$(dep_paths "$deps_column")
+ boundary "$module" "$allowed"
+ # A declared dep the module no longer requires leaves the catalog stale.
+ missing=$(awk -F '\t' 'FILENAME==ARGV[1]{if(NF)want[$1]=1;next} $1=="require"{delete want[$2]} END{for(m in want)print m}' <(printf '%s\n' "$allowed") <(awk -f "$repo/scripts/modules/metadata.awk" go.mod))
+ [[ -z "$missing" ]] || { printf 'catalog deps not required by go.mod: %s\n' $missing >&2;return 1; }
+ fuzz_inventory
  hook deps
  echo "$dir: dependency boundary passes"
 }
 consumers(){
- local base="$repo/examples/standalone/$dir" consumer own override
- override="$repo/scripts/allowlists/$name-consumers-dir.txt"
- [[ ! -f "$override" ]] || base="$repo/$(awk 'NF && !/^#/{print;exit}' "$override")"
+ local base consumer own allowed exercised=0
+ base=$(option consumers-dir);base="$repo/${base:-examples/standalone/$dir}"
  for consumer in minimal composed;do
   cd "$base/$consumer"
   own=$(go list -m -f '{{.Path}}')
-  graph "$own" "$repo/scripts/allowlists/$name-$consumer-modules.txt" "$repo/scripts/allowlists/$name-$consumer-replaces.txt"
+  allowed=$(printf '%s\n' "$module";dep_paths "$deps_column")
+  [[ "$consumer" == minimal ]] || allowed=$(printf '%s\n' "$allowed";composable_paths)
+  boundary "$own" "$allowed"
+  ! go list -m -f '{{.Path}}' all | grep -Fxq "$module" || exercised=1
   go run .
   go test -race ./...
  done
  cd "$repo/$dir"
+ [[ "$exercised" == 1 ]] || { echo "$dir: neither consumer depends on $module" >&2;return 1; }
 }
 run(){ local label=$1;shift;"$@" 2>&1 | tee "$results/$label.log"; }
 quick(){
@@ -66,29 +126,22 @@ quick(){
  run vet go vet ./...
 }
 stress(){
- local stress_env;stress_env=$(option stress-env);stress_env=${stress_env:-${prefix}STRESS}
+ local stress_env;stress_env=$(option stress-env);stress_env=${stress_env:-${prefix}_STRESS}
  if [[ -n "$(option stress-hook)" ]];then env "${prefix}STRESS=1" "$stress_env=1" bash "$repo/scripts/modules/$name.sh" stress "$dir";return;fi
  run stress env "${prefix}STRESS=1" "$stress_env=1" go test -race -run '^TestStress' -v -count=3 -timeout=180s ./...
 }
 fuzz(){
- local target discovered duration package matches owner
+ local target duration package owner label
  duration=$(setting FUZZ_TIME "$(option fuzz-time)");duration=${duration:-30s}
  : > "$results/fuzz-packages.tsv"
  while IFS= read -r package;do
-  discovered=$(go test -list '^Fuzz' "$package")
-  printf '%s\n' "$discovered" | awk -v p="$package" '/^Fuzz[A-Za-z0-9_]+$/{print $0 "\t" p}' >> "$results/fuzz-packages.tsv"
+  go test -list '^Fuzz' "$package" | awk -v p="$package" '/^Fuzz[A-Za-z0-9_]+$/{print $0 "\t" p}' >> "$results/fuzz-packages.tsv"
  done < <(go list -f '{{.ImportPath}}' ./...)
- while IFS= read -r target;do
-  [[ -n "$target" && "$target" != \#* ]] || continue
-  [[ "$target" =~ ^Fuzz[A-Za-z0-9_]+$ ]] || { echo 'invalid fuzz target' >&2;return 1; }
-  matches=$(awk -F '\t' -v t="$target" '$1==t{n++}END{print n+0}' "$results/fuzz-packages.tsv")
-  [[ "$matches" == 1 ]] || { echo "missing or ambiguous fuzz target: $target ($matches matches)" >&2;return 1; }
- done < "$repo/scripts/allowlists/$name-fuzz.txt"
- while IFS= read -r target;do
-  [[ -n "$target" && "$target" != \#* ]] || continue
-  owner=$(awk -F '\t' -v t="$target" '$1==t{print $2}' "$results/fuzz-packages.tsv")
-  run "fuzz-$target" go test -run '^$' -fuzz "^$target$" -fuzztime="$duration" -parallel=2 "$owner"
- done < "$repo/scripts/allowlists/$name-fuzz.txt"
+ [[ -s "$results/fuzz-packages.tsv" ]] || { echo "$dir: no fuzz target found" >&2;return 1; }
+ while IFS=$'\t' read -r target owner;do
+  label="fuzz-$target";[[ ! -e "$results/$label.log" ]] || label="$label-${owner//\//_}"
+  run "$label" go test -run '^$' -fuzz "^$target$" -fuzztime="$duration" -parallel=2 "$owner"
+ done < "$results/fuzz-packages.tsv"
 }
 bench(){ local duration;duration=$(setting BENCH_TIME "$(option bench-time)");run benchmarks go test -run '^$' -bench . -benchmem -benchtime="${duration:-500ms}" -count=3 -timeout=180s ./...; }
 case "$mode" in

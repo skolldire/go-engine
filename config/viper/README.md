@@ -2,8 +2,9 @@
 
 Go 1.27.4, independent module `github.com/skolldire/go-engine/config/viper`.
 Depends on config and Viper v1.21.0; core uses mapstructure/v2 v2.5.0. Versions
-already selected by the repository are retained; the dependency footprint is
-recorded in scripts/allowlists/config-viper-modules.txt. No engine/provider,
+already selected by the repository are retained; the dependency boundary is the
+`deps` column of modules.tsv (config and spf13/viper), checked by
+`make check-module M=config/viper MODE=deps`. No engine/provider,
 archived mapstructure, direct YAML parser, globals, automatic environment,
 search paths, CONF_DIR, watcher, retry or logger.
 

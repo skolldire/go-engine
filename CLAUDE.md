@@ -19,7 +19,7 @@ See [RELEASING.md](RELEASING.md) for track policy, version proposals and release
 approval. New tools are unreleased (`-`), never part of coordinated tags until an
 explicit approved catalog change. Basic families/core/preset remain coordinated
 v0.30.0; example is a non-published harness. The catalog, not this description,
-is normative. A module is registered with its row, go.work membership, allowlists
+is normative. A module is registered with its row (including its `deps` boundary), go.work membership
 and standalone consumers; see [module template](scripts/modules/README.md).
 
 ```bash
