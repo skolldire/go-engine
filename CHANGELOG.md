@@ -9,7 +9,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Experimental (not released)
-- Independent config candidate: stdlib JSON/env, bounded immutable snapshots, atomic strict decoding, injected reference resolution, standalone consumers and autocontained validation (D34); not released.
+- D34 revised config candidate: strict mapstructure/v2 v2.5.0, env.Resolver, independent config/viper with Viper v1.21.0, accepted native limitations and comparative engine validation; not released.
+
+- Independent config candidate: JSON/env sources, bounded immutable snapshots, atomic strict decoding, injected reference resolution, standalone consumers and autocontained validation (D34); not released.
 
 - Complete the standalone concurrency candidate: fixed workers, atomic count/weight/key admission, Job/Future tracking, keyed FIFO with round-robin, explicit key failure policies, drain/cancel shutdown, weighted batches and FIFO weighted limiter. No external dependencies, including tests.
 - Break the unpublished streaming prototype signatures: StreamConfig/StreamResult, From returning an error, BatchConfig plus weight, and LimiterConfig/Acquire(ctx, weight).

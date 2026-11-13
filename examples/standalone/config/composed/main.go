@@ -9,17 +9,28 @@ import (
 
 	"github.com/skolldire/go-engine/concurrency"
 	c "github.com/skolldire/go-engine/config"
-	j "github.com/skolldire/go-engine/config/json"
+	e "github.com/skolldire/go-engine/config/env"
+	v "github.com/skolldire/go-engine/config/viper"
 )
 
 func run() error {
-	sourceCfg := j.DefaultConfig()
-	sourceCfg.Path = "pool.json"
-	source, err := j.New(sourceCfg, j.Dependencies{FS: fstest.MapFS{"pool.json": {Data: []byte(`{"pool":{"workers":2,"queue_capacity":4,"max_in_flight_weight":6,"task_timeout":"1s"}}`)}}})
+	sourceCfg := v.DefaultConfig()
+	sourceCfg.Files = []string{"base.yaml", "prod.yaml"}
+	source, err := v.New(sourceCfg, v.Dependencies{FS: fstest.MapFS{"base.yaml": {Data: []byte("pool:\n  workers: 1\n  queue_capacity: 4\n  max_in_flight_weight: 6\n  task_timeout: ${TIMEOUT}\n")}, "prod.yaml": {Data: []byte("pool:\n  workers: 2\n")}}})
 	if err != nil {
 		return err
 	}
-	loader, err := c.New(c.DefaultConfig(), c.Dependencies{Sources: []c.Source{source}})
+	captured := map[string]string{"TIMEOUT": "1s", "WORKERS": "2"}
+	lookup := func(name string) (string, bool) { value, ok := captured[name]; return value, ok }
+	resolver, err := e.Resolver(lookup)
+	if err != nil {
+		return err
+	}
+	override, err := e.New(e.Config{Bindings: map[string]string{"pool.workers": "WORKERS"}}, e.Dependencies{Env: lookup})
+	if err != nil {
+		return err
+	}
+	loader, err := c.New(c.DefaultConfig(), c.Dependencies{Sources: []c.Source{source, override}, Resolver: resolver})
 	if err != nil {
 		return err
 	}
@@ -60,5 +71,5 @@ func main() {
 	if err := run(); err != nil {
 		panic(err)
 	}
-	fmt.Println("composed: config decoded concurrency defaults; application constructed/executed/closed Pool OK")
+	fmt.Println("composed: YAML base/override + env/Resolver decoded concurrency defaults; application constructed/executed/closed Pool OK")
 }

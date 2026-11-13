@@ -1,6 +1,7 @@
 package json
 
 import (
+	"bytes"
 	"context"
 	stdjson "encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"reflect"
+	"unicode/utf8"
 
 	"github.com/skolldire/go-engine/config"
 )
@@ -36,7 +38,7 @@ func (c Config) Validate() error {
 	}
 	return nil
 }
-func New(cfg Config, deps Dependencies) (*Source, error) {
+func New(cfg Config, deps Dependencies) (config.Source, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func (s *Source) Load(ctx context.Context) (document config.Document, err error)
 		}
 		return nil, fmt.Errorf("open %s: %w", s, err)
 	}
-	if reader == nil {
+	if reader == nil || (reflect.ValueOf(reader).Kind() == reflect.Pointer && reflect.ValueOf(reader).IsNil()) {
 		return nil, &config.ConfigError{Field: s.cfg.Path, Reason: "nil reader from " + s.String()}
 	}
 	defer func() {
@@ -92,13 +94,17 @@ func (s *Source) Load(ctx context.Context) (document config.Document, err error)
 		}
 	}()
 	bounded := &boundedReader{ctx: ctx, reader: reader, remaining: s.cfg.MaxBytes}
-	decoder := stdjson.NewDecoder(bounded)
+	raw, readErr := io.ReadAll(bounded)
+	if readErr != nil {
+		return nil, fmt.Errorf("read %s: %w", s, readErr)
+	}
+	if !strictUnicode(raw) {
+		return nil, &config.ConfigError{Field: s.cfg.Path, Reason: "invalid JSON Unicode from " + s.String()}
+	}
+	decoder := stdjson.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	document, err = parse(decoder)
 	if err != nil {
-		if bounded.err != nil {
-			return nil, fmt.Errorf("read %s: %w", s, bounded.err)
-		}
 		var ce *config.ConfigError
 		if errors.As(err, &ce) {
 			field := ce.Field
@@ -119,23 +125,17 @@ type boundedReader struct {
 	ctx       context.Context
 	reader    io.Reader
 	remaining int64
-	err       error
 }
 
 func (r *boundedReader) Read(p []byte) (int, error) {
 	if err := r.ctx.Err(); err != nil {
-		r.err = err
 		return 0, err
 	}
 	if r.remaining == 0 {
 		var extra [1]byte
 		n, err := r.reader.Read(extra[:])
 		if n > 0 {
-			r.err = config.ErrLimitExceeded
-			return 0, r.err
-		}
-		if err != nil && err != io.EOF {
-			r.err = err
+			return 0, config.ErrLimitExceeded
 		}
 		return 0, err
 	}
@@ -144,9 +144,6 @@ func (r *boundedReader) Read(p []byte) (int, error) {
 	}
 	n, err := r.reader.Read(p)
 	r.remaining -= int64(n)
-	if err != nil && err != io.EOF {
-		r.err = err
-	}
 	return n, err
 }
 
@@ -232,4 +229,66 @@ func parse(decoder *stdjson.Decoder) (config.Document, error) {
 			return nil, err
 		}
 	}
+}
+
+func strictUnicode(raw []byte) bool {
+	if !utf8.Valid(raw) {
+		return false
+	}
+	inString := false
+	for i := 0; i < len(raw); i++ {
+		if raw[i] == '"' {
+			inString = !inString
+			continue
+		}
+		if !inString || raw[i] != '\\' {
+			continue
+		}
+		i++
+		if i >= len(raw) {
+			return false
+		}
+		if raw[i] != 'u' {
+			continue
+		}
+		high, ok := hexUnit(raw, i+1)
+		if !ok {
+			return false
+		}
+		i += 4
+		if high >= 0xdc00 && high <= 0xdfff {
+			return false
+		}
+		if high >= 0xd800 && high <= 0xdbff {
+			if i+6 >= len(raw) || raw[i+1] != '\\' || raw[i+2] != 'u' {
+				return false
+			}
+			low, ok := hexUnit(raw, i+3)
+			if !ok || low < 0xdc00 || low > 0xdfff {
+				return false
+			}
+			i += 6
+		}
+	}
+	return true
+}
+func hexUnit(raw []byte, start int) (uint16, bool) {
+	if start+4 > len(raw) {
+		return 0, false
+	}
+	var unit uint16
+	for _, b := range raw[start : start+4] {
+		unit <<= 4
+		switch {
+		case b >= '0' && b <= '9':
+			unit |= uint16(b - '0')
+		case b >= 'a' && b <= 'f':
+			unit |= uint16(b - 'a' + 10)
+		case b >= 'A' && b <= 'F':
+			unit |= uint16(b - 'A' + 10)
+		default:
+			return 0, false
+		}
+	}
+	return unit, true
 }

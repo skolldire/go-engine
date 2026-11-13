@@ -21,6 +21,9 @@ func TestStrictJSONAndRawLimits(t *testing.T) {
 		{"valid", `{"x":9007199254740993}`, true}, {"empty", `{}`, true}, {"nested", `{"x":[{"a":1},[],{}]}`, true},
 		{"duplicate", `{"password":"secret","password":"other"}`, false}, {"nested_duplicate", `{"x":{"a":1,"a":2}}`, false}, {"escaped_duplicate", `{"a":1,"\u0061":2}`, false},
 		{"extra", `{} {}`, false}, {"extra_array", `{} []`, false}, {"extra_scalar", `{} 1`, false}, {"truncated", `{"x":`, false}, {"root_list", `[]`, false}, {"root_null", `null`, false},
+		{"invalid_utf8", "{\"x\":\"\xff\"}", false},
+		{"unpaired_surrogate", `{"x":"\ud800"}`, false},
+		{"surrogate_pair", `{"x":"\ud83d\ude00"}`, true},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -139,6 +142,18 @@ func TestJSONConstruction(t *testing.T) {
 	}
 	cfg.MaxBytes = 0
 	if _, err := j.New(cfg, j.Dependencies{FS: fstest.MapFS{}}); !errors.Is(err, c.ErrInvalidConfig) {
+		t.Fatal(err)
+	}
+}
+
+func TestTypedNilReaderRejected(t *testing.T) {
+	cfg := j.DefaultConfig()
+	cfg.Path = "nil"
+	src, err := j.New(cfg, j.Dependencies{Reader: func(context.Context) (io.ReadCloser, error) { var value *reader; return value, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Load(context.Background()); !errors.Is(err, c.ErrInvalidConfig) {
 		t.Fatal(err)
 	}
 }

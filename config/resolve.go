@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/skolldire/go-engine/config/internal/paths"
+	"github.com/skolldire/go-engine/config/internal/textvalue"
 )
 
 type resolved struct {
@@ -49,13 +50,16 @@ func (e *expander) walk(n *node, path string, depth int, budget *measure) error 
 				return err
 			}
 		}
-	} else if value, ok := n.value.(string); ok {
+	} else if value, ok := textContent(n.value); ok {
 		output, textual, err := e.expand(value, path, n.origin, 0, budget.limit-budget.used)
 		if err != nil {
 			return err
 		}
+		_, marked := n.value.(textvalue.Value)
 		n.value = output
-		n.textual = n.textual || textual
+		if marked || textual {
+			n.value = textvalue.Value(output)
+		}
 		if err := budget.add(int64(len(output)), path); err != nil {
 			return err
 		}
@@ -193,4 +197,15 @@ func (e *expander) expand(value, path, origin string, depth int, remaining int64
 		i = end + 1
 	}
 	return out.String(), textual, nil
+}
+
+func textContent(value any) (string, bool) {
+	switch v := value.(type) {
+	case string:
+		return v, true
+	case textvalue.Value:
+		return string(v), true
+	default:
+		return "", false
+	}
 }

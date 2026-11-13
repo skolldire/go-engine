@@ -162,11 +162,11 @@ func TestDecodeTypesNamesAndAtomicity(t *testing.T) {
 		CAFile  string
 	}
 	type target struct {
-		Embedded
+		Embedded     `mapstructure:",squash"`
 		MaxJWKSBytes int
-		Port         uint16   `json:"wrong" yaml:"wrong" mapstructure:"wrong"`
-		Renamed      bool     `config:"renamed"`
-		Ignored      chan int `config:"-"`
+		Port         uint16   `json:"wrong" yaml:"wrong" mapstructure:"port"`
+		Renamed      bool     `mapstructure:"renamed"`
+		Ignored      chan int `mapstructure:"-"`
 		Prefix       netip.Prefix
 		Wait         time.Duration
 		Numbers      [2]int
@@ -199,8 +199,8 @@ func TestDecodeTypesNamesAndAtomicity(t *testing.T) {
 		requireError(t, s.Decode("", input), c.ErrInvalidConfig)
 	}
 	duplicate := struct {
-		A int `config:"x"`
-		B int `config:"x"`
+		A int `mapstructure:"x"`
+		B int `mapstructure:"x"`
 	}{1, 2}
 	requireError(t, load(t, source(c.Document{})).Decode("", &duplicate), c.ErrInvalidConfig)
 	unsupported := struct{ P *int }{}
@@ -413,4 +413,61 @@ func TestExactFloat32ExponentNormalization(t *testing.T) {
 			t.Fatal(test.raw, err)
 		}
 	}
+}
+
+type textList []string
+
+func (v *textList) UnmarshalText(input []byte) error {
+	*v = strings.Split(string(input), ",")
+	return nil
+}
+func TestSupportedTypeMatrixAndUnsupportedContainers(t *testing.T) {
+	type allTypes struct {
+		I       int
+		I8      int8
+		I16     int16
+		I32     int32
+		I64     int64
+		U       uint
+		U8      uint8
+		U16     uint16
+		U32     uint32
+		U64     uint64
+		PtrSize uintptr
+		F32     float32
+		F64     float64
+		Text    textList
+		Rows    []map[string]int
+		Maps    map[string]struct{ A int }
+	}
+	doc := c.Document{"i": int(-1), "i8": int8(-2), "i16": int16(-3), "i32": int32(-4), "i64": int64(-5), "u": uint(1), "u8": uint8(2), "u16": uint16(3), "u32": uint32(4), "u64": uint64(5), "ptr_size": uintptr(6), "f32": float64(.5), "f64": float64(.1), "text": "a,b", "rows": []any{map[string]any{"a": 1}}, "maps": map[string]any{"row": map[string]any{"a": 2}}}
+	var got allTypes
+	if err := load(t, source(doc)).Decode("", &got); err != nil || got.I64 != -5 || got.U64 != 5 || got.PtrSize != 6 || got.Rows[0]["a"] != 1 || got.Maps["row"].A != 2 || len(got.Text) != 2 {
+		t.Fatal(got, err)
+	}
+	for _, target := range []any{&map[int]string{}, &[]any{}, &map[string]chan int{}, &struct{ F func() }{}, &[]map[string]any{}, new(complex128)} {
+		requireError(t, load(t, source(c.Document{})).Decode("", target), c.ErrInvalidConfig)
+	}
+}
+func TestReferenceGrammarAndResolverErrors(t *testing.T) {
+	for _, ref := range []string{"${:name}", "${HTTP:abc}", "${secret:}", "${bad~:name}", "${a:b:c}"} {
+		l, _ := c.New(c.DefaultConfig(), c.Dependencies{Sources: []c.Source{source(c.Document{"x": ref})}, Resolver: resolverFunc(func(context.Context, string) (string, error) {
+			t.Error("invalid reference reached resolver")
+			return "", nil
+		})})
+		_, err := l.Load(context.Background())
+		requireError(t, err, c.ErrInvalidConfig)
+	}
+	failure := errors.New("injected resolver error")
+	l, _ := c.New(c.DefaultConfig(), c.Dependencies{Sources: []c.Source{source(c.Document{"x": "${secret:db/password}"})}, Resolver: resolverFunc(func(_ context.Context, name string) (string, error) {
+		if name != "secret:db/password" {
+			t.Fatal(name)
+		}
+		return "", failure
+	})})
+	s, err := l.Load(context.Background())
+	if s != nil {
+		t.Fatal("partial snapshot")
+	}
+	requireError(t, err, failure)
 }

@@ -14,11 +14,10 @@ import (
 )
 
 type node struct {
-	value   any
-	object  map[string]*node
-	list    []*node
-	origin  string
-	textual bool
+	value  any
+	object map[string]*node
+	list   []*node
+	origin string
 }
 type measure struct {
 	limit, used int64
@@ -64,8 +63,7 @@ func (m *measure) copy(value any, path, origin string, depth int) (*node, error)
 			return nil, err
 		}
 	case textvalue.Value:
-		n.value = string(v)
-		n.textual = true
+		n.value = v
 		if err := m.add(int64(len(v)), path); err != nil {
 			return nil, err
 		}

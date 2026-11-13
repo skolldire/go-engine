@@ -1,7 +1,7 @@
 # config — experimental candidate, not released
 
-Independent Go 1.27.4 module; stdlib only, including tests. `config/json` and
-`config/env` are packages in this module. No engine, Viper, mapstructure, drivers,
+Independent Go 1.27.4 module; stdlib + mapstructure/v2 v2.5.0, including tests. `config/json` and
+`config/env` are packages in this module. No engine, Viper, archived mitchellh/mapstructure, drivers,
 logger or dependency on other go-engine modules. E6/E7 are deferred until the
 modularization release work; this candidate is not a published stable API.
 
@@ -55,15 +55,19 @@ collisions fail with both source names. No raw mutable getters exist.
 `Decode(section, target)` requires a non-nil pointer. Empty section means root;
 other sections use dot-separated `[a-z0-9_-]+` segments. Has returns false for
 invalid/missing paths. Dot-containing map keys cannot be addressed as sections.
-Field names derive snake_case, preserving acronym boundaries; `config:"name"`
-overrides and `config:"-"` skips. json/yaml/mapstructure tags are ignored.
-Exported anonymous structs flatten unless explicitly tagged; collisions fail.
+Fields use `mapstructure:"name"` when present; otherwise legacy MatchName
+accepts case-insensitive names and underscore-separated keys. `mapstructure:"-"`
+skips; `,squash` explicitly flattens a struct. config/json/yaml tags are ignored.
+Fields accepting the same input key and duplicate input aliases fail before
+decoding; no arbitrary choice of matching field. The tag options follow the
+strict documented surface; unknown keys remain errors.
 
 Supported values: bool/string, signed/unsigned integers, float32/64, time.Duration,
 structs, string-keyed maps, slices, exact-length arrays, TextUnmarshaler values.
 Pointers/interfaces/functions/channels are unsupported. Durations require unit
 strings (`0s`, not `0` or numeric literals). JSON numeric strings cannot populate
-numbers. Only env/resolved text can convert to scalar types. Integers require
+numbers. Only env/resolved text can convert to scalar types or comma-separated lists
+without empty elements. File strings do not convert to numbers, bools or lists. Integers require
 strict base10 syntax; overflow/decimal-to-int/float32 precision loss are errors.
 TextUnmarshaler runs on a fresh value, never the seeded object's mutable state.
 Validate on target is always the application's responsibility.
@@ -75,9 +79,15 @@ Dependencies accepts exactly one FS or Reader(ctx)→io.ReadCloser. FS paths mus
 satisfy fs.ValidPath; Reader mode uses Path as a source identifier. Every opened
 reader is closed once, also on failure; close errors are returned. Required=false
 ignores only fs.ErrNotExist. Duplicate keys, malformed JSON and extra values fail.
-Decoder.UseNumber and token parsing preserve decimal precision. jsontext was not
+A bounded raw buffer validates UTF-8 and paired Unicode surrogates before
+Decoder.UseNumber and token parsing, which preserve decimal precision. Invalid
+Unicode is rejected rather than silently replaced. Raw buffering remains bounded
+by MaxBytes; there is no unbounded read before applying the limit. jsontext was not
 importable in the available toolchain; the user approved this stdlib replacement.
-No experimental Go feature is required.
+No experimental Go feature is required. The optional separate module
+config/viper reads YAML/JSON/TOML through Viper v1.21.0. It keeps native lowercase,
+dotted-key and JSON float64 semantics; use config/json for literal keys and
+exact decimal input. config itself never imports Viper.
 
 Env: Config has nonempty Bindings (path→variable) and optional Required paths;
 Dependencies.Env is mandatory. New copies bindings and rejects invalid paths,
@@ -101,7 +111,9 @@ Without Resolver any real reference fails. Returned values/fallbacks are expande
 recursively, cycles/depth/size limits enforced. Each distinct ref is looked up
 once per Load, including missing refs. No shell, commands or expressions.
 
-For a coherent environment, the application captures the required environment
+`env.Resolver(lookup)` accepts plain names and env:name; unsupported schemes
+fail even with fallback, and nil lookup is ErrInvalidConfig. It never reads the
+process environment implicitly. For a coherent environment, the application captures the required environment
 into an immutable map once, provides the same lookup function to env and its
 Resolver, and maps missing to config.ErrReferenceNotFound. Minimal demonstrates
 this with an explicit captured map. config cannot atomically snapshot an arbitrary
@@ -140,6 +152,8 @@ make check-config check-config-quick check-config-stress check-config-fuzz check
 The scripts run offline with GOWORK=off and -mod=readonly. CONFIG_RESULTS_DIR
 selects the log directory; CONFIG_FUZZ_TIME (default 30s/target) and
 CONFIG_BENCH_TIME (default 500ms, three repetitions) select campaign lengths.
-Unit/composition tests require no external service. Heavy harnesses, YAML, Viper,
-SSM, reload and engine migration are separate tasks. See
+Unit/composition tests require no external service. config/viper has its own tests/benchmarks via check-config-viper-* targets;
+YAML direct, SSM, reload and engine migration are separate tasks.
+check-config-engine runs tagged comparisons against the real legacy decoder,
+without changing engine production code or module requirements. See
 [implementation evidence](../docs/modules/config.md).

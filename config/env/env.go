@@ -50,7 +50,7 @@ func (c Config) Validate() error {
 	}
 	return nil
 }
-func New(cfg Config, deps Dependencies) (*Source, error) {
+func New(cfg Config, deps Dependencies) (config.Source, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

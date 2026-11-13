@@ -5,7 +5,9 @@ mode=${1:-all}
 results=${CONFIG_RESULTS_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/config-validation.XXXXXX")}
 mkdir -p "$results"
 results=$(cd "$results" && pwd)
-cd "$repo/config"
+module=${CONFIG_MODULE:-config}
+case "$module" in config|config/viper) ;; *) echo "invalid config module";exit 2 ;; esac
+cd "$repo/$module"
 export GOWORK=off GOTOOLCHAIN=local GOPROXY=off GOFLAGS=-mod=readonly
 go version | tee "$results/environment.log"
 go env -json GOOS GOARCH GOVERSION CGO_ENABLED >> "$results/environment.log"
@@ -18,7 +20,9 @@ quick(){
 }
 stress(){ run stress env CONFIG_STRESS=1 go test -race -run '^TestStress' -count=3 -v -timeout=180s ./...; }
 fuzz(){
- for target in JSON References DecodeAndPaths Merge; do
+ targets="JSON References DecodeAndPaths Merge TextConversions"
+ [[ "$module" == config/viper ]] && targets=Files
+ for target in $targets; do
   run "fuzz-$target" go test -run '^$' -fuzz "^Fuzz$target$" -fuzztime="${CONFIG_FUZZ_TIME:-30s}" -parallel=2
  done
 }

@@ -1,7 +1,10 @@
 # config composed consumer
 
-Run with Go 1.27.4: `GOWORK=off GOPROXY=off go run -mod=readonly .`.
-The sole config replacement is `../../../../config`; composed additionally uses
-`../../../../concurrency`. These are local candidate checks, not published tags.
-No engine/app/provider is initialized. The application injects its filesystem and
-lookup, seeds defaults, validates tool configuration and owns tool lifecycle.
+Go 1.27.4. GOWORK=off GOPROXY=off go run -mod=readonly .
+Reads YAML base/profile via config/viper, explicit captured lookup via env.Resolver
+and bindings, then decodes over concurrency.DefaultPoolConfig(). Application
+validates, constructs, executes jobs and shuts down the real Pool. No engine/app.
+
+Replaces: ../../../../config, ../../../../config/viper, ../../../../concurrency.
+External dependencies are pinned in go.mod/go.sum and the composed allowlist.
+Populate the cache with go mod download before running offline. No tags implied.

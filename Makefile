@@ -4,7 +4,7 @@ MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/nul
 # adapter families, then the preset that composes all of them. `go.work` binds
 # them together for local development, so a change to the core is visible to
 # every family without a tagged release in between.
-MODULES := . config concurrency aws messaging http \
+MODULES := . config config/viper concurrency aws messaging http \
     database/sql database/sqlc database/redis database/mongodb database/memcached \
     preset/full example
 
@@ -269,3 +269,21 @@ check-config-fuzz:
 	@./scripts/check-config-production.sh fuzz
 check-config-bench:
 	@./scripts/check-config-production.sh bench
+
+.PHONY: check-config-engine
+check-config-engine:
+	@GOWORK=$(CURDIR)/go.work go test -tags=configcomparison -race -count=1 ./pkg/engine
+
+.PHONY: bench-config-engine
+bench-config-engine:
+	@GOWORK=$(CURDIR)/go.work go test -tags=configcomparison -run '^$$' -bench '^BenchmarkConfigDecoderComparison$$' -benchmem -count=3 -benchtime=500ms ./pkg/engine
+
+.PHONY: check-config-viper-quick check-config-viper-stress check-config-viper-fuzz check-config-viper-bench
+check-config-viper-quick:
+	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh quick
+check-config-viper-stress:
+	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh stress
+check-config-viper-fuzz:
+	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh fuzz
+check-config-viper-bench:
+	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh bench

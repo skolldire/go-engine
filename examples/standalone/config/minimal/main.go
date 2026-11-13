@@ -12,15 +12,6 @@ import (
 	j "github.com/skolldire/go-engine/config/json"
 )
 
-type resolver struct{ lookup func(string) (string, bool) }
-
-func (r resolver) Resolve(_ context.Context, name string) (string, error) {
-	value, ok := r.lookup(name)
-	if !ok {
-		return "", c.ErrReferenceNotFound
-	}
-	return value, nil
-}
 func run() error {
 	captured := map[string]string{"PORT": "0", "TOKEN": ""}
 	lookup := func(name string) (string, bool) { value, ok := captured[name]; return value, ok }
@@ -34,7 +25,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	loader, err := c.New(c.DefaultConfig(), c.Dependencies{Sources: []c.Source{base, overrides}, Resolver: resolver{lookup}})
+	resolver, err := e.Resolver(lookup)
+	if err != nil {
+		return err
+	}
+	loader, err := c.New(c.DefaultConfig(), c.Dependencies{Sources: []c.Source{base, overrides}, Resolver: resolver})
 	if err != nil {
 		return err
 	}
