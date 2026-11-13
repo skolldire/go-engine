@@ -1,0 +1,18 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/skolldire/go-engine/pkg/utilities/circuit_breaker
+cpu: Apple M1 Max
+BenchmarkBoundarySuccess-10    	 5873288	       100.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundarySuccess-10    	 6000390	       102.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundarySuccess-10    	 5983852	       101.3 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/pkg/utilities/circuit_breaker	2.121s
+goos: darwin
+goarch: arm64
+pkg: github.com/skolldire/go-engine/circuitbreaker
+cpu: Apple M1 Max
+BenchmarkClosed/success-10         	 5806008	        99.63 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/success-10         	 5945979	       100.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/success-10         	 6129891	        98.37 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/circuitbreaker	1.986s

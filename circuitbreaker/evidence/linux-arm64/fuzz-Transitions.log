@@ -1,0 +1,15 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/2 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 2/2 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 100143 (33364/sec), new interesting: 82 (total: 84)
+fuzz: elapsed: 6s, execs: 231522 (43764/sec), new interesting: 112 (total: 114)
+fuzz: elapsed: 9s, execs: 350676 (39752/sec), new interesting: 116 (total: 118)
+fuzz: elapsed: 12s, execs: 469324 (39520/sec), new interesting: 120 (total: 122)
+fuzz: elapsed: 15s, execs: 593653 (41479/sec), new interesting: 120 (total: 122)
+fuzz: elapsed: 18s, execs: 708771 (38369/sec), new interesting: 124 (total: 126)
+fuzz: elapsed: 21s, execs: 832194 (41149/sec), new interesting: 124 (total: 126)
+fuzz: elapsed: 24s, execs: 940330 (36040/sec), new interesting: 124 (total: 126)
+fuzz: elapsed: 27s, execs: 1068668 (42790/sec), new interesting: 124 (total: 126)
+fuzz: elapsed: 30s, execs: 1183351 (38225/sec), new interesting: 124 (total: 126)
+fuzz: elapsed: 30s, execs: 1183351 (0/sec), new interesting: 124 (total: 126)
+PASS
+ok  	github.com/skolldire/go-engine/circuitbreaker	30.031s

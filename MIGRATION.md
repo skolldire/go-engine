@@ -329,3 +329,5 @@ retry ownership is explicit; there is no mutable Use or implicit BaseConfig.
 See [client migration](client/MIGRATION.md) for before/after and D35 preconditions.
 
 Retry candidate: see [retry/MIGRATION.md](retry/MIGRATION.md). Legacy retries remain unchanged; typed retry requires explicit replay classification.
+
+Circuitbreaker candidate: see [circuitbreaker/MIGRATION.md](circuitbreaker/MIGRATION.md). Legacy circuit_breaker/resilience remain unchanged; new classification and recovery semantics are explicit.

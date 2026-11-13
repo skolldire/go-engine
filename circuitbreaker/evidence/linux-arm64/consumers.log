@@ -1,0 +1,5 @@
+circuitbreaker: stdlib-only runtime and tests
+circuitbreaker minimal: passed; recovery verified by go test
+ok  	example.com/circuitbreaker-minimal	1.014s
+circuitbreaker composed: client + retry + breaker passed
+ok  	example.com/circuitbreaker-composed	1.012s

@@ -1,0 +1,38 @@
+goos: linux
+goarch: arm64
+pkg: github.com/skolldire/go-engine/circuitbreaker
+BenchmarkDirect-4          	283470968	         2.098 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDirect-4          	285204741	         2.131 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDirect-4          	286387408	         2.099 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/success-4  	 4900792	       121.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/success-4  	 4973116	       123.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/success-4  	 4919361	       122.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/failure-4  	 4964990	       121.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/failure-4  	 4932608	       124.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/failure-4  	 4855581	       123.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/ignored-4  	 4894154	       122.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/ignored-4  	 4861262	       121.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClosed/ignored-4  	 4949235	       125.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkOpen-4            	 9668914	        61.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkOpen-4            	 9682255	        60.79 ns/op	       0 B/op	       0 allocs/op
+BenchmarkOpen-4            	 9727270	        61.55 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHalfOpen/admit-4  	 5080551	       118.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHalfOpen/admit-4  	 5075162	       118.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHalfOpen/admit-4  	 5076390	       120.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHalfOpen/reject-4 	 9859010	        60.02 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHalfOpen/reject-4 	10117189	        59.52 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHalfOpen/reject-4 	10123006	        59.39 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWindowRenewal-4   	14487058	        40.27 ns/op	      96 B/op	       1 allocs/op
+BenchmarkWindowRenewal-4   	14611934	        39.34 ns/op	      96 B/op	       1 allocs/op
+BenchmarkWindowRenewal-4   	15852236	        39.60 ns/op	      96 B/op	       1 allocs/op
+BenchmarkTransitions-4     	 5947605	       100.7 ns/op	     288 B/op	       3 allocs/op
+BenchmarkTransitions-4     	 5963229	       103.7 ns/op	     288 B/op	       3 allocs/op
+BenchmarkTransitions-4     	 5442720	       105.6 ns/op	     288 B/op	       3 allocs/op
+BenchmarkConcurrent-4      	 2284770	       264.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrent-4      	 2239897	       267.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrent-4      	 2314167	       272.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndependent-4     	19507324	        30.72 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndependent-4     	18852829	        30.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndependent-4     	19284574	        30.68 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/circuitbreaker	20.740s

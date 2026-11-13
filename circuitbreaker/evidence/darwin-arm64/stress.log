@@ -1,0 +1,47 @@
+=== RUN   TestStressConcurrentOutcomes
+    qualification_test.go:93: goroutineleak profile: total 0
+        
+    qualification_test.go:94: 64000 concurrent executions, five outcomes including operation/classifier panic
+--- PASS: TestStressConcurrentOutcomes (0.15s)
+=== RUN   TestStressGenerationChurn
+    qualification_test.go:162: goroutineleak profile: total 0
+        
+    qualification_test.go:163: 100 recovery cycles, 10000 open and 64000 probe-limit rejections, 1700 late completions
+--- PASS: TestStressGenerationChurn (0.08s)
+=== RUN   TestStressReleasedState
+    qualification_test.go:225: goroutineleak profile: total 0
+        
+    qualification_test.go:226: 960 abandoned instances/64KiB classifier payloads, 6000 retired generations; heap baseline=531112 peak=531176
+--- PASS: TestStressReleasedState (0.04s)
+=== RUN   TestStressConcurrentOutcomes
+    qualification_test.go:93: goroutineleak profile: total 0
+        
+    qualification_test.go:94: 64000 concurrent executions, five outcomes including operation/classifier panic
+--- PASS: TestStressConcurrentOutcomes (0.14s)
+=== RUN   TestStressGenerationChurn
+    qualification_test.go:162: goroutineleak profile: total 0
+        
+    qualification_test.go:163: 100 recovery cycles, 10000 open and 64000 probe-limit rejections, 1700 late completions
+--- PASS: TestStressGenerationChurn (0.07s)
+=== RUN   TestStressReleasedState
+    qualification_test.go:225: goroutineleak profile: total 0
+        
+    qualification_test.go:226: 960 abandoned instances/64KiB classifier payloads, 6000 retired generations; heap baseline=531064 peak=531080
+--- PASS: TestStressReleasedState (0.04s)
+=== RUN   TestStressConcurrentOutcomes
+    qualification_test.go:93: goroutineleak profile: total 0
+        
+    qualification_test.go:94: 64000 concurrent executions, five outcomes including operation/classifier panic
+--- PASS: TestStressConcurrentOutcomes (0.13s)
+=== RUN   TestStressGenerationChurn
+    qualification_test.go:162: goroutineleak profile: total 0
+        
+    qualification_test.go:163: 100 recovery cycles, 10000 open and 64000 probe-limit rejections, 1700 late completions
+--- PASS: TestStressGenerationChurn (0.10s)
+=== RUN   TestStressReleasedState
+    qualification_test.go:225: goroutineleak profile: total 0
+        
+    qualification_test.go:226: 960 abandoned instances/64KiB classifier payloads, 6000 retired generations; heap baseline=537816 peak=537816
+--- PASS: TestStressReleasedState (0.05s)
+PASS
+ok  	github.com/skolldire/go-engine/circuitbreaker	1.989s

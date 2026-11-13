@@ -1,0 +1,18 @@
+ok  	github.com/skolldire/go-engine/circuitbreaker	0.186s	coverage: 97.1% of statements
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:30:	Error		0.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:31:	Unwrap		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:71:	DefaultConfig	100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:74:	Validate	100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:91:	New		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:102:	Execute		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:136:	State		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:137:	Stats		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:143:	start		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:153:	advance		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:165:	rotate		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:172:	admit		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:195:	contextError	100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:206:	finish		100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:239:	terminalCount	100.0%
+github.com/skolldire/go-engine/circuitbreaker/circuitbreaker.go:252:	reachedRate	86.4%
+total:									(statements)	97.1%
