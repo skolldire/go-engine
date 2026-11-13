@@ -339,3 +339,7 @@ Resilience candidate: see [resilience/MIGRATION.md](resilience/MIGRATION.md). Th
 ## Experimental logging candidate (not released)
 
 The independent `github.com/skolldire/go-engine/logging` uses native slog and a caller-owned writer. Legacy logger behavior is unchanged. See [logging migration](logging/MIGRATION.md) for explicit construction, materialization and the deliberate change from regex sanitization to structural key redaction. No compatibility bridge or stable tag is introduced.
+
+## Experimental client/logging candidate (not released)
+
+The standalone `github.com/skolldire/go-engine/client/logging` provides generic completion middleware through a minimal Logger interface. Legacy WithLogging remains unchanged. See [client/logging migration](client/logging/MIGRATION.md) for the single completion event, fixed debug/info severity, omitted error text, optional duration and explicit logical-call placement. No stable tag or compatibility bridge is introduced.

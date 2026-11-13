@@ -5,6 +5,7 @@ use (
 	.
 	./aws
 	./client
+	./client/logging
 	./logging
 	./circuitbreaker
 	./retry

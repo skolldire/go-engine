@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- Independent client/logging candidate (D42): generic completion middleware, backend-neutral Logger, optional duration and independent consumers; not released.
+
 - Independent logging candidate: stdlib slog, explicit writer, structural redaction and D41 limits, offline consumers and reproducible verification; not released.
 
 - Add D40 module catalog, generic verification and catalog-derived CI/release planning. Unapproved tools remain unreleased; coordinated version stays v0.30.0.
