@@ -29,4 +29,5 @@ jobs:
 
     - name: Build every module
       run: |
-        for m in . concurrency aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do (cd "$m" && go build ./...); done
+        modules=$(./scripts/modules.sh dirs)
+        for m in $modules; do (cd "$m" && go mod download && go build ./...); done

@@ -1,0 +1,4 @@
+env-prefix	CIRCUITBREAKER
+stress-env	CIRCUITBREAKER_STRESS
+fuzz-time	30s
+bench-time	500ms

@@ -72,10 +72,10 @@ jobs:
           #
           # scripts/sync-module-versions.sh sets the declared version; this job
           # only publishes it.
-          DECLARED=$(grep -hoE 'github\.com/skolldire/go-engine v[0-9]+\.[0-9]+\.[0-9]+' aws/go.mod | head -n1 | awk '{print $2}')
+          DECLARED=$(./scripts/modules.sh get . version)
 
           if [ -z "$DECLARED" ]; then
-            echo "::error::no intra-repository version found in aws/go.mod"
+            echo "::error::no approved coordinated version in modules.tsv"
             exit 1
           fi
 
@@ -126,20 +126,19 @@ jobs:
           make smoke
 
           # Never publish a version with a known reachable vulnerability.
-          for m in . concurrency aws messaging http database/sql database/sqlc database/redis \
-                   database/mongodb database/memcached preset/full; do
+          modules=$(./scripts/modules.sh dirs)
+          for m in $modules; do
             echo "==> govulncheck $m"
             (cd "$m" && go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...)
           done
 
-          for m in "" concurrency aws messaging http database/sql database/sqlc database/redis \
-                   database/mongodb database/memcached preset/full; do
-            tag="${m:+$m/}$NEW_VERSION"
+          PLAN=$(./scripts/release-plan.sh)
+          while IFS= read -r tag; do
             if git rev-parse "$tag" >/dev/null 2>&1; then
               echo "::error::tag $tag already exists"
               exit 1
             fi
-          done
+          done <<< "$PLAN"
 
       - name: Create and push every tag atomically
         run: |
@@ -150,14 +149,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           TAGS=()
-          for m in "" concurrency aws messaging http database/sql database/sqlc database/redis \
-                   database/mongodb database/memcached preset/full; do
-            # Go resolves a sub-module only through a tag prefixed with its
-            # directory, so each module needs its own.
-            tag="${m:+$m/}$NEW_VERSION"
-            git tag -a "$tag" -m "${m:-go-engine} $NEW_VERSION"
+          PLAN=$(./scripts/release-plan.sh)
+          while IFS= read -r tag; do
+            git tag -a "$tag" -m "$tag"
             TAGS+=("$tag")
-          done
+          done <<< "$PLAN"
 
           # --atomic makes the remote accept all of them or none: a partial
           # push is what created the broken window in the first place.
@@ -183,9 +179,8 @@ jobs:
           body: |
             ## Release ${{ steps.next_version.outputs.new_version }}
 
-            Every module is tagged at this version:
-            `go-engine`, `aws`, `messaging`, `http`,
-            `database/{sql,sqlc,redis,mongodb,memcached}`, `concurrency` and `preset/full`.
+            Only coordinated modules approved in modules.tsv are tagged at this version.
+            Unreleased, independent and harness modules are excluded.
 
             ```bash
             go get github.com/skolldire/go-engine@${{ steps.next_version.outputs.new_version }}

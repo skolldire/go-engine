@@ -43,3 +43,9 @@ _cgo_export.*
 # Custom folders
 /coverage
 /docs/
+
+# Verification evidence and logs: useful to maintainers, not to library
+# consumers. Anything under a module directory ships in its `go get` zip.
+/release-evidence/
+**/evidence/
+*.log

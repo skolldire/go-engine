@@ -1,0 +1,4 @@
+env-prefix	RATELIMIT
+stress-env	RATELIMIT_STRESS
+fuzz-time	30s
+bench-time	500ms

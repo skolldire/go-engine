@@ -1,8 +1,0 @@
-self-test: clean fixtures pass ...... ok
-self-test: detects readme.md ...... ok
-self-test: detects example_test.go ...... ok
-self-test: detects getter.md ...... ok
-self-test: detects field.md ...... ok
-self-test: detects bare_marker.md ...... ok
-self-test passed
-OK: no documentation or example presents an API removed in v0.30.0

@@ -1,30 +1,26 @@
 #!/usr/bin/env bash
-# Rewrites every intra-repository require to the given version.
-#
-# The modules in this repository are released together, so a submodule must
-# require the exact core version tagged in the same release. Doing it by hand is
-# how a submodule ends up requiring a core that was never published: invisible
-# locally, because go.work and the replace directives satisfy it, and broken
-# only for the consumer.
-#
-# Usage: scripts/sync-module-versions.sh v0.30.0
 set -euo pipefail
-
-VERSION="${1:-}"
-if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "usage: $0 vX.Y.Z" >&2
-    exit 1
-fi
-
-cd "$(dirname "$0")/.."
-
-# e2e is never published, so its requires stay on replace directives.
-for dir in $(find . -name go.mod -not -path './.git/*' -not -path './example/*' -exec dirname {} \; | sort); do
-    gomod="$dir/go.mod"
-    if grep -qE '^[[:space:]]+github\.com/skolldire/go-engine(/[a-z/]+)? v' "$gomod"; then
-        perl -pi -e "s{^(\\s+github\\.com/skolldire/go-engine(?:/[a-z/]+)?) v\\S+}{\$1 $VERSION}" "$gomod"
-        echo "  updated $gomod"
-    fi
-done
-
-echo "==> All intra-repository requires set to $VERSION"
+version=${1:-}
+[[ "$version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo 'usage: sync-module-versions.sh vX.Y.Z' >&2;exit 2; }
+repo=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo"
+./scripts/modules.sh validate
+while IFS= read -r dir;do
+ output=$(mktemp)
+ awk -F '\t' -v version="$version" '
+ FILENAME==ARGV[1]{if(!/^#/ && $4=="coordinated")coordinated[$2]=1;next}
+ {
+  text=$0;gsub(/^[[:space:]]+|[[:space:]]+$/,"",text)
+  if(text ~ /^require[[:space:]]+\(/)block=1
+  if(text ~ /^\)/)block=0
+  if(!block && text !~ /^require[[:space:]]+/){print;next}
+  n=split($0,words,/[[:space:]]+/)
+  for(i=1;i<=n;i++)if(words[i] in coordinated){pattern=words[i];gsub(/\./,"\\.",pattern);sub(pattern "[[:space:]]+v[^[:space:])]+",words[i] " " version)}
+  print
+ }' modules.tsv "$dir/go.mod" > "$output"
+ cat "$output" > "$dir/go.mod";rm -f "$output"
+done < <(./scripts/modules.sh dirs --track coordinated)
+output=$(mktemp)
+awk -F '\t' -v OFS='\t' -v v="$version" '!/^#/ && $4=="coordinated"{$5=v} {print}' modules.tsv > "$output"
+cat "$output" > modules.tsv;rm -f "$output"
+echo "coordinated catalog and coordinated-to-coordinated requires set to $version"

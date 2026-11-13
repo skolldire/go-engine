@@ -1,5 +1,0 @@
-retry: stdlib-only runtime and tests
-retry minimal: passed
-ok  	example.com/retry-minimal	1.018s
-retry composed with client: passed
-ok  	example.com/retry-composed	1.011s

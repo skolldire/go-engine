@@ -1,0 +1,5 @@
+env-prefix	CONCURRENCY
+stress-env	CONCURRENCY_STRESS
+fuzz-time	60s
+bench-time	1s
+stress-hook	true

@@ -1,0 +1,20 @@
+# dir	path	kind	track	version	checks
+.	github.com/skolldire/go-engine	core	coordinated	v0.30.0	basic
+aws	github.com/skolldire/go-engine/aws	family	coordinated	v0.30.0	basic
+messaging	github.com/skolldire/go-engine/messaging	family	coordinated	v0.30.0	basic
+http	github.com/skolldire/go-engine/http	family	coordinated	v0.30.0	basic
+database/sql	github.com/skolldire/go-engine/database/sql	family	coordinated	v0.30.0	basic
+database/sqlc	github.com/skolldire/go-engine/database/sqlc	family	coordinated	v0.30.0	basic
+database/redis	github.com/skolldire/go-engine/database/redis	family	coordinated	v0.30.0	basic
+database/mongodb	github.com/skolldire/go-engine/database/mongodb	family	coordinated	v0.30.0	basic
+database/memcached	github.com/skolldire/go-engine/database/memcached	family	coordinated	v0.30.0	basic
+preset/full	github.com/skolldire/go-engine/preset/full	preset	coordinated	v0.30.0	basic
+concurrency	github.com/skolldire/go-engine/concurrency	tool	unreleased	-	production
+config	github.com/skolldire/go-engine/config	tool	unreleased	-	production
+client	github.com/skolldire/go-engine/client	tool	unreleased	-	production
+retry	github.com/skolldire/go-engine/retry	tool	unreleased	-	production
+circuitbreaker	github.com/skolldire/go-engine/circuitbreaker	tool	unreleased	-	production
+ratelimit	github.com/skolldire/go-engine/ratelimit	tool	unreleased	-	production
+resilience	github.com/skolldire/go-engine/resilience	composition	unreleased	-	production
+config/viper	github.com/skolldire/go-engine/config/viper	source	unreleased	-	production
+example	github.com/skolldire/go-engine/example	harness	none	-	basic

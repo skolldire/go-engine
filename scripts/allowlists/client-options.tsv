@@ -1,0 +1,4 @@
+env-prefix	CLIENT
+stress-env	CLIENT_STRESS
+fuzz-time	30s
+bench-time	500ms

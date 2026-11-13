@@ -1,0 +1,2 @@
+"github.com/mitchellh/mapstructure
+"(go\.yaml\.in/|gopkg\.in/yaml|github\.com/pelletier/go-toml)

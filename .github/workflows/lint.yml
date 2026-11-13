@@ -47,8 +47,9 @@ jobs:
 
       - name: Lint every module
         run: |
-          for m in . concurrency aws messaging http database/sql database/sqlc database/redis database/mongodb database/memcached preset/full; do
+          modules=$(./scripts/modules.sh dirs)
+          for m in $modules; do
             echo "==> lint $m"
             # Tests are linted too; excluding them hid real findings in test code.
-            (cd "$m" && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci.yml" --timeout=10m ./...)
+            (cd "$m" && go mod download && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci.yml" --timeout=10m ./...)
           done

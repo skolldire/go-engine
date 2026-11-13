@@ -1,78 +1,48 @@
 #!/usr/bin/env bash
-# Fails when an intra-repository require names a version that cannot be resolved
-# by a consumer.
-#
-# This check exists because nothing else can catch the problem. Inside the repo,
-# go.work and the replace directives satisfy every intra-repository import, so a
-# submodule requiring `v0.0.0-00010101000000-000000000000` — the placeholder
-# `go mod tidy` writes when only a replace is available — builds and tests
-# perfectly. A consumer's `go get` then fails with
-# "invalid version: unknown revision 000000000000", because replace directives
-# in a dependency's go.mod are ignored.
-#
-# An external smoke test does not catch it either: the moment the consumer
-# replaces the core as well, the bogus require is satisfied again.
 set -euo pipefail
-
-cd "$(dirname "$0")/.."
-
-PLACEHOLDER='v0.0.0-00010101000000-000000000000'
-FAILED=0
-declare -a VERSIONS=()
-
-# e2e is a test harness, never tagged and never installed by anyone, so it is
-# free to resolve its siblings through replace directives.
-for gomod in $(find . -name go.mod -not -path './.git/*' -not -path './example/*' | sort); do
-    while read -r mod version; do
-        [[ -z "${version:-}" ]] && continue
-
-        if [[ "$version" == "$PLACEHOLDER" ]]; then
-            echo "VIOLATION: $gomod requires $mod at the unresolvable placeholder $version"
-            echo "  a consumer cannot install this module; run scripts/sync-module-versions.sh vX.Y.Z"
-            FAILED=1
-            continue
-        fi
-
-        if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "VIOLATION: $gomod requires $mod at a non-release version $version"
-            FAILED=1
-            continue
-        fi
-
-        VERSIONS+=("$version")
-    done < <(grep -E '^[[:space:]]+github\.com/skolldire/go-engine(/[a-z/]+)? v' "$gomod" || true)
-done
-
-# Every module in this repository is released together, so a single release must
-# not mix versions: that is how a submodule ends up pinned to a stale core.
-UNIQUE=$(printf '%s\n' "${VERSIONS[@]:-}" | sort -u | grep -c . || true)
-if [[ "$UNIQUE" -gt 1 ]]; then
-    echo "VIOLATION: intra-repository requires disagree on a version:"
-    printf '%s\n' "${VERSIONS[@]}" | sort -u | sed 's/^/  /'
-    FAILED=1
+repo=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo"
+allow_current=0
+case "${1:-}" in '') ;; --allow-current)allow_current=1;;*)echo 'usage: check-module-versions.sh [--allow-current]' >&2;exit 2;;esac
+./scripts/modules.sh validate
+bad=0
+while IFS= read -r dir;do
+ owner_track=$(./scripts/modules.sh get "$dir" track)
+ [[ "$owner_track" != none ]] || continue
+ while IFS=$'\t' read -r record path version;do
+  [[ "$record" == require ]] || continue
+  target=$(awk -F '\t' -v p="$path" '!/^#/ && $2==p{print $1}' modules.tsv)
+  if [[ -z "$target" ]];then
+   root_path=$(./scripts/modules.sh get . path)
+   case "$path" in "$root_path"/*)echo "VIOLATION: $dir requires uncatalogued sibling $path" >&2;bad=1;;esac
+   continue
+  fi
+  track=$(./scripts/modules.sh get "$target" track)
+  expected=$(./scripts/modules.sh get "$target" version)
+  if [[ "$track" == unreleased ]];then
+   if [[ "$owner_track" != unreleased || "$version" != v0.0.0 ]];then echo "VIOLATION: $dir requires unreleased $path at $version" >&2;bad=1;continue;fi
+   replacement=$(awk -f scripts/modules/metadata.awk "$dir/go.mod" | awk -F '\t' -v p="$path" '$1=="replace" && $2==p{print $3}')
+   case "$replacement" in ..|.|../*|./*)
+    actual=$(cd "$dir" && cd "$replacement" && pwd -P) || actual=''
+    desired=$(cd "$target" && pwd -P)
+    [[ "$actual" == "$desired" ]] || { echo "VIOLATION: $dir replacement for $path points elsewhere" >&2;bad=1; } ;;
+    *)echo "VIOLATION: $dir unreleased sibling $path needs a relative replace" >&2;bad=1;;
+   esac
+  elif [[ "$track" == none || "$version" != "$expected" ]];then
+   echo "VIOLATION: $dir requires $path at $version, expected approved $expected ($track)" >&2;bad=1
+  fi
+ done < <(awk -f scripts/modules/metadata.awk "$dir/go.mod")
+done < <(./scripts/modules.sh dirs)
+version=$(./scripts/modules.sh get . version)
+latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ && !found++{print}')
+if [[ -n "$latest" ]];then
+ newer=$(awk -v a="$version" -v b="$latest" 'BEGIN{sub(/^v/,"",a);sub(/^v/,"",b);split(a,x,".");split(b,y,".");for(i=1;i<=3;i++){if(length(x[i])!=length(y[i])){print(length(x[i])>length(y[i]));exit};if("x" x[i]!="x" y[i]){print("x" x[i]>"x" y[i]);exit}}print 0}')
+ if [[ "$allow_current" == 1 && "$version" == "$latest" ]];then
+  while IFS= read -r dir;do tag="$version";[[ "$dir" == . ]] || tag="$dir/$version"
+   ref=$(git rev-parse "$tag^{commit}" 2>/dev/null || true)
+   [[ "$ref" == "$(git rev-parse HEAD)" ]] || { echo "VIOLATION: post-tag verification needs $tag at HEAD" >&2;bad=1; }
+  done < <(./scripts/modules.sh dirs --track coordinated)
+ elif [[ "$newer" != 1 ]];then echo "VIOLATION: coordinated $version must be ahead of $latest (strict preflight)" >&2;bad=1;fi
 fi
-
-# The declared version is what will be tagged, so it must be ahead of what is
-# already released. Without this, the modules can say v0.30.0 while the version
-# workflow computes v0.21.0 from the last root tag, and the release publishes a
-# tag no module requires.
-DECLARED=$(printf '%s\n' "${VERSIONS[@]:-}" | sort -u | head -n 1)
-LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname 2>/dev/null | head -n 1)
-
-if [[ -n "${DECLARED:-}" && -n "${LATEST:-}" ]]; then
-    NEWEST=$(printf '%s\n%s\n' "$DECLARED" "$LATEST" | sort -V | tail -n 1)
-    if [[ "$DECLARED" == "$LATEST" || "$NEWEST" != "$DECLARED" ]]; then
-        echo "VIOLATION: modules declare $DECLARED but $LATEST is already tagged"
-        echo "  the release must publish a version newer than the last one;"
-        echo "  run scripts/sync-module-versions.sh with the version you intend to tag"
-        FAILED=1
-    fi
-fi
-
-if [[ "$FAILED" -ne 0 ]]; then
-    echo ""
-    echo "FAIL: module versions would break an external consumer"
-    exit 1
-fi
-
-echo "==> OK: modules declare ${DECLARED:-a single version}, ahead of ${LATEST:-no tag}"
+[[ "$bad" == 0 ]] || exit 1
+echo 'module versions: catalog tracks and sibling requirements pass'

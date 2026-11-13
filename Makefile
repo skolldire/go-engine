@@ -1,21 +1,11 @@
 MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/null || pwd))
 
-# Every module in the repository, in dependency order: the core first, then the
-# adapter families, then the preset that composes all of them. `go.work` binds
-# them together for local development, so a change to the core is visible to
-# every family without a tagged release in between.
-MODULES := . resilience ratelimit circuitbreaker retry client config config/viper concurrency aws messaging http \
-    database/sql database/sqlc database/redis database/mongodb database/memcached \
-    preset/full example
-
-# Modules that ship an adapter family. The core is deliberately absent: its
-# whole point is that it resolves none of their dependencies.
-FAMILY_MODULES := aws messaging http \
-    database/sql database/sqlc database/redis database/mongodb database/memcached
+MODULES := $(shell ./scripts/modules.sh dirs)
+FAMILY_MODULES := $(shell ./scripts/modules.sh dirs --kind family)
 
 .PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
 
-## all: the checks a change must pass before it is pushed
+## all: catalog-check lint lint-arch lint-docs check-modules check-all-modules test example
 all: lint lint-arch lint-docs check-modules check-concurrency check-config check-client-deps check-client check-retry-deps check-retry check-circuitbreaker-deps check-circuitbreaker check-ratelimit-deps check-ratelimit check-resilience-deps check-resilience test example
 
 
@@ -157,13 +147,7 @@ example-e2e:
 	@cd example && go test -tags e2e ./... -count=1 -v
 
 lint-arch:
-	@./scripts/check-resilience-deps.sh
-	@./scripts/check-ratelimit-deps.sh
-	@./scripts/check-circuitbreaker-deps.sh
-	@./scripts/check-retry-deps.sh
-	@./scripts/check-client-deps.sh
-	@./scripts/check-concurrency-deps.sh
-	@./scripts/check-config-deps.sh
+	@set -e; for m in $$(./scripts/modules.sh dirs --checks production); do ./scripts/check-module.sh "$$m" deps; done
 	@echo "==> Checking architectural constraints..."
 	@FAILED=0; \
 	for forbidden in $(FORBIDDEN_IN_CORE); do \
@@ -208,13 +192,7 @@ HTTP_ONLY_MODULES = 19
 
 ## lint-deps: reports the external dependency footprint of every module
 lint-deps:
-	@./scripts/check-resilience-deps.sh
-	@./scripts/check-ratelimit-deps.sh
-	@./scripts/check-circuitbreaker-deps.sh
-	@./scripts/check-retry-deps.sh
-	@./scripts/check-client-deps.sh
-	@./scripts/check-concurrency-deps.sh
-	@./scripts/check-config-deps.sh
+	@set -e; for m in $$(./scripts/modules.sh dirs --checks production); do ./scripts/check-module.sh "$$m" deps; done
 	@# Counting uses each package's real Module.Path, never a prefix of the
 	@# import path. Truncating to two segments merges distinct modules that
 	@# share an owner: spf13/{viper,afero,cast,pflag} collapsed into one, as did
@@ -257,113 +235,19 @@ lint-deps:
 		exit 1; \
 	fi
 
-.PHONY: check-concurrency
+.PHONY: catalog-check check-module check-all-modules
+catalog-check:
+	@./scripts/modules.sh validate
+	@./scripts/modules.sh lint-lists
+check-module:
+	@./scripts/check-module.sh "$(M)" "$(or $(MODE),all)"
+check-all-modules:
+	@set -e; modules=$$(./scripts/modules.sh dirs --checks production); for m in $$modules; do for mode in deps consumers quick; do ./scripts/check-module.sh "$$m" "$$mode"; done; done
 
-## check-concurrency: verifies the standalone module has zero dependencies
-check-concurrency:
-	@./scripts/check-concurrency-module.sh
+.PHONY: FORCE
+FORCE:
 
-.PHONY: check-concurrency-production
-
-check-concurrency-production:
-	@./scripts/check-concurrency-production.sh all
-
-.PHONY: check-config check-config-quick check-config-stress check-config-fuzz check-config-bench
-check-config:
-	@./scripts/check-config-module.sh
-check-config-quick:
-	@./scripts/check-config-production.sh quick
-check-config-stress:
-	@./scripts/check-config-production.sh stress
-check-config-fuzz:
-	@./scripts/check-config-production.sh fuzz
-check-config-bench:
-	@./scripts/check-config-production.sh bench
-
-.PHONY: check-config-engine
-check-config-engine:
-	@GOWORK=$(CURDIR)/go.work go test -tags=configcomparison -race -count=1 ./pkg/engine
-
-.PHONY: bench-config-engine
-bench-config-engine:
-	@GOWORK=$(CURDIR)/go.work go test -tags=configcomparison -run '^$$' -bench '^BenchmarkConfigDecoderComparison$$' -benchmem -count=3 -benchtime=500ms ./pkg/engine
-
-.PHONY: check-config-viper-quick check-config-viper-stress check-config-viper-fuzz check-config-viper-bench
-check-config-viper-quick:
-	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh quick
-check-config-viper-stress:
-	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh stress
-check-config-viper-fuzz:
-	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh fuzz
-check-config-viper-bench:
-	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh bench
-
-.PHONY: check-client-deps check-client check-client-quick check-client-stress check-client-fuzz check-client-bench
-check-client-deps:
-	@./scripts/check-client-deps.sh
-check-client:
-	@./scripts/check-client-module.sh
-check-client-quick:
-	@./scripts/check-client-production.sh quick
-check-client-stress:
-	@./scripts/check-client-production.sh stress
-check-client-fuzz:
-	@./scripts/check-client-production.sh fuzz
-check-client-bench:
-	@./scripts/check-client-production.sh bench
-
-.PHONY: check-retry-deps check-retry check-retry-quick check-retry-stress check-retry-fuzz check-retry-bench
-check-retry-deps:
-	@./scripts/check-retry-deps.sh
-check-retry:
-	@./scripts/check-retry-module.sh
-check-retry-quick:
-	@./scripts/check-retry-production.sh quick
-check-retry-stress:
-	@./scripts/check-retry-production.sh stress
-check-retry-fuzz:
-	@./scripts/check-retry-production.sh fuzz
-check-retry-bench:
-	@./scripts/check-retry-production.sh bench
-
-.PHONY: check-circuitbreaker-deps check-circuitbreaker check-circuitbreaker-quick check-circuitbreaker-stress check-circuitbreaker-fuzz check-circuitbreaker-bench
-check-circuitbreaker-deps:
-	@./scripts/check-circuitbreaker-deps.sh
-check-circuitbreaker:
-	@./scripts/check-circuitbreaker-module.sh
-check-circuitbreaker-quick:
-	@./scripts/check-circuitbreaker-production.sh quick
-check-circuitbreaker-stress:
-	@./scripts/check-circuitbreaker-production.sh stress
-check-circuitbreaker-fuzz:
-	@./scripts/check-circuitbreaker-production.sh fuzz
-check-circuitbreaker-bench:
-	@./scripts/check-circuitbreaker-production.sh bench
-
-.PHONY: check-ratelimit-deps check-ratelimit check-ratelimit-quick check-ratelimit-stress check-ratelimit-fuzz check-ratelimit-bench
-check-ratelimit-deps:
-	@./scripts/check-ratelimit-deps.sh
-check-ratelimit:
-	@./scripts/check-ratelimit-module.sh
-check-ratelimit-quick:
-	@./scripts/check-ratelimit-production.sh quick
-check-ratelimit-stress:
-	@./scripts/check-ratelimit-production.sh stress
-check-ratelimit-fuzz:
-	@./scripts/check-ratelimit-production.sh fuzz
-check-ratelimit-bench:
-	@./scripts/check-ratelimit-production.sh bench
-
-.PHONY: check-resilience-deps check-resilience check-resilience-quick check-resilience-stress check-resilience-fuzz check-resilience-bench
-check-resilience-deps:
-	@./scripts/check-resilience-deps.sh
-check-resilience:
-	@./scripts/check-resilience-module.sh
-check-resilience-quick:
-	@./scripts/check-resilience-production.sh quick
-check-resilience-stress:
-	@./scripts/check-resilience-production.sh stress
-check-resilience-fuzz:
-	@./scripts/check-resilience-production.sh fuzz
-check-resilience-bench:
-	@./scripts/check-resilience-production.sh bench
+check-%: FORCE
+	@./scripts/modules/run-alias.sh "$@"
+bench-%: FORCE
+	@./scripts/modules/run-alias.sh "$@"

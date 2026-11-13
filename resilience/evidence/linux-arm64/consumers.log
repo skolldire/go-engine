@@ -1,5 +1,0 @@
-resilience: stdlib + five base modules only, no inverse dependency
-resilience minimal: typed boundary and explicit retry passed (six-module graph)
-ok  	example.com/resilience-minimal	1.018s
-resilience composed: all real tools, per-attempt accounting and reconciliation passed
-ok  	example.com/resilience-composed	1.024s
