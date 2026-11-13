@@ -246,3 +246,29 @@ process-wide singleton, hold your own reference instead.
 
 Signatures that used `interface{}` now spell it `any`. The two are identical, so
 implementations and callers do not need changes; this is a cosmetic update.
+
+## Experimental config candidate (not released)
+
+`github.com/skolldire/go-engine/config` is an optional independent loader.
+Existing engine/RawConfig/providers are unchanged; there is no compatibility
+alias and no automatic migration. New applications explicitly provide FS/readers,
+environment bindings and Resolver, seed their own tool defaults, Decode, Validate
+and construct tools themselves.
+
+| Legacy | Independent config |
+|---|---|
+| Viper file discovery/cwd/executable fallback | Explicit FS or Reader and Path; YAML/Viper adapters later |
+| mapstructure/json/yaml tags, weak conversion | config tags and snake_case; strict typed conversion |
+| comma-string to slice | Typed lists; env scalar text only |
+| Missing section Decode no-op | ErrSectionMissing |
+| os.Getenv at Decode, unresolved retained | Explicit captured lookup, resolve once per Load, missing error |
+| Empty treated like absent for :- | Empty is present; fallback only for ErrReferenceNotFound |
+| Raw mutable tree | Immutable snapshot, no raw getter |
+| Implicit overwrite/merge behavior | Last source wins within same shape; cross-shape error, null deletes |
+| Partially mutated target on error | Atomic Decode over seeded defaults |
+
+Duplicate JSON keys and content after the root are rejected. Preserve default
+values by decoding into DefaultConfig(), not a zero literal. Explicit 0/false are
+not normalized. Maps merge with seeded values and lists replace. Conversion and
+parser errors omit values; external dependency errors remain the caller's
+confidentiality responsibility. No module is published by this extraction.

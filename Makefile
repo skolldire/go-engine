@@ -4,7 +4,7 @@ MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/nul
 # adapter families, then the preset that composes all of them. `go.work` binds
 # them together for local development, so a change to the core is visible to
 # every family without a tagged release in between.
-MODULES := . concurrency aws messaging http \
+MODULES := . config concurrency aws messaging http \
     database/sql database/sqlc database/redis database/mongodb database/memcached \
     preset/full example
 
@@ -16,7 +16,7 @@ FAMILY_MODULES := aws messaging http \
 .PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
 
 ## all: the checks a change must pass before it is pushed
-all: lint lint-arch lint-docs check-modules check-concurrency test example
+all: lint lint-arch lint-docs check-modules check-concurrency check-config test example
 
 
 clean:
@@ -158,6 +158,7 @@ example-e2e:
 
 lint-arch:
 	@./scripts/check-concurrency-deps.sh
+	@./scripts/check-config-deps.sh
 	@echo "==> Checking architectural constraints..."
 	@FAILED=0; \
 	for forbidden in $(FORBIDDEN_IN_CORE); do \
@@ -203,6 +204,7 @@ HTTP_ONLY_MODULES = 19
 ## lint-deps: reports the external dependency footprint of every module
 lint-deps:
 	@./scripts/check-concurrency-deps.sh
+	@./scripts/check-config-deps.sh
 	@# Counting uses each package's real Module.Path, never a prefix of the
 	@# import path. Truncating to two segments merges distinct modules that
 	@# share an owner: spf13/{viper,afero,cast,pflag} collapsed into one, as did
@@ -255,3 +257,15 @@ check-concurrency:
 
 check-concurrency-production:
 	@./scripts/check-concurrency-production.sh all
+
+.PHONY: check-config check-config-quick check-config-stress check-config-fuzz check-config-bench
+check-config:
+	@./scripts/check-config-module.sh
+check-config-quick:
+	@./scripts/check-config-production.sh quick
+check-config-stress:
+	@./scripts/check-config-production.sh stress
+check-config-fuzz:
+	@./scripts/check-config-production.sh fuzz
+check-config-bench:
+	@./scripts/check-config-production.sh bench
