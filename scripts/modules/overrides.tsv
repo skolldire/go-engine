@@ -8,3 +8,4 @@ concurrency	stress-hook	true
 config/viper	consumers-dir	examples/standalone/config
 config/viper	stress-env	CONFIG_STRESS
 config/viper	env-prefix	CONFIG
+resilience/integration	stress-env	RESILIENCE_STRESS

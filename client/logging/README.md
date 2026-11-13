@@ -60,3 +60,9 @@ For one logical observation with resilience, pass the operation already returned
 ## Verification
 
 From root use scripts/check-module.sh client/logging deps|consumers|quick|stress|fuzz|bench|all. Campaign prefix is CLIENTLOGGING; durations and results use CLIENTLOGGING_FUZZ_TIME, CLIENTLOGGING_BENCH_TIME, CLIENTLOGGING_RESULTS_DIR. Standard tools, synctest, race, goroutineleak, memory-backed integration, three independent Logger implementations, fuzzing and benchmarks exercise the contract. See RELEASE_NOTES.md for executed commands, source hashes, platforms, limitations and E1–E7. No stable tag is declared.
+
+## D44 backend policy
+
+Slog is the library standard. This module still accepts its two-method Logger interface, which *slog.Logger satisfies. See [Elegir backend](../../logging/README.md#elegir-backend-d44) for native slog, the redacting logging.New factory and application-owned foreign adapters. There is no planned logging/logrus module; foreign backends do not inherit logging.New's redaction or limits.
+
+D43.5 uses the same clock at start and end: now().Sub(start). Production passes time.Now, preserving monotonic duration semantics; private fake-clock tests verify an exact7s advance and unchanged no-measurement paths.

@@ -205,3 +205,115 @@ Final working-tree observation: 175 staged deletions of historical module eviden
 and an unstaged .gitignore change appeared after the initial clean preflight.
 They are external to this task and were neither modified nor restored. New wave-0
 evidence is retained locally under release-evidence/wave0 (currently ignored).
+
+## Evidencias D43/D44
+
+Initial branch feature/split, HEAD93b8e86f3b59119a4e91bed5cd313ef2cdbe3fa3; git status --porcelain empty. Go1.27.4 darwin/arm64. D43.1–D43.5 and D44 are approved by architect and user, superseding concrete tool dependencies, the logging clock and the planned Logrus bridge. No existing changes are mixed into this task.
+
+C1 confirmed: resilience imports three concrete tools in source/tests; circuitbreaker exposes only generic Execute; root pkg/engine/config_modular_test.go imports unreleased config modules under configcomparison and calls private newDecoder; docs/ ignores four files retained locally and present in origin/master (4f3d3e9); client/logging mixes injected now with time.Since. No new code may import legacy production code except the explicitly nonpublished config comparison harness. No production legacy source is changed.
+
+Increment results, commands, platforms, mutation tests, move map and hashes are recorded below. No commit, push, tags, version/track approvals or release workflow dispatch.
+
+
+### D43/D44 incremental results
+
+| Step | Result | Evidence |
+|---|---|---|
+| C1 | clean preflight; all six findings confirmed | initial state above |
+| C2 | single-clock fake7s regression passes; four master documents restored byte-for-byte | c2-clock.log, restored-master.sha256, docs-status.txt |
+| C3 | Run/Execute share one D37 core; original circuitbreaker assertions untouched | c3-run.log, circuitbreaker/race-*.log |
+| C4 | resilience depends only on client/retry; local foreign implementations plus real-tool harness pass | c4-interfaces.log, c4-real-harness.log, c4-consumers.log, test-move-map.md |
+| C5 | config comparison uses public RawConfig.Decode outside root; root tidy unchanged; tagged-source guard enforced | c5-comparison.log, harnesses.log, root-tidy-final.log, c5-source-policy.log |
+| C6 | slog standard documented; Logrus catalog and graph bans enforced | policy-final.log, policy-final/d44-*.log |
+| C7 | full macOS regression and scoped Linux verification pass | make-all.log, make-test.log, make-check-module.log, linux-arm64/execution.log |
+
+Resilience integration moved every original Test/Fuzz/Benchmark function (28 total) and its one checked-in fuzz corpus file. The per-function location table is versioned in resilience/RELEASE_NOTES.md; integration/README.md maps files. No original case is discarded. Namespace/import changes and concrete Stats/Allow observations are confined to the harness. D43 deliberately changes local rejection identity: affected assertions now require errors.Is for BOTH ErrRejected and the original ErrOpen/ErrProbeLimit, while operation error identity assertions remain strict. The composed consumer changes only that rejection assertion and gains compile-time interface assignments. Minimal loses stale concrete-tool go.mod requires/replaces and its graph-description message changes; it now selects three library modules, not six.
+
+Config comparison retains both original TestModularConfig functions and BenchmarkConfigDecoderComparison. Private newDecoder is replaced by exported engine.NewRawConfig(...).Decode; no new engine export or legacy production change. The public decoder includes metadata validation, so the benchmark now explicitly compares public APIs rather than claiming identical private-decoder overhead. No configcomparison build tag or workspace is needed. Existing check-config-engine/bench-config-engine hooks delegate to this harness with GOWORK=off; check-config-engine passes.
+
+The generic source-policy helper is stdlib Go (Go was already a repository prerequisite), reads catalog data and parses Go imports irrespective of build tags. It skips nested modules as separate boundaries and does not mistake comments/string literals for imports. No module inventory is duplicated. The root catalog dep `.` resolves to its actual module path. Basic harness dependency checks do not require production fuzz targets. No Makefile or workflow change was needed for the two harnesses.
+
+### D43/D44 executed commands and scope
+
+Toolchain Go1.27.4. macOS ARM64 with system Bash3.2 and existing golangci-lint2.14.0. PATH uses /private/tmp/go-engine-toolchain/go/bin and /private/tmp/resilience-tools/bin; GOCACHE=/private/tmp/go-engine-build-cache, GOMODCACHE=/Users/seven/go/pkg/mod, GOPROXY=off. No dependency/directive/version/track of an existing module is upgraded; resilience's declared dependencies are intentionally reduced.
+
+```sh
+scripts/modules.sh validate
+scripts/modules.sh lint-lists
+WAVE0_RESULTS_DIR="$PWD/release-evidence/d43-d44/policy-final" scripts/test-modules.sh decisions
+WAVE0_RESULTS_DIR="$PWD/release-evidence/d43-d44/unit" scripts/test-modules.sh unit
+# For each affected module: circuitbreaker, resilience, client/logging, logging
+make check-module M=<dir> MODE=deps
+make check-module M=<dir> MODE=consumers
+make check-module M=<dir> MODE=quick
+# Stress/bench for circuitbreaker, resilience and resilience/integration:
+# <PREFIX>_RESULTS_DIR=... scripts/check-module.sh <dir> stress
+# <PREFIX>_BENCH_TIME=100ms ... scripts/check-module.sh <dir> bench
+(cd resilience/integration && GOWORK=off go test -race -count=20 ./...)
+(cd harness/config-engine-comparison && GOWORK=off go test -race -count=20 ./...)
+(cd harness/config-engine-comparison && GOWORK=off go test -run '^$' -bench . -benchtime=100ms -benchmem ./...)
+GOWORK=off GOFLAGS=-mod=mod go mod tidy
+make check-config-engine
+make all
+make test
+```
+
+All above pass. Generic quick is race count20/default GOMAXPROCS/1/4 plus vet for all four affected modules. Stress is count3; benchmark duration100ms/count3, no race. Real-tool harness stress retains its original32,000-call fixture and other lifecycle/retention cases; the interface-only module adds12,000 calls through foreign implementations. Additional fuzz campaigns ran2s per target in both resilience and its real harness, preserving the original seeds/model as well as testing the new interface boundary. These are short correction campaigns, not new performance/SLA qualifications. make all covers all18 actual standalone modules; standalone-coverage.txt verifies exact set equality against catalog-derived consumers, including the config/viper override. Their frameworks/SDK graphs remain bounded by their declared catalog contracts.
+
+Root GOWORK=off tidy was run twice. go.mod and go.sum are byte-identical to initial HEAD93b8e86, not merely semantically unchanged. The only pkg/ change is removal of the test moved to the comparison harness. No legacy production code, family, preset, release workflow, version track, tag or index entry is modified.
+
+Linux ARM64 verification used the existing local image e432b43af23a, four CPUs/4GiB, network disabled and source mounted read-only. The existing Go1.27.4 archive was injected into tmpfs; only result output was writable. Linux ran catalog/source/list rules, deps/consumers/quick (race20/default/1/4 + vet) for all four modules, real resilience harness race count20 and real harness stress count1. The config/engine harness, root tidy, root full regression/lint, policy mutation snapshots, benchmarks and short fuzz campaigns ran on macOS only; they are not attributed to Linux. No AMD64 validation is claimed.
+
+The two requested policy mutations are performed only in a disposable current-tree snapshot: a coordinated root test importing config behind a build tag fails for the tagged source import; a client unreleased row declaring Logrus fails for that dependency. An additional graph mutation independently fails when Logrus is selected even without a corresponding direct import. Each case checks the intended diagnostic, not just a nonzero exit. An initial graph test failed too early on a missing offline transitive module; it was not accepted. The final fixture pins the already-resolved root x/sys version in the disposable copy and passes the intended graph-ban assertion. Nothing is added to the real module or cache to fake a published version.
+
+An initial make all run correctly caught obsolete concrete-tool requirements in resilience's minimal consumer after the dependency reduction. Those stale requires/replaces and its six-module informational description were corrected; the final make all and explicit make test pass. No failure is silently treated as success.
+
+### Restored documents and newly visible local files
+
+.gitignore now ignores only /docs/modularization/ and /docs/modularization.md instead of all docs/. These four files match origin/master4f3d3e9 byte-for-byte: docs/adr/0001-core-provider-decoupling.md, docs/migration-engine.md, docs/plan-auditoria-2026-08.md, docs/plan-mejoras-go-engine.md. They were restored to the working tree from git object contents without staging. Their contents are not edited. The local modularization plan/answers were updated under the remaining ignore rules to record D43/D44 and remove logging/logrus as a target.
+
+The following35 pre-existing local files become visible because the broad ignore was removed. They are NOT part of this task's additions, have not been staged/added or modified, and are left for the user's decision:
+
+```text
+docs/modules/concurrency-candidate.sha256
+docs/modules/concurrency-evidence/SHA256SUMS
+docs/modules/concurrency-evidence/execution-context.txt
+docs/modules/concurrency-production.md
+docs/modules/concurrency-release-fixture/composed-download.json
+docs/modules/concurrency-release-fixture/composed.go.mod
+docs/modules/concurrency-release-fixture/composed.go.sum
+docs/modules/concurrency-release-fixture/harness/reject-corrupt-artifact/minimal-download.json
+docs/modules/concurrency-release-fixture/harness/valid/composed-download.json
+docs/modules/concurrency-release-fixture/harness/valid/composed.go.mod
+docs/modules/concurrency-release-fixture/harness/valid/composed.go.sum
+docs/modules/concurrency-release-fixture/harness/valid/minimal-download.json
+docs/modules/concurrency-release-fixture/harness/valid/minimal.go.mod
+docs/modules/concurrency-release-fixture/harness/valid/minimal.go.sum
+docs/modules/concurrency-release-fixture/minimal-download.json
+docs/modules/concurrency-release-fixture/minimal.go.mod
+docs/modules/concurrency-release-fixture/minimal.go.sum
+docs/modules/concurrency-release-readiness.md
+docs/modules/concurrency-validation.md
+docs/modules/concurrency.md
+docs/modules/config-candidate.sha256
+docs/modules/config-evidence/SHA256SUMS
+docs/modules/config-evidence/execution-context.txt
+docs/modules/config-revised-candidate.sha256
+docs/modules/config-revised-evidence/SHA256SUMS
+docs/modules/config-revised-evidence/core/package-module-footprint.txt
+docs/modules/config-revised-evidence/execution-context.txt
+docs/modules/config-revised-evidence/mapstructure-compose-doc.txt
+docs/modules/config-revised-evidence/mapstructure-options-doc.txt
+docs/modules/config-revised-evidence/mapstructure-value-hook-doc.txt
+docs/modules/config-revised-evidence/viper/package-module-footprint.txt
+docs/modules/config-revised-validation.md
+docs/modules/config-validation.md
+docs/modules/config-viper-candidate.sha256
+docs/modules/config.md
+```
+
+### D43/D44 artifacts and remaining gates
+
+Source hashes: release-evidence/d43-d44/SOURCE.sha256, relative to repository root. Evidence hashes: release-evidence/d43-d44/SHA256SUMS, relative to that evidence directory. Deleted-path list and exact restored-master hashes are alongside the logs. These ignored logs are local artifacts; this versioned report and module release notes preserve the approved decisions, commands, scopes, move map and limitations. Earlier module candidate hash manifests describe their earlier snapshots; this correction has its own manifest.
+
+All requested implementation and applicable local checks are complete. No task-specific blocker remains. Existing version approval/publication/gorelease/tag-consumer gates are not claimed or changed by these corrections. No commit, push, tag creation or release workflow execution.

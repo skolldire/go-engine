@@ -107,3 +107,13 @@ External gorelease command: copy logging/*.go, go.mod and testdata to a temporar
 - Built-in fields remain untouched, including duplicate same-named user attrs. Message/opaque text is not secret-scanned. Redaction is not universal DLP; limits do not bound user callbacks or entire records.
 
 Versionable source manifest: logging/SOURCES.sha256 (verify from root with shasum -a256 -c logging/SOURCES.sha256). Local ignored logs: logging/evidence/{darwin-arm64,linux-arm64}; evidence SHA256SUMS is relative to logging/evidence. These local logs do not ship as versioned deliverables; this document preserves the commands, results, limitations and acceptance status.
+
+## D44 approved correction
+
+Slog is the library's interface/backend reference. No new unreleased/independent module may declare Logrus or resolve it in its module graph. Backends belong to the application. logging/logrus and a separate AdaptLegacy module are removed from the target plan; any necessary wave7 adapter stays temporarily inside legacy pkg/utilities/logger and is deleted with it. logging.New production code is unchanged. README's Elegir backend section distinguishes native handlers, our redaction/limits and illustrative application-owned Logrus/zap/OTel integrations, which do not inherit those protections. D43/D44 validation, mutation evidence and hashes are recorded in root RELEASING.md.
+
+### Final D43/D44 validation
+
+Go1.27.4 macOS ARM64 and Linux ARM64: deps, consumers, quick/race count20 at default/1/4 and vet pass. macOS make all, make test, both isolated harnesses and18 standalone modules pass. Circuitbreaker/resilience/real harness stress3 and100ms/count3 benchmarks pass on macOS; real resilience harness race20/stress1 also passes on Linux. Root manifests stay byte-identical after GOWORK=off tidy. Policy snapshots reject tagged coordinated-to-unreleased imports and Logrus declarations/graphs for their intended reasons. Scope/details, commands and hashes: root RELEASING.md, Evidencias D43/D44; local logs release-evidence/d43-d44. No versions/tracks/tags/commits/publication are approved or created.
+
+Production Go files plus go.mod fingerprint (sorted root-relative path + NUL + bytes + NUL, concatenated, SHA256): 905a7b2362b9a27761ebf509d55af4397a6607072763f97995c462141ad7fcb1. logging factory production code is unchanged by D44; this fingerprint records the correction snapshot, not published compatibility. Earlier source manifests remain historical snapshots.

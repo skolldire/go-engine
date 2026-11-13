@@ -4,18 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
-	"github.com/skolldire/go-engine/circuitbreaker"
 	"github.com/skolldire/go-engine/client"
-	"github.com/skolldire/go-engine/concurrency"
-	"github.com/skolldire/go-engine/ratelimit"
 	"github.com/skolldire/go-engine/retry"
 )
 
 const OrderRetryThenBreaker = "retry_then_breaker"
 
 var (
+	ErrRejected         = errors.New("resilience breaker rejected call")
 	ErrInvalidConfig    = errors.New("invalid resilience configuration")
 	ErrInvalidCall      = errors.New("invalid resilience call")
 	ErrAdmission        = errors.New("resilience admission failed")
@@ -38,11 +37,20 @@ type Config struct {
 	Weight           int64
 	Tokens           int
 }
+type RateLimiter interface {
+	Wait(context.Context, int) error
+}
+type Limiter interface {
+	Acquire(context.Context, int64) (func(), error)
+}
+type Breaker interface {
+	Run(context.Context, func(context.Context) error) error
+}
 type Dependencies struct {
 	Classify    retry.Classifier
-	Breaker     *circuitbreaker.Breaker
-	Limiter     *concurrency.Limiter
-	RateLimiter *ratelimit.Limiter
+	Breaker     Breaker
+	Limiter     Limiter
+	RateLimiter RateLimiter
 }
 
 func DefaultConfig() Config {
@@ -85,21 +93,27 @@ func Wrap[T any](operation client.Operation[T], cfg Config, deps Dependencies) (
 		return nil, err
 	}
 	switch {
+	case nilPointer(deps.Breaker):
+		return nil, &ConfigError{"Breaker", "must not be a nil pointer"}
 	case deps.Breaker != nil && cfg.Order == "":
 		return nil, &ConfigError{"Order", "required with Breaker"}
 	case cfg.Retry.MaxRetries > 0 && deps.Classify == nil:
 		return nil, &ConfigError{"Classify", "required when retries enabled"}
+	case nilPointer(deps.Limiter):
+		return nil, &ConfigError{"Limiter", "must not be a nil pointer"}
 	case deps.Limiter != nil && cfg.Weight == 0:
 		return nil, &ConfigError{"Weight", "must be positive with Limiter"}
 	case deps.Limiter == nil && cfg.Weight != 0:
 		return nil, &ConfigError{"Weight", "requires Limiter"}
+	case nilPointer(deps.RateLimiter):
+		return nil, &ConfigError{"RateLimiter", "must not be a nil pointer"}
 	case deps.RateLimiter != nil && cfg.Tokens == 0:
 		return nil, &ConfigError{"Tokens", "must be positive with RateLimiter"}
 	case deps.RateLimiter == nil && cfg.Tokens != 0:
 		return nil, &ConfigError{"Tokens", "requires RateLimiter"}
 	}
 	classify := func(err error) retry.Decision {
-		if errors.Is(err, ErrAdmission) || errors.Is(err, circuitbreaker.ErrOpen) || errors.Is(err, circuitbreaker.ErrProbeLimit) || deps.Classify == nil {
+		if errors.Is(err, ErrAdmission) || errors.Is(err, ErrRejected) || deps.Classify == nil {
 			return retry.DecisionStop
 		}
 		return deps.Classify(err)
@@ -122,7 +136,18 @@ func Wrap[T any](operation client.Operation[T], cfg Config, deps Dependencies) (
 			defer release()
 		}
 		if deps.Breaker != nil {
-			return circuitbreaker.Execute(ctx, deps.Breaker, ioCall)
+			var value T
+			entered := false
+			err := deps.Breaker.Run(ctx, func(attemptContext context.Context) error {
+				entered = true
+				var err error
+				value, err = ioCall(attemptContext)
+				return err
+			})
+			if err != nil && !entered {
+				return value, errors.Join(ErrRejected, err)
+			}
+			return value, err
 		}
 		return ioCall(ctx)
 	}
@@ -200,4 +225,9 @@ func settleBudget(err error, ctx, parent context.Context, duration time.Duration
 		return
 	}
 	<-ctx.Done()
+}
+
+func nilPointer(value any) bool {
+	reflected := reflect.ValueOf(value)
+	return reflected.Kind() == reflect.Pointer && reflected.IsNil()
 }

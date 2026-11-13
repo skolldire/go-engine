@@ -85,3 +85,13 @@ Additional make check-modules failed under its existing shared-version rule: v0.
 Closed has no concurrency limit. HalfOpenMax is a current-generation limit, not a global connection/bulkhead guarantee. Noncooperative old operations can remain active after transitions. HalfOpen can remain indefinitely with only Ignored/abnormal results. No automatic timeout, cancellation, replay safety or classifier is provided. Callers own callback concurrency, classification, resource cleanup and retry budgets. Shared names do not share state. No distributed coordination or persistence.
 
 Candidate circuitbreaker/v0.1.0 is functionally validated, not published or declared stable. E6/E7 remain explicit distribution work. No staging, commit, push or tags performed.
+
+## D43.2 approved correction
+
+Additive Run(ctx,fn) error shares a private execution core with Execute[T]; no second state machine. Existing tests/assertions remain unchanged. New equivalence tests cover normal/ignored/failure, Open/ProbeLimit, operation/classifier panic and Goexit, cancellation/causes and nil validation. Dependency remains stdlib. Final D43/D44 commands/results are in root RELEASING.md and release-evidence/d43-d44; distribution gates remain pending as before.
+
+### Final D43/D44 validation
+
+Go1.27.4 macOS ARM64 and Linux ARM64: deps, consumers, quick/race count20 at default/1/4 and vet pass. macOS make all, make test, both isolated harnesses and18 standalone modules pass. Circuitbreaker/resilience/real harness stress3 and100ms/count3 benchmarks pass on macOS; real resilience harness race20/stress1 also passes on Linux. Root manifests stay byte-identical after GOWORK=off tidy. Policy snapshots reject tagged coordinated-to-unreleased imports and Logrus declarations/graphs for their intended reasons. Scope/details, commands and hashes: root RELEASING.md, Evidencias D43/D44; local logs release-evidence/d43-d44. No versions/tracks/tags/commits/publication are approved or created.
+
+Production Go files plus go.mod fingerprint (sorted root-relative path + NUL + bytes + NUL, concatenated, SHA256): 388bf85d1c128e7b3659d7fbcf63faf014fccf56e3c77b3f977281dbab13ba55. logging factory production code is unchanged by D44; this fingerprint records the correction snapshot, not published compatibility. Earlier source manifests remain historical snapshots.

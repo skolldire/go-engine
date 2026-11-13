@@ -11,6 +11,7 @@ use (
 	./retry
 	./ratelimit
 	./resilience
+	./resilience/integration
 	./config
 	./config/viper
 	./concurrency
@@ -21,6 +22,7 @@ use (
 	./database/sqlc
 	./example
 	./http
+	./harness/config-engine-comparison
 	./messaging
 	./preset/full
 )

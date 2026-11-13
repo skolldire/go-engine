@@ -4,7 +4,7 @@ Explicit typed composition for I/O. D39/D39.1–D39.5 approved; D32 ordering con
 
 **total budget → retry → rate admission → concurrency admission → circuitbreaker → attempt timeout → I/O**.
 
-No SDKs, registry, observers, logger, background workers, recover or reimplementation of the tools. Dependencies: stdlib and client/retry/ratelimit/concurrency/circuitbreaker. Base modules remain independent. Even a minimal consumer resolves this declared module graph; it is not stdlib-only.
+No SDKs, registry, observers, logger, background workers, recover or reimplementation of the tools. Dependencies after approved D43.1: stdlib, client and retry only, including tests. Base modules remain independent. Even a minimal consumer resolves this declared module graph; it is not stdlib-only.
 
 ## API
 
@@ -19,11 +19,14 @@ type Config struct {
     Weight int64
     Tokens int
 }
+type RateLimiter interface { Wait(context.Context, int) error }
+type Limiter interface { Acquire(context.Context, int64) (func(), error) }
+type Breaker interface { Run(context.Context, func(context.Context) error) error }
 type Dependencies struct {
     Classify retry.Classifier
-    Breaker *circuitbreaker.Breaker
-    Limiter *concurrency.Limiter
-    RateLimiter *ratelimit.Limiter
+    Breaker Breaker
+    Limiter Limiter
+    RateLimiter RateLimiter
 }
 type ConfigError struct { Field, Reason string }
 func DefaultConfig() Config
@@ -52,7 +55,7 @@ Sentinels: ErrInvalidConfig, ErrInvalidCall, ErrAdmission, ErrAdmissionTimeout, 
 
 Wait/Acquire failures add ErrAdmission and a fixed stage name (ratelimit/concurrency), preserving their errors and the admission context's cause. In particular, Acquire alone only returns ctx.Err; this layer restores parent/custom/total/admission causes. These local failures never enter breaker classification. Oversized Weight (concurrency.ErrJobTooLarge) and Tokens (ratelimit.ErrInvalidCall) are application configuration errors detected at runtime: Wrap cannot inspect private capacities. Both preserve causes and Stop.
 
-ErrAdmission, circuitbreaker.ErrOpen and ErrProbeLimit always Stop before the caller classifier; it never sees those categories. HalfOpen probe saturation therefore fails immediately rather than backing off/retrying locally. No universal SDK/context classifier or implicit attempt-timeout retry. Caller owns Stop/Retry/Reconcile, replay safety and SDK retry settings. Unknown publication/commit outcomes must reconcile, not blind retry.
+ErrAdmission and ErrRejected always Stop before the caller classifier; it never sees those categories. HalfOpen probe saturation therefore fails immediately rather than backing off/retrying locally. No universal SDK/context classifier or implicit attempt-timeout retry. Caller owns Stop/Retry/Reconcile, replay safety and SDK retry settings. Unknown publication/commit outcomes must reconcile, not blind retry.
 
 I/O errors are enriched before breaker classification only when they represent the effective ended context. ErrAttemptTimeout is added only if err!=nil, the attempt context's cause is ErrAttemptTimeout and errors.Is(err, context.DeadlineExceeded). Success and independent business errors are untouched. If a parent wins, preserve its cause without local timeout attribution. Total/caller context-error causes are restored in this I/O boundary too: retry.Do returns original errors on Stop/exhaustion/nil classifier, so it cannot add a missing total cause on those paths. Retry normally preserves causes when canceling between attempts/backoff. At an exact timer/deadline boundary it can observe deadline expiry before the local context callback publishes its cause. On context-error paths, resilience settles an already-expired, locally-owned earliest budget via its Done channel, then restores the cause. The final total boundary also handles that case without attributing an earlier admission/attempt timeout to total; no new timer or goroutine is created. Classifier Stop/Reconcile/exhaustion precedence remains D36: an independent business/uncertain error is not rewritten merely because total time expired. All enrichment preserves errors.Is/As and partial values; otherwise error identity stays unchanged. Caller-provided causes may contain sensitive text; preserving them is not redaction.
 
@@ -72,3 +75,25 @@ value, err := wrapped(ctx)
 ```
 
 Root targets: check-resilience and check-resilience-{quick,stress,fuzz,bench}. See MIGRATION and RELEASE_NOTES for executed evidence, dependency graph, release limitations and hash verification. No publication/stability claim.
+
+
+## D43.1 approved interface boundary
+
+RateLimiter, Limiter and Breaker are consumer-side interfaces. Any compatible application implementation may be used. Wrap rejects a typed nil pointer in any of them using reflect only at construction. Nil interfaces mean absent tools; existing Order/Weight/Tokens/Classify validation remains. No concrete tool or error type is inspected during execution.
+
+Run must synchronously complete its callback before returning, call it at most once with the supplied context or a context derived from it, and propagate its panics/Goexit. If it returns an error without entering the callback, resilience joins ErrRejected and the original backend error and forces Stop before the caller classifier. Our breaker errors remain discoverable with errors.Is/As, but local rejection error identity is deliberately no longer the bare backend sentinel. If the callback ran, Run's returned error is forwarded; error identity is preserved when Run forwards the callback error unchanged. A backend that replaces/suppresses that error owns that semantic change. Multiple callback invocation is a contract violation: resilience does not deduplicate it; its result slot reflects the last callback and the backend's returned error. A unit test demonstrates two executions/last result with only one admission release.
+
+Acquire success should return a nonnil release. A nil release is tolerated as no-op. A nonnil release is deferred exactly once on normal/error/rejection/panic/Goexit exits, before retry classification and backoff. Wrapper cancellation does not forcibly stop foreign callbacks. No runtime reflection, concrete type assertions, State prechecks or resource ownership are added.
+
+Retry deliberately remains concrete: it is the composition engine, and its value Config is embedded so the complete policy can be decoded from configuration. This exception does not tie the admission/breaker dependencies to implementations.
+
+| Implementation | Application adaptation | Status |
+|---|---|---|
+| Our ratelimit.Limiter | Direct Wait(ctx,n) | compiled in composed consumer and tested in harness |
+| Our concurrency.Limiter | Direct Acquire(ctx,weight) | compiled in composed consumer and tested in harness |
+| Our circuitbreaker.Breaker | Direct Run(ctx,fn) | compiled in composed consumer and tested in harness |
+| x/time/rate | Wait delegates to WaitN | illustrative, no dependency/version pinned |
+| x/sync/semaphore | Acquire delegates, returns an exactly-once closure calling Release(weight) | illustrative, no dependency/version pinned |
+| gobreaker | Adapt execution to Run and forward callback context/error; return rejection without invoking callback | illustrative, no dependency/version pinned |
+
+The module suite uses only local foreign implementations. All previous concrete-tool tests, stress, fuzz seeds and benchmarks live in resilience/integration with its own go.mod and nonpublished harness catalog row. See that README and RELEASE_NOTES for the move map. No production consumer is required to adapt our tool values; one composed consumer's bare ErrOpen identity assertion changes to errors.Is for the mandated ErrRejected wrapper.

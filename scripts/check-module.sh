@@ -4,6 +4,7 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 dir=${1:?module directory required};mode=${2:-all}
 module=$("$repo/scripts/modules.sh" get "$dir" path)
 deps_column=$("$repo/scripts/modules.sh" get "$dir" deps)
+track=$("$repo/scripts/modules.sh" get "$dir" track)
 name=${dir//\//-}
 export GOWORK=off GOTOOLCHAIN=local GOPROXY=off GOFLAGS=-mod=readonly
 cd "$repo/$dir"
@@ -22,7 +23,7 @@ dep_paths(){
  local item
  [[ "$1" != - && "$1" != stdlib ]] || return 0
  for item in ${1//,/ };do
-  if [[ "${item%%/*}" == *.* ]];then printf '%s\n' "$item";else records | awk -F '\t' -v d="$item" '$1==d{print $2}';fi
+  if [[ "$item" != . && "${item%%/*}" == *.* ]];then printf '%s\n' "$item";else records | awk -F '\t' -v d="$item" '$1==d{print $2}';fi
  done
 }
 # The modules a composed consumer may add: the new tools, never the legacy
@@ -43,6 +44,9 @@ boundary(){
  # 2. Every selected module is reachable from an allowed one, so an undeclared
  # dependency cannot hide in go.mod as // indirect.
  selected=$(go list -m -f '{{.Path}}' all)
+ if [[ "$track" == unreleased || "$track" == independent ]];then
+  if printf '%s\n' "$selected" | grep -Fxq github.com/sirupsen/logrus;then echo "$dir: logrus is prohibited in unreleased/independent module graphs" >&2;return 1;fi
+ fi
  edges=$(go mod graph)
  awk -v own="$own" '
  FILENAME==ARGV[1]{if(NF)reached[$1]=1;next}
@@ -98,7 +102,7 @@ deps(){
  # A declared dep the module no longer requires leaves the catalog stale.
  missing=$(awk -F '\t' 'FILENAME==ARGV[1]{if(NF)want[$1]=1;next} $1=="require"{delete want[$2]} END{for(m in want)print m}' <(printf '%s\n' "$allowed") <(awk -f "$repo/scripts/modules/metadata.awk" go.mod))
  [[ -z "$missing" ]] || { printf 'catalog deps not required by go.mod: %s\n' $missing >&2;return 1; }
- fuzz_inventory
+ if [[ "$("$repo/scripts/modules.sh" get "$dir" checks)" == production ]];then fuzz_inventory;fi
  hook deps
  echo "$dir: dependency boundary passes"
 }

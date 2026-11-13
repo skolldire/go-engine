@@ -88,3 +88,52 @@ D38.4 conflict is closed by D39.2, not left for implementation choice. Whole pol
 Operations/classifiers must cooperate with context and be concurrency-safe if shared. No forced termination, replay safety or SDK policy detection. Caller owns tools/lifecycle and bounded pending call count. Positive total/attempt budgets cancel returned context-tied bodies/streams/cursors: consume inside or use caller context with both zero. Config literals are not defaulted. Local admission/open/probe failures Stop, never reach caller classifier, and may discard a prior remote attempt's partial result because the latest rejected attempt returns zero T.
 
 Candidate resilience/v0.1.0 is functionally validated, not published or declared stable. E5–E7 remain explicit distribution tasks. No staging, commit, push or tags.
+
+## D43.1 approved correction and preservation map
+
+The module now imports/requires only client and retry. RateLimiter.Wait, Limiter.Acquire and Breaker.Run are consumer-side interfaces. Wrap rejects typed nil pointers with reflect only during construction. Release nil is no-op; nonnil release runs once. Local rejection before callback entry joins ErrRejected with the backend error and Stops before caller classification. Operation errors/partial values remain intact when Run forwards its callback error. A foreign Run must complete the callback synchronously, at most once, with a supplied/derived context and unchanged panic propagation. A new test explicitly demonstrates two callbacks as an observable contract violation, not silently corrected. Retry remains concrete so Config fully represents the retry policy.
+
+New independent tests use only local foreign implementations; original real-tool tests move unchanged in intent to a nonpublished harness. No original test/fuzz/benchmark function is lost. Namespace/import adaptations and real-value Stats/Allow assertions are confined to the harness. Exactly the local-rejection assertions change from bare ErrOpen/ProbeLimit equality to errors.Is on both original error and new ErrRejected, including the fuzz model's expected signal. Original operation-error identity assertions remain strict.
+
+The composed consumer's same rejection assertion is corrected for the mandated wrapper and gains compile-time interface assignments. Its tool construction is unchanged. Minimal's unused tool require/replace entries are removed and its informational graph description corrected; it now selects resilience/client/retry, not six library modules.
+
+| Original function | New location |
+|---|---|
+| BenchmarkDirect | resilience/integration/benchmark_test.go |
+| BenchmarkWrapExecution | resilience/integration/benchmark_test.go |
+| BenchmarkConstruction | resilience/integration/benchmark_test.go |
+| BenchmarkBudgets | resilience/integration/benchmark_test.go |
+| BenchmarkRejections | resilience/integration/benchmark_test.go |
+| BenchmarkRetry | resilience/integration/benchmark_test.go |
+| BenchmarkConcurrent | resilience/integration/benchmark_test.go |
+| BenchmarkBoundarySuccess | resilience/integration/benchmark_test.go |
+| TestMemoryTransportRecovery | resilience/integration/integration_test.go |
+| TestNoGoroutineLeaks | resilience/integration/qualification_test.go |
+| TestStressSharedTools | resilience/integration/qualification_test.go |
+| TestStressBudgetsAndAbnormalExit | resilience/integration/qualification_test.go |
+| TestStressReleasedClosures | resilience/integration/qualification_test.go |
+| FuzzConfig | resilience/integration/qualification_test.go |
+| FuzzSequences | resilience/integration/qualification_test.go |
+| FuzzBudgets | resilience/integration/qualification_test.go |
+| TestConfigurationAndValidation | resilience/integration/resilience_test.go |
+| TestPureCaptureAndCombinations | resilience/integration/resilience_test.go |
+| TestContextValuesErrorsAndRetry | resilience/integration/resilience_test.go |
+| TestOrderAndPermitBeforeRetryClassification | resilience/integration/resilience_test.go |
+| TestAdmissionBeforeProbeAndAttemptClock | resilience/integration/resilience_test.go |
+| TestAdmissionJointBudgetAndPermanentErrors | resilience/integration/resilience_test.go |
+| TestBudgetsCausesAndErrorPrecedence | resilience/integration/resilience_test.go |
+| TestAdmissionParentCauseAndContextOwnership | resilience/integration/resilience_test.go |
+| TestLocalStopsAndBreakerPerAttempt | resilience/integration/resilience_test.go |
+| TestAbnormalReleaseAndNonCooperation | resilience/integration/resilience_test.go |
+| TestReusableConcurrentWrapper | resilience/integration/resilience_test.go |
+| TestAttemptEnrichmentBoundary | resilience/integration/resilience_test.go |
+
+Original fuzz corpus retained byte-for-byte: resilience/integration/testdata/fuzz/FuzzSequences/0db7db71e7942ff1.
+
+Validation commands/platforms/hashes and the remaining distribution gates are recorded in root RELEASING.md, Evidencias D43/D44. No version/track approval, commit, push or tags.
+
+### Final D43/D44 validation
+
+Go1.27.4 macOS ARM64 and Linux ARM64: deps, consumers, quick/race count20 at default/1/4 and vet pass. macOS make all, make test, both isolated harnesses and18 standalone modules pass. Circuitbreaker/resilience/real harness stress3 and100ms/count3 benchmarks pass on macOS; real resilience harness race20/stress1 also passes on Linux. Root manifests stay byte-identical after GOWORK=off tidy. Policy snapshots reject tagged coordinated-to-unreleased imports and Logrus declarations/graphs for their intended reasons. Scope/details, commands and hashes: root RELEASING.md, Evidencias D43/D44; local logs release-evidence/d43-d44. No versions/tracks/tags/commits/publication are approved or created.
+
+Production Go files plus go.mod fingerprint (sorted root-relative path + NUL + bytes + NUL, concatenated, SHA256): fd8446b4cc81c6fba218236a64ac8ed6d57a9f49517c6dee402fe03edc9b84f6. logging factory production code is unchanged by D44; this fingerprint records the correction snapshot, not published compatibility. Earlier source manifests remain historical snapshots.

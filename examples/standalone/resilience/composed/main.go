@@ -104,7 +104,7 @@ func run() error {
 		case "open":
 			spent = 2
 			expected = []string{"logical.before", "io", "breaker.classify", "retry.classify", "logical.after"}
-			if calls != 1 || value != "" || err != circuitbreaker.ErrOpen || callerClassified != 1 {
+			if calls != 1 || value != "" || (!errors.Is(err, circuitbreaker.ErrOpen) || !errors.Is(err, resilience.ErrRejected)) || callerClassified != 1 {
 				return errors.New("local rejection retried")
 			}
 		case "uncertain":

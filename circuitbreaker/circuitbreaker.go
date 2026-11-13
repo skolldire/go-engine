@@ -110,9 +110,30 @@ func Execute[T any](ctx context.Context, b *Breaker, operation func(context.Cont
 	if operation == nil {
 		return zero, fmt.Errorf("operation: %w", ErrInvalidCall)
 	}
+	var value T
+	err := b.run(ctx, func(ctx context.Context) error {
+		var err error
+		value, err = operation(ctx)
+		return err
+	})
+	return value, err
+}
+func (b *Breaker) Run(ctx context.Context, fn func(context.Context) error) error {
+	if ctx == nil {
+		return fmt.Errorf("ctx: %w", ErrInvalidCall)
+	}
+	if b == nil {
+		return fmt.Errorf("breaker: %w", ErrInvalidCall)
+	}
+	if fn == nil {
+		return fmt.Errorf("fn: %w", ErrInvalidCall)
+	}
+	return b.run(ctx, fn)
+}
+func (b *Breaker) run(ctx context.Context, fn func(context.Context) error) error {
 	g, err := b.admit(ctx)
 	if err != nil {
-		return zero, err
+		return err
 	}
 	finished := false
 	result := abnormal
@@ -122,7 +143,7 @@ func Execute[T any](ctx context.Context, b *Breaker, operation func(context.Cont
 		}
 		b.finish(g, result)
 	}()
-	value, err := operation(ctx)
+	err = fn(ctx)
 	result = success
 	if err != nil {
 		result = ignored
@@ -131,7 +152,7 @@ func Execute[T any](ctx context.Context, b *Breaker, operation func(context.Cont
 		}
 	}
 	finished = true
-	return value, err
+	return err
 }
 func (b *Breaker) State() State { return b.Stats().State }
 func (b *Breaker) Stats() Counts {

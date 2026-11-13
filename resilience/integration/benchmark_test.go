@@ -1,4 +1,4 @@
-package resilience
+package integration
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/skolldire/go-engine/resilience"
 
 	"github.com/skolldire/go-engine/circuitbreaker"
 	"github.com/skolldire/go-engine/concurrency"
@@ -23,10 +25,10 @@ func BenchmarkDirect(b *testing.B) {
 		benchmarkValue, benchmarkError = op(context.Background())
 	}
 }
-func benchDependencies(b *testing.B, mask int) (Config, Dependencies) {
+func benchDependencies(b *testing.B, mask int) (resilience.Config, resilience.Dependencies) {
 	b.Helper()
-	cfg := DefaultConfig()
-	deps := Dependencies{}
+	cfg := resilience.DefaultConfig()
+	deps := resilience.Dependencies{}
 	var err error
 	if mask&1 != 0 {
 		cfg.Weight = 1
@@ -60,7 +62,7 @@ func BenchmarkWrapExecution(b *testing.B) {
 	}{{"none", 0}, {"concurrency", 1}, {"ratelimit", 2}, {"breaker", 4}, {"all", 7}} {
 		b.Run(tc.name, func(b *testing.B) {
 			cfg, deps := benchDependencies(b, tc.mask)
-			fn, err := Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
+			fn, err := resilience.Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -76,7 +78,7 @@ func BenchmarkConstruction(b *testing.B) {
 	op := func(context.Context) (int, error) { return 42, nil }
 	b.ReportAllocs()
 	for b.Loop() {
-		fn, err := Wrap(op, cfg, deps)
+		fn, err := resilience.Wrap(op, cfg, deps)
 		if err != nil || fn == nil {
 			b.Fatal(err)
 		}
@@ -92,7 +94,7 @@ func BenchmarkBudgets(b *testing.B) {
 			cfg.TotalTimeout = tc.total
 			cfg.AttemptTimeout = tc.attempt
 			cfg.AdmissionTimeout = tc.admission
-			fn, err := Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
+			fn, err := resilience.Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -122,9 +124,9 @@ func BenchmarkRejections(b *testing.B) {
 					c.OpenTimeout = time.Hour
 					return c
 				}(), circuitbreaker.Dependencies{Classify: func(error) bool { return true }})
-				circuitbreaker.Execute(context.Background(), deps.Breaker, func(context.Context) (int, error) { return 0, errors.New("remote") })
+				circuitbreaker.Execute(context.Background(), deps.Breaker.(*circuitbreaker.Breaker), func(context.Context) (int, error) { return 0, errors.New("remote") })
 			}
-			fn, err := Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
+			fn, err := resilience.Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -140,13 +142,13 @@ func BenchmarkRetry(b *testing.B) {
 	cfg.Retry.MaxRetries = 2
 	original := errors.New("transient")
 	calls := 0
-	fn, err := Wrap(func(context.Context) (int, error) {
+	fn, err := resilience.Wrap(func(context.Context) (int, error) {
 		calls++
 		if calls < 3 {
 			return 0, original
 		}
 		return 42, nil
-	}, cfg, Dependencies{Classify: func(error) retry.Decision { return retry.DecisionRetry }})
+	}, cfg, resilience.Dependencies{Classify: func(error) retry.Decision { return retry.DecisionRetry }})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -158,7 +160,7 @@ func BenchmarkRetry(b *testing.B) {
 }
 func BenchmarkConcurrent(b *testing.B) {
 	cfg, deps := benchDependencies(b, 7)
-	fn, err := Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
+	fn, err := resilience.Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, deps)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -174,7 +176,7 @@ func BenchmarkConcurrent(b *testing.B) {
 }
 
 func BenchmarkBoundarySuccess(b *testing.B) {
-	cfg := DefaultConfig()
+	cfg := resilience.DefaultConfig()
 	cfg.Retry.MaxRetries = 3
 	c := circuitbreaker.DefaultConfig()
 	c.Name = "bench"
@@ -182,7 +184,7 @@ func BenchmarkBoundarySuccess(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	fn, err := Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, Dependencies{Breaker: breaker, Classify: retryAll})
+	fn, err := resilience.Wrap(func(context.Context) (int, error) { return 42, nil }, cfg, resilience.Dependencies{Breaker: breaker, Classify: retryAll})
 	if err != nil {
 		b.Fatal(err)
 	}

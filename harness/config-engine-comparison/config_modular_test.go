@@ -1,6 +1,4 @@
-//go:build configcomparison
-
-package engine
+package comparison
 
 import (
 	"context"
@@ -9,6 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/skolldire/go-engine/pkg/engine"
 
 	c "github.com/skolldire/go-engine/config"
 	envsource "github.com/skolldire/go-engine/config/env"
@@ -33,11 +33,7 @@ func comparisonLegacy(t testing.TB, body string, target *comparisonConfig) error
 	if err := source.ReadConfig(strings.NewReader(body)); err != nil {
 		return err
 	}
-	decoder, err := newDecoder(target)
-	if err != nil {
-		return err
-	}
-	return decoder.Decode(source.AllSettings())
+	return engine.NewRawConfig("comparison", source.AllSettings()).Decode(target)
 }
 func comparisonSnapshot(t testing.TB, body string, lookup func(string) (string, bool)) *c.Snapshot {
 	t.Helper()
@@ -131,11 +127,7 @@ func BenchmarkConfigDecoderComparison(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			target := comparisonConfig{Optional: 42}
-			decoder, err := newDecoder(&target)
-			if err != nil {
-				b.Fatal(err)
-			}
-			if err := decoder.Decode(data); err != nil {
+			if err := engine.NewRawConfig("comparison", data).Decode(&target); err != nil {
 				b.Fatal(err)
 			}
 		}

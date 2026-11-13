@@ -10,9 +10,16 @@ trap 'rm -rf "$workspace"' EXIT
 snapshot() { 
  mkdir -p "$1"
  git -C "$repo" archive HEAD | tar -x -C "$1"
- cp "$repo/modules.tsv" "$repo/Makefile" "$repo/go.work" "$1/"
- cp -R "$repo/scripts/." "$1/scripts/"
- cp -R "$repo/.github/workflows/." "$1/.github/workflows/"
+ local file
+ while IFS= read -r -d '' file;do
+  case "$file" in *' 2'*)continue;;esac
+  if [[ -f "$repo/$file" || -L "$repo/$file" ]];then
+   mkdir -p "$1/$(dirname "$file")"
+   cp -P "$repo/$file" "$1/$file"
+  else
+   rm -f "$1/$file"
+  fi
+ done < <(git -C "$repo" diff --name-only -z HEAD;git -C "$repo" ls-files --others --exclude-standard -z)
 }
 old_run() { 
  local root=$1 dir=$2 mode=$3 family=$2 oldmode
@@ -25,6 +32,28 @@ old_run() {
 new_run() { (cd "$1" && bash scripts/check-module.sh "$2" "$3");}
 expect_fail() { local label=$1;shift;if "$@" > "$results/$label.log" 2>&1;then echo "FAIL: $label unexpectedly passed" >&2;return 1;fi;echo "PASS rejection $label";}
 case "$mode" in
+ decisions)
+ snapshot "$workspace/repo";cd "$workspace/repo"
+ ./scripts/modules.sh validate
+ cp modules.tsv "$workspace/catalog"
+ printf '//go:build d43mutant\n\npackage engine\nimport _ "github.com/skolldire/go-engine/config"\n' > pkg/engine/zz_d43_mutant_test.go
+ expect_fail d43-tagged-unreleased ./scripts/modules.sh validate
+ grep -q 'coordinated . imports unreleased config' "$results/d43-tagged-unreleased.log"
+ rm pkg/engine/zz_d43_mutant_test.go
+ awk -F '\t' -v OFS='\t' '$1=="client"{$7="github.com/sirupsen/logrus"}{print}' "$workspace/catalog" > modules.tsv
+ expect_fail d44-catalog-logrus ./scripts/modules.sh validate
+ grep -q 'logrus is prohibited' "$results/d44-catalog-logrus.log"
+ cp "$workspace/catalog" modules.tsv
+ cp client/go.mod "$workspace/client.mod"
+ cp go.sum client/go.sum
+ logrus=$(awk -f scripts/modules/metadata.awk go.mod | awk -F '\t' '$1=="require" && $2=="github.com/sirupsen/logrus"{print $3}')
+  sys=$(awk -f scripts/modules/metadata.awk go.mod | awk -F '\t' '$1=="require" && $2=="golang.org/x/sys"{print $3}')
+ (cd client && GOWORK=off go mod edit -require="github.com/sirupsen/logrus@$logrus" -require="golang.org/x/sys@$sys")
+ expect_fail d44-graph-logrus ./scripts/check-module.sh client deps
+ grep -q 'logrus is prohibited' "$results/d44-graph-logrus.log"
+ cp "$workspace/client.mod" client/go.mod;rm client/go.sum
+ ./scripts/modules.sh validate
+ echo 'D43 tagged source, D44 catalog and D44 graph mutations rejected in disposable snapshot' ;;
  unit)
  snapshot "$workspace/repo";cd "$workspace/repo"
  ./scripts/modules.sh validate

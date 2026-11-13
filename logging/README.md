@@ -90,3 +90,17 @@ No error is also logged internally. A slow writer blocks the caller. Canceling c
 From the root: `scripts/check-module.sh logging deps|consumers|quick|stress|fuzz|bench|all`. `LOGGING_RESULTS_DIR`, `LOGGING_FUZZ_TIME` (default30s), `LOGGING_BENCH_TIME` (default500ms) configure campaigns. `quick` runs race count20 at default/1/4 GOMAXPROCS plus vet. Stress uses LOGGING_STRESS=1; time is not simulated with precision sleeps. Tests include testing/slogtest, memory-backed integration, standard goroutineleak, reference isolation, fuzzing and benchmarks against native slog.
 
 See RELEASE_NOTES.md for executed scope, logs, hashes and pending distribution gates. See MIGRATION.md for deliberate breaks. Examples under examples/standalone/logging run offline with their own go.mod and real public APIs; composed uses client without adding it to this module's dependencies.
+
+## Elegir backend (D44)
+
+`log/slog` is go-engine's logging standard and reference backend. New library modules depend on slog types or consumer-side interfaces using those types, never Logrus or another concrete backend. The application chooses and owns its backend.
+
+| Choice | Application setup | Protection and scope |
+|---|---|---|
+| Standard slog | slog.New(slog.NewJSONHandler(writer, opts)) or NewTextHandler | Standard formatting/filtering; no automatic redaction from this module |
+| logging.New | Explicit Config and Output | This module's structural redaction, text/depth/item/node limits |
+| Logrus | Application-owned Enabled/LogAttrs adapter for client/logging, or third-party slog.Handler wrapped with slog.New | Illustrative, no library dependency or pinned version; loses logging.New's redaction/limits unless the application supplies equivalent protection |
+| zap | Application-owned slog handler integration | Illustrative, no dependency/version/test claim; logging.New protections are not inherited |
+| OpenTelemetry | Application-owned slog handler integration | Illustrative, no dependency/version/test claim; logging.New protections are not inherited |
+
+No logging/logrus module or standalone AdaptLegacy module will be created. If wave7 needs a migration adapter, it belongs temporarily in pkg/utilities/logger and disappears with that legacy package. A foreign backend is not a bypass for confidentiality requirements: the application must redact secrets before delivery and own its lifecycle/flush policy. The library does not configure, close or recover failures from that backend.

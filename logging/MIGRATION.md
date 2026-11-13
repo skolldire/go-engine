@@ -1,6 +1,6 @@
 # Migration to logging (unreleased)
 
-The legacy pkg/utilities/logger, Logrus adapters and consumers remain unchanged. No aliases or compatibility bridge are provided. logging/logrus and client/logging are separate future tasks.
+The legacy pkg/utilities/logger, Logrus adapters and consumers remain unchanged. No aliases or compatibility bridge are provided. No logging/logrus or separate AdaptLegacy module is planned (D44). Any required wave7 bridge stays temporarily in legacy pkg/utilities/logger and is removed with it. client/logging is the independent backend-neutral middleware.
 
 | Legacy | Explicit replacement | Difference |
 |---|---|---|

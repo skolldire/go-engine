@@ -1,4 +1,4 @@
-package resilience_test
+package integration
 
 import (
 	"context"
@@ -57,7 +57,7 @@ func TestMemoryTransportRecovery(t *testing.T) {
 			t.Fatal(value, err, b.Stats())
 		}
 		value, err = fn(context.Background())
-		if value != "" || err != circuitbreaker.ErrOpen || calls != 1 || r.Allow(1) {
+		if value != "" || (!errors.Is(err, circuitbreaker.ErrOpen) || !errors.Is(err, resilience.ErrRejected)) || calls != 1 || r.Allow(1) {
 			t.Fatal(value, err, calls)
 		}
 		behavior = nil

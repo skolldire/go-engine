@@ -63,5 +63,5 @@ func main() {
 	if err := run(); err != nil {
 		panic(err)
 	}
-	fmt.Println("resilience minimal: typed boundary and explicit retry passed (six-module graph)")
+	fmt.Println("resilience minimal: typed boundary and explicit retry passed (three-module library graph)")
 }

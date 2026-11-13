@@ -74,3 +74,25 @@ type enabledLogger struct{ emissions int }
 
 func (*enabledLogger) Enabled(context.Context, slog.Level) bool                     { return true }
 func (l *enabledLogger) LogAttrs(context.Context, slog.Level, string, ...slog.Attr) { l.emissions++ }
+
+func TestDurationUsesOneClock(t *testing.T) {
+	start := time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC)
+	reads := 0
+	logger := &durationLogger{}
+	mw := middleware[int](slog.LevelInfo, true, logger, func() time.Time { value := start.Add(time.Duration(reads) * 7 * time.Second); reads++; return value })
+	_, err := mw(func(context.Context, client.Invocation, client.Operation[int]) (int, error) { return 1, nil })(context.Background(), client.Invocation{}, nil)
+	if err != nil || reads != 2 || logger.duration != 7*time.Second {
+		t.Fatalf("reads=%d duration=%s error=%v", reads, logger.duration, err)
+	}
+}
+
+type durationLogger struct{ duration time.Duration }
+
+func (*durationLogger) Enabled(context.Context, slog.Level) bool { return true }
+func (l *durationLogger) LogAttrs(_ context.Context, _ slog.Level, _ string, attrs ...slog.Attr) {
+	for _, a := range attrs {
+		if a.Key == "duration" {
+			l.duration = a.Value.Duration()
+		}
+	}
+}

@@ -73,7 +73,7 @@ func middleware[T any](level slog.Level, includeDuration bool, logger Logger, no
 			}
 			count := 3
 			if includeDuration {
-				attrs[3] = slog.Duration("duration", time.Since(start))
+				attrs[3] = slog.Duration("duration", now().Sub(start))
 				count++
 			}
 			logger.LogAttrs(ctx, level, "operation completed", attrs[:count]...)

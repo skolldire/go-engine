@@ -119,3 +119,13 @@ This is the first candidate without a published comparison base. E5 is not passe
 Versionable documentation records the contract, decisions, commands, results and limitations. Source manifest client/logging/SOURCES.sha256 verifies from root with shasum -a256 -c client/logging/SOURCES.sha256. Local ignored logs live under client/logging/evidence/{darwin-arm64,linux-arm64}; SHA256SUMS is relative to that evidence directory. Those logs are not represented as versioned deliverables.
 
 Backend adapters in README not executed here (Logrus bridge, zap/zapslog, OTel/otelslog) are illustrative and versionless. This module does not implement or claim their integration. A backend may filter again, retain records, block or panic; labels/backend-owned fields remain the caller's confidentiality responsibility. Config defaults to debug, so an info-threshold backend filters it unless the application selects info or adjusts the backend. No client, logger factory, legacy implementation or resilience guarantee was changed.
+
+## D43.5 and D44 approved corrections
+
+Duration now uses now().Sub(start), a single clock source. Production time.Now preserves monotonic behavior; a fake clock advancing7s produces exactly7s, with two reads. Existing disabled/IncludeDuration=false tests still prove no measurement. Logger interface/API semantics remain D42; D44 makes slog the library reference, forbids new Logrus dependencies and delegates foreign backends to application adapters. See root RELEASING.md and release-evidence/d43-d44 for final commands, platforms and hashes.
+
+### Final D43/D44 validation
+
+Go1.27.4 macOS ARM64 and Linux ARM64: deps, consumers, quick/race count20 at default/1/4 and vet pass. macOS make all, make test, both isolated harnesses and18 standalone modules pass. Circuitbreaker/resilience/real harness stress3 and100ms/count3 benchmarks pass on macOS; real resilience harness race20/stress1 also passes on Linux. Root manifests stay byte-identical after GOWORK=off tidy. Policy snapshots reject tagged coordinated-to-unreleased imports and Logrus declarations/graphs for their intended reasons. Scope/details, commands and hashes: root RELEASING.md, Evidencias D43/D44; local logs release-evidence/d43-d44. No versions/tracks/tags/commits/publication are approved or created.
+
+Production Go files plus go.mod fingerprint (sorted root-relative path + NUL + bytes + NUL, concatenated, SHA256): 6da32ac7a1c4535660962fe545ac464bdaf21281b394e3b133bbe133dc5f187d. logging factory production code is unchanged by D44; this fingerprint records the correction snapshot, not published compatibility. Earlier source manifests remain historical snapshots.

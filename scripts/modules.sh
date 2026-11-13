@@ -17,6 +17,7 @@ schema(){
   if($4 !~ /^(coordinated|independent|unreleased|none)$/) fail("invalid track")
   if($6 !~ /^(production|basic|none)$/) fail("invalid checks")
   if($7!="-" && $7!="stdlib" && $7 !~ /^[A-Za-z0-9_.~-]+(\/[A-Za-z0-9_.~-]+)*(,[A-Za-z0-9_.~-]+(\/[A-Za-z0-9_.~-]+)*)*$/) fail("invalid deps")
+  if(($4=="unreleased" || $4=="independent") && ("," $7 ",") ~ /,github\.com\/sirupsen\/logrus,/) fail("logrus is prohibited for unreleased/independent modules")
   if($6=="production" && $7=="-") fail("production module must declare deps (stdlib or a list)")
   if(($4=="unreleased" || $4=="none") && $5!="-") fail("unreleased/none version must be -")
   if(($4=="coordinated" || $4=="independent") && $5 !~ /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/) fail("version must be vX.Y.Z")
@@ -50,7 +51,7 @@ validate(){
   if [[ "$deps" != - && "$deps" != stdlib ]];then
    for item in ${deps//,/ };do
     # An item without a dot in its first element names a catalog dir.
-    [[ "${item%%/*}" == *.* ]] || records | awk -F '\t' -v d="$item" '$1==d{found=1} END{exit !found}' || { echo "VIOLATION: $dir deps names uncatalogued module $item" >&2;bad=1; }
+    [[ "$item" != . && "${item%%/*}" == *.* ]] || records | awk -F '\t' -v d="$item" '$1==d{found=1} END{exit !found}' || { echo "VIOLATION: $dir deps names uncatalogued module $item" >&2;bad=1; }
    done
   fi
   if [[ "$checks" == production ]];then
@@ -77,6 +78,7 @@ validate(){
  /^use[[:space:]]/ {sub(/^use[[:space:]]+/,"");gsub(/"/,"");sub(/^\.\//,"");print}
  ' go.work)
  if ! awk -F '\t' 'NR==FNR{if(!/^#/ && NF)expected[$1]=1;next} NF{if(seen[$0]++ || !($0 in expected)){print "VIOLATION: unexpected/duplicate go.work use " $0 > "/dev/stderr";bad=1};delete expected[$0]} END{for(d in expected){print "VIOLATION: missing go.work use " d > "/dev/stderr";bad=1};exit bad}' "$catalog" <(printf '%s\n' "$actual");then bad=1;fi
+ if ! GOWORK=off go run "$repo/scripts/modules/import-policy.go" "$repo";then bad=1;fi
  return "$bad"
 }
 overrides_file="$repo/scripts/modules/overrides.tsv"

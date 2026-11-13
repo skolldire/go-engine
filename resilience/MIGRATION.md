@@ -36,3 +36,7 @@ Only resilience owns total budget; nested Retry.TotalTimeout must be zero. Admis
 Context cancellation remains cooperative; noncooperative I/O retains its probe/permit until actual termination. Defer releases resources for panic and Goexit, without recover. Positive total/attempt budgets cancel returned context-tied streams/bodies/cursors: consume inside I/O or use caller-owned contexts with both budgets zero. No logger, metrics, lifecycle or automatic SDK retry configuration. Callers own resources and duplicate-budget avoidance.
 
 Minimal still resolves all five base-module dependencies; activation is optional, the declared module graph is not. Local v0.0.0 replaces are development placeholders. Tags/manifests and real-tag consumers remain deferred to authorized publication.
+
+## D43.1 correction (approved, not released)
+
+Dependencies.Breaker/Limiter/RateLimiter are now minimal consumer-side interfaces. Existing concrete values still assign directly; foreign backends can implement them. Retry Config/Classifier remain concrete. Typed nil pointers are rejected at Wrap. Local breaker rejection joins ErrRejected and its original cause: replace equality comparisons against bare ErrOpen/ErrProbeLimit with errors.Is. Operation results/errors still travel through the callback. Nil release is a no-op; a real release runs once. The old concrete integration suite and fuzz corpus move to resilience/integration, not deleted.

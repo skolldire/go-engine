@@ -3,759 +3,296 @@ package resilience
 import (
 	"context"
 	"errors"
-	"math"
 	"reflect"
 	"runtime"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	"github.com/skolldire/go-engine/circuitbreaker"
 	"github.com/skolldire/go-engine/client"
-	"github.com/skolldire/go-engine/concurrency"
-	"github.com/skolldire/go-engine/ratelimit"
 	"github.com/skolldire/go-engine/retry"
 )
 
-type domainError struct{ code int }
+type foreignRate struct {
+	wait func(context.Context, int) error
+}
 
-func (e *domainError) Error() string { return "domain" }
-func retryAll(error) retry.Decision  { return retry.DecisionRetry }
-func config() Config {
+func (r *foreignRate) Wait(ctx context.Context, n int) error { return r.wait(ctx, n) }
+
+type foreignLimiter struct {
+	acquire func(context.Context, int64) (func(), error)
+}
+
+func (l *foreignLimiter) Acquire(ctx context.Context, n int64) (func(), error) {
+	return l.acquire(ctx, n)
+}
+
+type foreignBreaker struct {
+	run func(context.Context, func(context.Context) error) error
+}
+
+func (b *foreignBreaker) Run(ctx context.Context, fn func(context.Context) error) error {
+	return b.run(ctx, fn)
+}
+func localConfig() Config {
 	cfg := DefaultConfig()
 	cfg.Retry.InitialBackoff = time.Nanosecond
 	cfg.Retry.MaxBackoff = time.Nanosecond
 	cfg.Retry.Jitter = retry.JitterNone
 	return cfg
 }
-func limiter(t *testing.T, capacity int64) *concurrency.Limiter {
+func mustWrap[T any](t testing.TB, op client.Operation[T], cfg Config, deps Dependencies) client.Operation[T] {
 	t.Helper()
-	l, err := concurrency.NewLimiter(concurrency.LimiterConfig{Capacity: capacity})
+	f, err := Wrap(op, cfg, deps)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return l
+	return f
 }
-func rate(t *testing.T, r float64, burst int) *ratelimit.Limiter {
-	t.Helper()
-	l, err := ratelimit.New(ratelimit.Config{RatePerSecond: r, Burst: burst})
-	if err != nil {
-		t.Fatal(err)
+
+type operationError struct{ cause error }
+
+func (*operationError) Error() string   { return "domain" }
+func (e *operationError) Unwrap() error { return e.cause }
+func TestIndependentInterfacesAndOrder(t *testing.T) {
+	var order []string
+	cfg := localConfig()
+	cfg.Tokens = 3
+	cfg.Weight = 2
+	type key struct{}
+	parent := context.WithValue(context.Background(), key{}, "parent")
+	cause := errors.New("original")
+	failure := &operationError{cause}
+	payload := map[string]int{"value": 7}
+	deps := Dependencies{
+		RateLimiter: &foreignRate{func(ctx context.Context, n int) error {
+			if ctx != parent || n != 3 {
+				t.Fatal("rate args")
+			}
+			order = append(order, "rate")
+			return nil
+		}},
+		Limiter: &foreignLimiter{func(ctx context.Context, n int64) (func(), error) {
+			if ctx != parent || n != 2 {
+				t.Fatal("limiter args")
+			}
+			order = append(order, "acquire")
+			return func() { order = append(order, "release") }, nil
+		}},
+		Breaker: &foreignBreaker{func(ctx context.Context, fn func(context.Context) error) error {
+			order = append(order, "run")
+			return fn(context.WithValue(ctx, key{}, "derived"))
+		}},
+		Classify: func(err error) retry.Decision {
+			if err != failure {
+				t.Fatal("error changed")
+			}
+			order = append(order, "classify")
+			return retry.DecisionStop
+		},
 	}
-	return l
+	f := mustWrap(t, func(ctx context.Context) (map[string]int, error) {
+		if ctx.Value(key{}) != "derived" {
+			t.Fatal("breaker context replaced")
+		}
+		order = append(order, "io")
+		return payload, failure
+	}, cfg, deps)
+	if len(order) != 0 {
+		t.Fatal("Wrap executed dependencies")
+	}
+	cfg.Tokens = 0
+	cfg.Weight = 0
+	value, err := f(parent)
+	var typed *operationError
+	if err != failure || !errors.Is(err, cause) || !errors.As(err, &typed) || typed != failure {
+		t.Fatal("original error not preserved")
+	}
+	value["value"] = 9
+	if payload["value"] != 9 {
+		t.Fatal("result copied")
+	}
+	if !reflect.DeepEqual(order, []string{"rate", "acquire", "run", "io", "release", "classify"}) {
+		t.Fatal(order)
+	}
 }
-func breaker(t *testing.T, threshold uint64, classify func(error) bool) *circuitbreaker.Breaker {
-	t.Helper()
-	cfg := circuitbreaker.DefaultConfig()
-	cfg.Name = "memory"
-	cfg.RequestThreshold = threshold
-	b, err := circuitbreaker.New(cfg, circuitbreaker.Dependencies{Classify: classify})
-	if err != nil {
-		t.Fatal(err)
+func TestForeignRejectionStopsWithoutClassifier(t *testing.T) {
+	original := &operationError{errors.New("backend rejection")}
+	cfg := localConfig()
+	cfg.Retry.MaxRetries = 4
+	calls := 0
+	f := mustWrap(t, func(context.Context) (int, error) { t.Fatal("rejected operation entered"); return 0, nil }, cfg, Dependencies{Breaker: &foreignBreaker{func(context.Context, func(context.Context) error) error { calls++; return original }}, Classify: func(error) retry.Decision { t.Fatal("local rejection reached classifier"); return retry.DecisionRetry }})
+	value, err := f(context.Background())
+	var typed *operationError
+	if value != 0 || calls != 1 || !errors.Is(err, ErrRejected) || !errors.Is(err, original) || !errors.As(err, &typed) || typed != original {
+		t.Fatal("rejection cause lost", err)
 	}
-	return b
 }
-func wrap[T any](t *testing.T, op client.Operation[T], cfg Config, deps Dependencies) client.Operation[T] {
-	t.Helper()
-	fn, err := Wrap(op, cfg, deps)
-	if err != nil {
-		t.Fatal(err)
+func TestEnteredErrorIsNotRejection(t *testing.T) {
+	failure := &operationError{}
+	classified := 0
+	cfg := localConfig()
+	cfg.Retry.MaxRetries = 1
+	f := mustWrap(t, func(context.Context) (int, error) { return 42, failure }, cfg, Dependencies{Breaker: &foreignBreaker{func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }}, Classify: func(err error) retry.Decision {
+		classified++
+		if err != failure {
+			t.Fatal("identity changed")
+		}
+		return retry.DecisionStop
+	}})
+	value, err := f(context.Background())
+	if value != 42 || err != failure || errors.Is(err, ErrRejected) || classified != 1 {
+		t.Fatal(value, err, classified)
 	}
-	return fn
 }
-func acquireNow(t *testing.T, l *concurrency.Limiter) func() {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
-	defer cancel()
-	release, err := l.Acquire(ctx, 1)
-	if err != nil {
-		t.Fatal("permit not available", err)
-	}
-	return release
-}
-func TestConfigurationAndValidation(t *testing.T) {
-	want := Config{Order: OrderRetryThenBreaker, Retry: retry.DefaultConfig()}
-	if DefaultConfig() != want || want.Validate() != nil {
-		t.Fatal(DefaultConfig())
-	}
-	cases := []struct {
-		field  string
-		change func(*Config)
-	}{
-		{"Order", func(c *Config) { c.Order = "secret-order" }},
-		{"TotalTimeout", func(c *Config) { c.TotalTimeout = -1 }},
-		{"AttemptTimeout", func(c *Config) { c.AttemptTimeout = -1 }},
-		{"AdmissionTimeout", func(c *Config) { c.AdmissionTimeout = -1 }},
-		{"Retry.InitialBackoff", func(c *Config) { c.Retry.InitialBackoff = 0 }},
-		{"Retry.TotalTimeout", func(c *Config) { c.Retry.TotalTimeout = time.Second }},
-		{"Weight", func(c *Config) { c.Weight = -1 }},
-		{"Tokens", func(c *Config) { c.Tokens = -1 }},
-	}
-	for _, tc := range cases {
-		cfg := want
-		tc.change(&cfg)
-		fn, err := Wrap(func(context.Context) (int, error) { t.Fatal("construction I/O"); return 0, nil }, cfg, Dependencies{})
+func TestTypedNilInterfacesAndValidation(t *testing.T) {
+	var b *foreignBreaker
+	var l *foreignLimiter
+	var r *foreignRate
+	for _, tc := range []struct {
+		field string
+		deps  Dependencies
+	}{{"Breaker", Dependencies{Breaker: b}}, {"Limiter", Dependencies{Limiter: l}}, {"RateLimiter", Dependencies{RateLimiter: r}}} {
+		_, err := Wrap(func(context.Context) (int, error) { return 1, nil }, DefaultConfig(), tc.deps)
 		var ce *ConfigError
-		if fn != nil || !errors.Is(err, ErrInvalidConfig) || !errors.As(err, &ce) || ce.Field != tc.field || strings.Contains(err.Error(), "secret-order") {
-			t.Fatal(err)
+		if !errors.Is(err, ErrInvalidConfig) || !errors.As(err, &ce) || ce.Field != tc.field {
+			t.Fatal(tc.field, err)
 		}
 	}
-	if err := (Config{}).Validate(); !errors.Is(err, ErrInvalidConfig) || !errors.Is(err, retry.ErrInvalidConfig) {
-		t.Fatal(err)
-	}
-	_, err := Wrap[int](nil, Config{}, Dependencies{})
-	if !errors.Is(err, ErrInvalidCall) {
-		t.Fatal(err)
-	}
-	cfg := config()
-	cfg.Retry.MaxRetries = 1
-	b := breaker(t, 5, func(error) bool { return true })
-	l := limiter(t, 1)
-	r := rate(t, 1, 1)
-	casesDeps := []struct {
+	pass := &foreignBreaker{func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }}
+	for _, tc := range []struct {
+		field string
 		cfg   Config
 		deps  Dependencies
-		field string
 	}{
-		{func() Config { c := cfg; c.Order = ""; return c }(), Dependencies{Breaker: b}, "Order"},
-		{cfg, Dependencies{}, "Classify"},
-		{config(), Dependencies{Limiter: l}, "Weight"},
-		{func() Config { c := config(); c.Weight = 1; return c }(), Dependencies{}, "Weight"},
-		{config(), Dependencies{RateLimiter: r}, "Tokens"},
-		{func() Config { c := config(); c.Tokens = 1; return c }(), Dependencies{}, "Tokens"},
-	}
-	for _, tc := range casesDeps {
+		{"Order", func() Config { c := DefaultConfig(); c.Order = ""; return c }(), Dependencies{Breaker: pass}},
+		{"Classify", func() Config { c := DefaultConfig(); c.Retry.MaxRetries = 1; return c }(), Dependencies{}},
+		{"Weight", DefaultConfig(), Dependencies{Limiter: &foreignLimiter{}}},
+		{"Tokens", DefaultConfig(), Dependencies{RateLimiter: &foreignRate{}}},
+	} {
 		_, err := Wrap(func(context.Context) (int, error) { return 1, nil }, tc.cfg, tc.deps)
 		var ce *ConfigError
 		if !errors.As(err, &ce) || ce.Field != tc.field {
-			t.Fatal(err)
+			t.Fatal(tc.field, err)
 		}
 	}
-	emptyOrder := config()
-	emptyOrder.Order = ""
-	if _, err := Wrap(func(context.Context) (int, error) { return 1, nil }, emptyOrder, Dependencies{}); err != nil {
-		t.Fatal(err)
-	}
 }
-func TestPureCaptureAndCombinations(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		for mask := 0; mask < 16; mask++ {
-			cfg := config()
-			deps := Dependencies{}
-			calls := 0
-			if mask&1 != 0 {
-				cfg.Retry.MaxRetries = 1
-				deps.Classify = retryAll
-			}
-			if mask&2 != 0 {
-				deps.Breaker = breaker(t, 5, func(error) bool { return true })
-			}
-			if mask&4 != 0 {
-				cfg.Weight = 1
-				deps.Limiter = limiter(t, 1)
-			}
-			if mask&8 != 0 {
-				cfg.Tokens = 1
-				deps.RateLimiter = rate(t, 1, 2)
-			}
-			before := cfg
-			fn := wrap(t, func(ctx context.Context) (int, error) { calls++; return 42, nil }, cfg, deps)
-			if calls != 0 || cfg != before {
-				t.Fatal("impure Wrap")
-			}
-			if deps.Breaker != nil && deps.Breaker.Stats().Requests != 0 {
-				t.Fatal("breaker touched")
-			}
-			if deps.Limiter != nil {
-				acquireNow(t, deps.Limiter)()
-			}
-			if deps.RateLimiter != nil && !deps.RateLimiter.Allow(1) {
-				t.Fatal("rate touched during Wrap")
-			}
-			cfg.Retry.MaxRetries = 99
-			cfg.Retry.InitialBackoff = -1
-			cfg.Tokens = 99
-			cfg.Weight = 99
-			value, err := fn(context.Background())
-			if value != 42 || err != nil || calls != 1 {
-				t.Fatal(mask, value, err, calls)
-			}
-		}
-		cfg := config()
-		cfg.TotalTimeout = time.Second
-		fn := wrap(t, func(context.Context) (int, error) { return 7, nil }, cfg, Dependencies{})
-		time.Sleep(time.Hour)
-		if value, err := fn(context.Background()); value != 7 || err != nil {
-			t.Fatal("budget started during Wrap", value, err)
-		}
-	})
-}
-func TestContextValuesErrorsAndRetry(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		type key struct{}
-		ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), key{}, "v"), time.Hour)
-		defer cancel()
-		original := &domainError{7}
-		payload := map[string]int{"value": 42}
-		fn := wrap(t, func(received context.Context) (map[string]int, error) {
-			if received != ctx || received.Value(key{}) != "v" {
-				t.Fatal("context changed")
-			}
-			return payload, original
-		}, config(), Dependencies{})
-		got, err := fn(ctx)
-		if err != original || got["value"] != 42 {
-			t.Fatal(got, err)
-		}
-		got["value"] = 10
-		if payload["value"] != 10 {
-			t.Fatal("result copied")
-		}
-		var typed *domainError
-		if !errors.As(err, &typed) || typed != original {
-			t.Fatal(err)
-		}
-		if value, err := fn(nil); value != nil || !errors.Is(err, ErrInvalidCall) {
-			t.Fatal(value, err)
-		}
-		cause := errors.New("caller cause")
-		canceled, stop := context.WithCancelCause(ctx)
-		stop(cause)
-		if value, err := fn(canceled); value != nil || !errors.Is(err, context.Canceled) || !errors.Is(err, cause) {
-			t.Fatal(value, err)
-		}
-		for _, decision := range []retry.Decision{retry.DecisionStop, retry.DecisionRetry, retry.DecisionReconcile, "invalid"} {
-			cfg := config()
-			cfg.Retry.MaxRetries = 2
-			calls, classifies := 0, 0
-			f := wrap(t, func(context.Context) (int, error) { calls++; return 20 + calls, original }, cfg, Dependencies{Classify: func(err error) retry.Decision {
-				classifies++
-				if err != original {
-					t.Fatal(err)
-				}
-				return decision
-			}})
-			value, err := f(ctx)
-			expected := 1
-			if decision == retry.DecisionRetry {
-				expected = 3
-			}
-			if calls != expected || classifies != expected || value != 20+expected || !errors.Is(err, original) {
-				t.Fatal(value, err, calls, classifies)
-			}
-			if decision == retry.DecisionStop || decision == retry.DecisionRetry {
-				if err != original {
-					t.Fatal("error identity")
-				}
-			}
-			if decision == retry.DecisionReconcile && !errors.Is(err, retry.ErrReconciliationRequired) {
-				t.Fatal(err)
-			}
-		}
-		classified := 0
-		f := wrap(t, func(context.Context) (int, error) { return 3, original }, config(), Dependencies{Classify: func(error) retry.Decision { classified++; return retry.DecisionReconcile }})
-		value, err := f(ctx)
-		if value != 3 || classified != 1 || !errors.Is(err, retry.ErrReconciliationRequired) {
-			t.Fatal(value, err)
-		}
-	})
-}
-func TestOrderAndPermitBeforeRetryClassification(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var order []string
-		original := errors.New("remote")
-		l := limiter(t, 1)
-		r := rate(t, 1, 2)
-		b := breaker(t, 5, func(err error) bool { order = append(order, "breaker.classify"); return errors.Is(err, original) })
-		cfg := config()
-		cfg.Retry.MaxRetries = 1
-		cfg.Weight = 1
-		cfg.Tokens = 1
-		calls := 0
-		fn := wrap(t, func(context.Context) (int, error) {
-			calls++
-			order = append(order, "io")
-			if b.Stats().InFlight != 1 {
-				t.Error("not breaker-admitted")
-			}
-			if calls == 1 {
-				return 7, original
-			}
-			return 42, nil
-		}, cfg, Dependencies{Limiter: l, RateLimiter: r, Breaker: b, Classify: func(error) retry.Decision {
-			order = append(order, "retry.classify")
-			acquireNow(t, l)()
-			return retry.DecisionRetry
-		}})
-		value, err := fn(context.Background())
-		if value != 42 || err != nil || calls != 2 {
-			t.Fatal(value, err, calls)
-		}
-		if !reflect.DeepEqual(order, []string{"io", "breaker.classify", "retry.classify", "io"}) {
-			t.Fatal(order)
-		}
-		if r.Allow(1) || b.Stats().Failures != 1 || b.Stats().Successes != 1 {
-			t.Fatal("attempt accounting", b.Stats())
-		}
-		acquireNow(t, l)()
-	})
-}
-func TestAdmissionBeforeProbeAndAttemptClock(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		l := limiter(t, 1)
-		r := rate(t, 1, 1)
-		r.Allow(1)
-		b := breaker(t, 1, func(error) bool { return true })
-		circuitbreaker.Execute(context.Background(), b, func(context.Context) (int, error) { return 0, errors.New("trip") })
-		time.Sleep(30 * time.Second)
-		r.Allow(1)
-		cfg := config()
-		cfg.Weight = 1
-		cfg.Tokens = 1
-		cfg.AttemptTimeout = 100 * time.Millisecond
-		calls := 0
-		fn := wrap(t, func(ctx context.Context) (int, error) {
-			calls++
-			deadline, _ := ctx.Deadline()
-			if time.Until(deadline) != cfg.AttemptTimeout {
-				t.Error("attempt clock started in queue")
-			}
-			return 42, nil
-		}, cfg, Dependencies{Limiter: l, RateLimiter: r, Breaker: b})
-		done := make(chan error, 1)
-		go func() { _, err := fn(context.Background()); done <- err }()
-		synctest.Wait()
-		if b.Stats().InFlight != 0 {
-			t.Fatal("probe held waiting for rate")
-		}
-		release := acquireNow(t, l)
-		time.Sleep(time.Second)
-		synctest.Wait()
-		if b.Stats().InFlight != 0 || calls != 0 {
-			t.Fatal("probe/attempt held waiting concurrency")
-		}
-		release()
-		if err := <-done; err != nil || calls != 1 {
-			t.Fatal(err, calls)
-		}
-		if b.State() != circuitbreaker.StateClosed {
-			t.Fatal(b.Stats())
-		}
-	})
-}
-func TestAdmissionJointBudgetAndPermanentErrors(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		l := limiter(t, 1)
-		held := acquireNow(t, l)
-		defer held()
-		r := rate(t, 2, 1)
-		r.Allow(1)
-		b := breaker(t, 5, func(error) bool { t.Error("local failure classified"); return true })
-		cfg := config()
-		cfg.Weight = 1
-		cfg.Tokens = 1
-		cfg.AdmissionTimeout = time.Second
-		cfg.Retry.MaxRetries = 4
-		classified := 0
-		fn := wrap(t, func(context.Context) (int, error) { t.Error("admission failure reached I/O"); return 1, nil }, cfg, Dependencies{Limiter: l, RateLimiter: r, Breaker: b, Classify: func(error) retry.Decision { classified++; return retry.DecisionRetry }})
-		started := time.Now()
-		_, err := fn(context.Background())
-		if time.Since(started) != time.Second || !errors.Is(err, ErrAdmission) || !errors.Is(err, ErrAdmissionTimeout) || !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "concurrency") || classified != 0 {
-			t.Fatal(err, time.Since(started), classified)
-		}
-		if b.Stats().Requests != 0 {
-			t.Fatal(b.Stats())
-		}
-		for _, which := range []string{"concurrency", "ratelimit"} {
-			c := config()
-			d := Dependencies{Classify: func(error) retry.Decision { t.Error("permanent failure retried"); return retry.DecisionRetry }}
-			c.Retry.MaxRetries = 2
-			expected := error(nil)
-			if which == "concurrency" {
-				d.Limiter = limiter(t, 1)
-				c.Weight = 2
-				expected = concurrency.ErrJobTooLarge
-			} else {
-				d.RateLimiter = rate(t, 1, 1)
-				c.Tokens = 2
-				expected = ratelimit.ErrInvalidCall
-			}
-			f := wrap(t, func(context.Context) (int, error) { t.Error("invalid weight I/O"); return 0, nil }, c, d)
-			_, err := f(context.Background())
-			if !errors.Is(err, ErrAdmission) || !errors.Is(err, expected) || !strings.Contains(err.Error(), which) {
-				t.Fatal(err)
-			}
-		}
-	})
-}
-func TestBudgetsCausesAndErrorPrecedence(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		for _, which := range []string{"total", "attempt", "parent"} {
-			cfg := config()
-			cfg.TotalTimeout = 2 * time.Second
-			cfg.AttemptTimeout = time.Second
-			parent, cancel := context.WithCancelCause(context.Background())
-			defer cancel(nil)
-			cause := errors.New("parent deadline")
-			if which == "total" {
-				cfg.TotalTimeout = 500 * time.Millisecond
-			}
-			if which == "parent" {
-				var stop context.CancelFunc
-				parent, stop = context.WithTimeoutCause(parent, 100*time.Millisecond, cause)
-				defer stop()
-			}
-			expected := ErrAttemptTimeout
-			duration := time.Second
-			if which == "total" {
-				expected = ErrTotalTimeout
-				duration = 500 * time.Millisecond
-			}
-			if which == "parent" {
-				expected = cause
-				duration = 100 * time.Millisecond
-			}
-			b := breaker(t, 5, func(err error) bool {
-				if !errors.Is(err, expected) {
-					t.Error("cause absent before breaker classification", err)
-				}
-				return false
-			})
-			cfg.Order = OrderRetryThenBreaker
-			f := wrap(t, func(ctx context.Context) (int, error) { <-ctx.Done(); return 17, ctx.Err() }, cfg, Dependencies{Breaker: b})
-			started := time.Now()
-			value, err := f(parent)
-			if value != 17 || !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, expected) || time.Since(started) != duration {
-				t.Fatal(which, value, err, time.Since(started))
-			}
-			if which != "attempt" && errors.Is(err, ErrAttemptTimeout) || which != "total" && errors.Is(err, ErrTotalTimeout) {
-				t.Fatal("wrong budget attribution", which, err)
-			}
-		}
-		original := &domainError{9}
-		for _, success := range []bool{false, true} {
-			cfg := config()
-			cfg.TotalTimeout = time.Second
-			cfg.AttemptTimeout = 100 * time.Millisecond
-			f := wrap(t, func(ctx context.Context) (int, error) {
-				<-ctx.Done()
-				if success {
-					return 42, nil
-				}
-				return 7, original
-			}, cfg, Dependencies{})
-			value, err := f(context.Background())
-			if success {
-				if value != 42 || err != nil {
-					t.Fatal(value, err)
-				}
-			} else if value != 7 || err != original {
-				t.Fatal("business error replaced", value, err)
-			}
-		}
-		cfg := config()
-		cfg.TotalTimeout = time.Second
-		cfg.Retry.InitialBackoff = time.Second
-		cfg.Retry.MaxBackoff = time.Second
-		cfg.Retry.MaxRetries = 2
-		calls := 0
-		f := wrap(t, func(context.Context) (int, error) { calls++; return 11, original }, cfg, Dependencies{Classify: retryAll})
-		value, err := f(context.Background())
-		if value != 11 || calls != 1 || !errors.Is(err, ErrTotalTimeout) || !errors.Is(err, original) || !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatal("backoff total cause", value, err, calls)
-		}
-		cfg = config()
-		cfg.TotalTimeout = time.Second
-		cfg.Retry.MaxRetries = 2
-		f = wrap(t, func(context.Context) (int, error) { return 31, original }, cfg, Dependencies{Classify: func(error) retry.Decision { time.Sleep(2 * time.Second); return retry.DecisionReconcile }})
-		value, err = f(context.Background())
-		if value != 31 || !errors.Is(err, retry.ErrReconciliationRequired) || !errors.Is(err, original) || errors.Is(err, ErrTotalTimeout) {
-			t.Fatal("uncertainty hidden", value, err)
-		}
-	})
-}
-func TestAdmissionParentCauseAndContextOwnership(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		for _, which := range []string{"rate", "concurrency"} {
-			for _, own := range []bool{false, true} {
-				cfg := config()
-				cfg.AdmissionTimeout = 2 * time.Second
-				deps := Dependencies{}
-				if which == "rate" {
-					cfg.Tokens = 1
-					deps.RateLimiter = rate(t, 1, 1)
-					deps.RateLimiter.Allow(1)
-				} else {
-					cfg.Weight = 1
-					deps.Limiter = limiter(t, 1)
-					held := acquireNow(t, deps.Limiter)
-					defer held()
-				}
-				ctx := context.Background()
-				cause := errors.New("caller budget")
-				if own {
-					cfg.TotalTimeout = 100 * time.Millisecond
-				} else {
-					var cancel context.CancelFunc
-					ctx, cancel = context.WithTimeoutCause(ctx, 100*time.Millisecond, cause)
-					defer cancel()
-				}
-				f := wrap(t, func(context.Context) (int, error) { t.Error("expired admission entered I/O"); return 0, nil }, cfg, deps)
-				_, err := f(ctx)
-				expected := cause
-				if own {
-					expected = ErrTotalTimeout
-				}
-				if !errors.Is(err, expected) || !errors.Is(err, ErrAdmission) || errors.Is(err, ErrAdmissionTimeout) {
-					t.Fatal(which, own, err)
-				}
-			}
-		}
-		for _, mask := range []int{0, 1, 2, 3} {
-			cfg := config()
-			cfg.AdmissionTimeout = time.Nanosecond
+func TestNilReleaseAndSingleRelease(t *testing.T) {
+	for _, mode := range []string{"nil", "success", "failure", "panic", "exit", "reject"} {
+		t.Run(mode, func(t *testing.T) {
+			var releases atomic.Int64
+			cfg := localConfig()
 			cfg.Weight = 1
-			if mask&1 != 0 {
-				cfg.TotalTimeout = time.Hour
-			}
-			if mask&2 != 0 {
-				cfg.AttemptTimeout = time.Hour
-			}
-			parent, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			l := limiter(t, 1)
-			f := wrap(t, func(ctx context.Context) (context.Context, error) {
-				if ctx.Err() != nil {
-					t.Error("admission context passed to I/O")
+			deps := Dependencies{Limiter: &foreignLimiter{func(context.Context, int64) (func(), error) {
+				if mode == "nil" {
+					return nil, nil
 				}
-				return ctx, nil
-			}, cfg, Dependencies{Limiter: l})
-			linked, err := f(parent)
-			if err != nil || parent.Err() != nil {
-				t.Fatal(err)
+				return func() { releases.Add(1) }, nil
+			}}}
+			if mode == "reject" {
+				deps.Breaker = &foreignBreaker{func(context.Context, func(context.Context) error) error { return errors.New("rejected") }}
 			}
-			if mask == 0 {
-				if linked != parent || linked.Err() != nil {
-					t.Fatal("parent context replaced/canceled")
+			failure := errors.New("original")
+			f := mustWrap(t, func(context.Context) (int, error) {
+				switch mode {
+				case "panic":
+					panic("same panic")
+				case "exit":
+					runtime.Goexit()
+				case "failure":
+					return 7, failure
 				}
-			} else if linked.Err() != context.Canceled {
-				t.Fatal("derived streaming context not canceled")
-			}
-			acquireNow(t, l)()
-		}
-	})
-}
-func TestLocalStopsAndBreakerPerAttempt(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		for _, probe := range []bool{false, true} {
-			b := breaker(t, 1, func(error) bool { return true })
-			circuitbreaker.Execute(context.Background(), b, func(context.Context) (int, error) { return 0, errors.New("remote") })
-			var gate chan struct{}
-			var finished chan struct{}
-			if probe {
-				time.Sleep(30 * time.Second)
-				gate = make(chan struct{})
-				finished = make(chan struct{})
-				go func() {
-					defer close(finished)
-					circuitbreaker.Execute(context.Background(), b, func(context.Context) (int, error) { <-gate; return 1, nil })
-				}()
-				synctest.Wait()
-			}
-			cfg := config()
-			cfg.Retry.MaxRetries = 3
-			cfg.Weight = 1
-			cfg.Tokens = 1
-			l := limiter(t, 1)
-			r := rate(t, math.SmallestNonzeroFloat64, 1)
-			f := wrap(t, func(context.Context) (int, error) { t.Error("rejected I/O"); return 9, nil }, cfg, Dependencies{Breaker: b, Limiter: l, RateLimiter: r, Classify: func(error) retry.Decision {
-				t.Error("local rejection classified by caller")
-				return retry.DecisionRetry
-			}})
-			value, err := f(context.Background())
-			expected := circuitbreaker.ErrOpen
-			if probe {
-				expected = circuitbreaker.ErrProbeLimit
-			}
-			if value != 0 || err != expected || r.Allow(1) {
-				t.Fatal(value, err)
-			}
-			acquireNow(t, l)()
-			if probe {
-				close(gate)
-				<-finished
-			}
-		}
-		b := breaker(t, 1, func(error) bool { return true })
-		cfg := config()
-		cfg.Retry.MaxRetries = 3
-		calls := 0
-		f := wrap(t, func(context.Context) (int, error) { calls++; return 2, errors.New("remote") }, cfg, Dependencies{Breaker: b, Classify: retryAll})
-		value, err := f(context.Background())
-		if calls != 1 || value != 0 || err != circuitbreaker.ErrOpen {
-			t.Fatal("breaker saw aggregate", calls, value, err)
-		}
-	})
-}
-func catchPanic(f func()) (value any) { defer func() { value = recover() }(); f(); return nil }
-func TestAbnormalReleaseAndNonCooperation(t *testing.T) {
-	for _, where := range []string{"operation", "breaker classifier", "retry classifier"} {
-		for _, exit := range []bool{false, true} {
-			synctest.Test(t, func(t *testing.T) {
-				l := limiter(t, 1)
-				marker := &domainError{11}
-				abort := func() {
-					if exit {
-						runtime.Goexit()
-					}
-					panic(marker)
+				return 7, nil
+			}, cfg, deps)
+			done := make(chan struct{})
+			var panicValue any
+			go func() {
+				defer close(done)
+				defer func() { panicValue = recover() }()
+				_, err := f(context.Background())
+				if mode == "failure" && err != failure {
+					t.Error("changed error")
 				}
-				cfg := config()
-				cfg.Weight = 1
-				cfg.TotalTimeout = time.Hour
-				cfg.AttemptTimeout = time.Minute
-				deps := Dependencies{Limiter: l, Breaker: breaker(t, 5, func(error) bool {
-					if where == "breaker classifier" {
-						abort()
-					}
-					return true
-				}), Classify: func(error) retry.Decision {
-					acquireNow(t, l)()
-					if where == "retry classifier" {
-						abort()
-					}
-					return retry.DecisionStop
-				}}
-				f := wrap(t, func(context.Context) (int, error) {
-					if where == "operation" {
-						abort()
-					}
-					return 3, marker
-				}, cfg, deps)
-				done := make(chan struct{})
-				go func() {
-					defer close(done)
-					work := func() { f(context.Background()) }
-					if exit {
-						work()
-						t.Error("Goexit returned")
-					} else if catchPanic(work) != marker {
-						t.Error("panic changed")
-					}
-				}()
-				<-done
-				acquireNow(t, l)()
-				c := deps.Breaker.Stats()
-				if c.InFlight != 0 || where != "retry classifier" && c.Panics != 1 {
-					t.Fatal(c)
-				}
-			})
-		}
-	}
-	synctest.Test(t, func(t *testing.T) {
-		l := limiter(t, 1)
-		b := breaker(t, 5, func(error) bool { return false })
-		cfg := config()
-		cfg.Weight = 1
-		cfg.AttemptTimeout = time.Second
-		gate := make(chan struct{})
-		done := make(chan struct{})
-		f := wrap(t, func(context.Context) (int, error) { <-gate; return 42, nil }, cfg, Dependencies{Limiter: l, Breaker: b})
-		go func() {
-			defer close(done)
-			value, err := f(context.Background())
-			if value != 42 || err != nil {
-				t.Error(value, err)
+			}()
+			<-done
+			if mode == "panic" && panicValue != "same panic" {
+				t.Fatal("panic changed")
 			}
-		}()
-		synctest.Wait()
-		time.Sleep(2 * time.Second)
-		if b.Stats().InFlight != 1 {
-			t.Fatal("noncooperative attempt abandoned", b.Stats())
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
-		defer cancel()
-		if release, err := l.Acquire(ctx, 1); err == nil {
-			release()
-			t.Fatal("noncooperative permit released early")
-		}
-		select {
-		case <-done:
-			t.Fatal("false termination")
-		default:
-		}
-		close(gate)
-		<-done
-		acquireNow(t, l)()
-	})
-}
-func TestReusableConcurrentWrapper(t *testing.T) {
-	l := limiter(t, 4)
-	cfg := config()
-	cfg.Weight = 1
-	f := wrap(t, func(context.Context) (int, error) { return 42, nil }, cfg, Dependencies{Limiter: l})
-	var wg sync.WaitGroup
-	for range 32 {
-		wg.Go(func() {
-			for range 100 {
-				value, err := f(context.Background())
-				if value != 42 || err != nil {
-					t.Error(value, err)
-				}
+			expected := int64(1)
+			if mode == "nil" {
+				expected = 0
+			}
+			if releases.Load() != expected {
+				t.Fatal(releases.Load())
 			}
 		})
 	}
-	wg.Wait()
-	release, err := l.Acquire(context.Background(), 4)
-	if err != nil {
-		t.Fatal(err)
-	}
-	release()
 }
-
-type deadlineError struct{ cause error }
-
-func (e *deadlineError) Error() string { return "I/O deadline" }
-func (e *deadlineError) Unwrap() error { return e.cause }
-func TestAttemptEnrichmentBoundary(t *testing.T) {
+func TestMultipleCallbackViolationIsObservable(t *testing.T) {
+	calls, releases := 0, 0
+	failure := errors.New("second callback")
+	cfg := localConfig()
+	cfg.Weight = 1
+	f := mustWrap(t, func(context.Context) (int, error) { calls++; return calls, failure }, cfg, Dependencies{Limiter: &foreignLimiter{func(context.Context, int64) (func(), error) { return func() { releases++ }, nil }}, Breaker: &foreignBreaker{func(ctx context.Context, fn func(context.Context) error) error { _ = fn(ctx); return fn(ctx) }}})
+	value, err := f(context.Background())
+	if value != 2 || calls != 2 || err != failure || releases != 1 {
+		t.Fatal("contract violation was hidden", value, calls, releases)
+	}
+}
+func TestLocalAdmissionStopsAndCauses(t *testing.T) {
+	for _, stage := range []string{"rate", "limiter"} {
+		failure := errors.New("admission")
+		cfg := localConfig()
+		cfg.Retry.MaxRetries = 2
+		deps := Dependencies{Classify: func(error) retry.Decision { t.Fatal("admission reached classifier"); return retry.DecisionRetry }}
+		if stage == "rate" {
+			cfg.Tokens = 1
+			deps.RateLimiter = &foreignRate{func(context.Context, int) error { return failure }}
+		} else {
+			cfg.Weight = 1
+			deps.Limiter = &foreignLimiter{func(context.Context, int64) (func(), error) { return nil, failure }}
+		}
+		f := mustWrap(t, func(context.Context) (int, error) { t.Fatal("admission executed I/O"); return 0, nil }, cfg, deps)
+		_, err := f(context.Background())
+		if !errors.Is(err, ErrAdmission) || !errors.Is(err, failure) || !strings.Contains(err.Error(), map[string]string{"rate": "ratelimit", "limiter": "concurrency"}[stage]) {
+			t.Fatal(err)
+		}
+	}
+}
+func TestBudgetsWithForeignImplementations(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		for _, kind := range []string{"wrapped deadline", "canceled", "early deadline"} {
-			cfg := config()
+		for _, stage := range []string{"io", "rate", "limiter"} {
+			cfg := localConfig()
+			cfg.TotalTimeout = 10 * time.Second
 			cfg.AttemptTimeout = time.Second
-			original := &deadlineError{context.DeadlineExceeded}
-			expected := error(original)
-			if kind == "canceled" {
-				expected = context.Canceled
+			cfg.AdmissionTimeout = 2 * time.Second
+			deps := Dependencies{}
+			if stage == "rate" {
+				cfg.Tokens = 1
+				deps.RateLimiter = &foreignRate{func(ctx context.Context, _ int) error { <-ctx.Done(); return ctx.Err() }}
 			}
-			b := breaker(t, 5, func(err error) bool {
-				if kind == "wrapped deadline" {
-					var typed *deadlineError
-					if !errors.Is(err, ErrAttemptTimeout) || !errors.As(err, &typed) || typed != original {
-						t.Error("classification lost typed cause", err)
-					}
-				} else if err != expected {
-					t.Error("unrelated error enriched", err)
-				}
-				return false
-			})
-			f := wrap(t, func(ctx context.Context) (int, error) {
-				if kind != "early deadline" {
-					<-ctx.Done()
-				}
-				return 21, expected
-			}, cfg, Dependencies{Breaker: b})
+			if stage == "limiter" {
+				cfg.Weight = 1
+				deps.Limiter = &foreignLimiter{func(ctx context.Context, _ int64) (func(), error) { <-ctx.Done(); return nil, ctx.Err() }}
+			}
+			calls := 0
+			f := mustWrap(t, func(ctx context.Context) (int, error) { calls++; <-ctx.Done(); return 17, ctx.Err() }, cfg, deps)
 			value, err := f(context.Background())
-			if value != 21 {
-				t.Fatal(value)
+			marker := ErrAdmissionTimeout
+			if stage == "io" {
+				marker = ErrAttemptTimeout
 			}
-			if kind == "wrapped deadline" {
-				if !errors.Is(err, original) || !errors.Is(err, ErrAttemptTimeout) {
-					t.Fatal(err)
+			if !errors.Is(err, marker) || !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal(stage, err)
+			}
+			if stage == "io" {
+				if value != 17 || calls != 1 {
+					t.Fatal(value, calls)
 				}
-			} else if err != expected {
-				t.Fatal("identity lost", kind, err)
+			} else if value != 0 || calls != 0 || !errors.Is(err, ErrAdmission) {
+				t.Fatal(value, calls)
 			}
 		}
 	})
