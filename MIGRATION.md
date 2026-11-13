@@ -2,6 +2,36 @@
 
 This guide lists the breaking changes and how to adapt.
 
+## Experimental concurrency candidate (not released)
+
+The standalone `github.com/skolldire/go-engine/concurrency` candidate replaces
+its unpublished prototype APIs. It is not a stable/tagged v1 yet. No module
+version or Go floor changes as part of this candidate.
+
+| Before | Candidate API | Behavior |
+|---|---|---|
+| Config / Result in Map | StreamConfig / StreamResult | Streaming remains completion-order; cancellation may discard results |
+| From(ctx, values...) returns channel | From returns (channel, error) | Nil context is rejected synchronously |
+| Batch(size, wait, buffer) | BatchConfig + weight callback, StreamResult of batches | Explicit weight bounds and terminal invalid/oversized-item errors |
+| NewLimiter(int), Acquire(ctx) | LimiterConfig, Acquire(ctx, weight) | FIFO weighted reservation and idempotent release |
+| WorkerPool task map | NewPool / Submit(Job) / Future.Wait | Caller owns result collection; explicit admission and local live-ID uniqueness |
+| WithTaskTimeout | PoolConfig.TaskTimeout | Running work keeps its slot until it returns; no detached task on timeout |
+| WithResultTimeout | Future.Wait(ctx) / Shutdown(ctx, mode) | Wait timeout does not cancel the job; Future.Cancel is explicit |
+| BatchWorkPool | Batch → Map or Pool submission | Streaming bounds instead of whole-workload materialization |
+| Logger/metrics/result callbacks | Task/Future wrappers and Stats | No SDK or callbacks inside scheduler locks |
+| Priorities | Not in concurrency v1 | No FIFO alias pretending to preserve priority semantics |
+
+`pkg/utilities/task_executor` is frozen and deprecated, not a wrapper around the
+new pool. It will be removed in the migration release. Its timeout may return
+while user code continues running; consumers depending on that behavior must
+migrate explicitly, not assume an equivalent alias. Its priority API is outside
+concurrency v1. No behavior of the frozen implementation changes here.
+
+The candidate's `Job.ID` is not durable idempotency; key serialization is local
+to a process. Business consistency still belongs to the database/domain layer.
+See [implementation evidence](docs/modules/concurrency.md) and
+[contract migration table](docs/modularization/concurrency-api.md#10-migración-explícita-desde-las-apis-anteriores).
+
 ## `v0.30.0` — multi-module split and removal of `pkg/app`
 
 The library is no longer a single module, and the old builder is gone. This is

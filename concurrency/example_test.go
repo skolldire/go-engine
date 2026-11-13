@@ -10,32 +10,41 @@ import (
 func ExampleMap() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// One worker preserves order in this example. More workers emit in completion order.
-	squared, err := concurrency.Map(ctx, concurrency.From(ctx, 1, 2, 3),
-		concurrency.Config{Workers: 1, Buffer: 1},
-		func(_ context.Context, n int) (int, error) { return n * n, nil })
+	input, err := concurrency.From(ctx, 1, 2, 3)
 	if err != nil {
 		panic(err)
 	}
-	// A second stage consumes Result so that upstream errors remain explicit.
-	formatted, err := concurrency.Map(ctx, squared, concurrency.Config{Workers: 1},
-		func(_ context.Context, r concurrency.Result[int]) (string, error) {
-			if r.Err != nil {
-				return "", r.Err
-			}
-			return fmt.Sprintf("value=%d", r.Value), nil
-		})
+	out, err := concurrency.Map(ctx, input, concurrency.StreamConfig{Workers: 1}, func(_ context.Context, n int) (int, error) { return n * n, nil })
 	if err != nil {
 		panic(err)
 	}
-	for r := range formatted {
+	for r := range out {
 		if r.Err != nil {
 			panic(r.Err)
 		}
 		fmt.Println(r.Value)
 	}
 	// Output:
-	// value=1
-	// value=4
-	// value=9
+	// 1
+	// 4
+	// 9
+}
+func ExampleNewPool() {
+	pool, err := concurrency.NewPool(concurrency.DefaultPoolConfig(), func(_ context.Context, n int) (int, error) { return n * 2, nil })
+	if err != nil {
+		panic(err)
+	}
+	future, err := pool.Submit(context.Background(), concurrency.Job[int]{ID: "answer", Weight: 1, Value: 21})
+	if err != nil {
+		panic(err)
+	}
+	r, err := future.Wait(context.Background())
+	if err != nil || r.Err != nil {
+		panic("job failed")
+	}
+	if err := pool.Shutdown(context.Background(), concurrency.ShutdownDrain); err != nil {
+		panic(err)
+	}
+	fmt.Println(r.ID, r.Value, r.State)
+	// Output: answer 42 succeeded
 }

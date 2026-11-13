@@ -157,6 +157,7 @@ example-e2e:
 	@cd example && go test -tags e2e ./... -count=1 -v
 
 lint-arch:
+	@./scripts/check-concurrency-deps.sh
 	@echo "==> Checking architectural constraints..."
 	@FAILED=0; \
 	for forbidden in $(FORBIDDEN_IN_CORE); do \
@@ -201,6 +202,7 @@ HTTP_ONLY_MODULES = 19
 
 ## lint-deps: reports the external dependency footprint of every module
 lint-deps:
+	@./scripts/check-concurrency-deps.sh
 	@# Counting uses each package's real Module.Path, never a prefix of the
 	@# import path. Truncating to two segments merges distinct modules that
 	@# share an owner: spf13/{viper,afero,cast,pflag} collapsed into one, as did
@@ -248,3 +250,8 @@ lint-deps:
 ## check-concurrency: verifies the standalone module has zero dependencies
 check-concurrency:
 	@./scripts/check-concurrency-module.sh
+
+.PHONY: check-concurrency-production
+
+check-concurrency-production:
+	@./scripts/check-concurrency-production.sh all

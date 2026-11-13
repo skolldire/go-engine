@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Experimental (not released)
+- Complete the standalone concurrency candidate: fixed workers, atomic count/weight/key admission, Job/Future tracking, keyed FIFO with round-robin, explicit key failure policies, drain/cancel shutdown, weighted batches and FIFO weighted limiter. No external dependencies, including tests.
+- Break the unpublished streaming prototype signatures: StreamConfig/StreamResult, From returning an error, BatchConfig plus weight, and LimiterConfig/Acquire(ctx, weight).
+- Add unit/race/fuzz/lifecycle/composition tests and offline minimal/composed consumers. Freeze/deprecate task_executor without changing its runtime behavior; document removal in the migration release.
+- Proposed version: concurrency/v1.0.0. Stable acceptance remains pending E6 (manifest and authorization) and E7 (consumer against a real tag); no tag is created by this change.
+
 ### Removed
 - Removed duplicate files with ` 2` and ` 3` suffixes introduced during integration; duplicate Go declarations prevented compilation.
 - **`pkg/app` and `pkg/config/viper` (BREAKING)**: deleted outright, with no deprecation window. `app.NewAppBuilder()` and the 39 `Engine` getters are replaced by `engine.New(ctx, opts...)` and `engine.Get[T]` / the per-provider `From` helpers. `pkg/app/build` went with them (it was dead API).

@@ -33,7 +33,7 @@ con su código dueño. Los paths destino son propuestos bajo
 | `aws/provider/sns` | Provider nombrado sns: decode, Init, Close y From | engine/providers/aws/sns | Separar del cliente; depende del cliente concreto y del engine, nunca a la inversa |
 | `aws/provider/sqs` | Provider nombrado sqs: decode, Init, Close y From | engine/providers/aws/sqs | Separar del cliente; depende del cliente concreto y del engine, nunca a la inversa |
 | `aws/provider/ssm` | Provider nombrado ssm: decode, Init, Close y From | engine/providers/aws/ssm | Separar del cliente; depende del cliente concreto y del engine, nunca a la inversa |
-| `concurrency` | Prototipo Map/From/FanOut/FanIn/Batch/Limiter; contexto y panics | concurrency | Experimental: no publicar todavía; revisar brechas de admisión, IDs, key ordering, bytes y shutdown |
+| `concurrency` | Candidato Pool/Job/Future/Stats, streaming y limiter ponderado; sin dependencias | concurrency | C1–C7 implementados; validación y RC en [evidencia](../modules/concurrency.md), E6/E7 pendientes; no publicar todavía |
 | `database/memcached/pkg/database/memcached` | Get/Set/Delete/Add/Replace, counters, multi-get, FlushAll y prefijos | database/memcached | Extraer conservando semántica de miss; operaciones peligrosas explícitas, sin promesa de durabilidad |
 | `database/memcached/provider/memcached` | Named provider Memcached y health/lifecycle | engine/providers/database/memcached | Separar integración |
 | `database/mongodb/pkg/database/mongodb` | Conexión, database/collection access, ping y disconnect | database/mongodb | Extraer funcionalidades reales; no anunciar transacciones Mongo nuevas por mover este cliente |
@@ -76,7 +76,7 @@ con su código dueño. Los paths destino son propuestos bajo
 | `pkg/utilities/logger/logrusadapter` | Adaptación bidireccional de interfaz logger y tipos logrus | logging/logrus | Conservar como puente opt-in, no dependencia de la nueva abstracción |
 | `pkg/utilities/resilience` | Composición breaker exterior/retry interior y estado del breaker | resilience | Cambio de ordering documentado como ruptura explícita, sin puente; clasificación de fallos e intentos; sin logger propio obligatorio |
 | `pkg/utilities/retry_backoff` | Normalización/defaults, retry, backoff exponencial y jitter aditivo, logging | retry | Adaptar a ctx por intento, full jitter, cap seguro y cero retries real; son cambios semánticos, no mero rename |
-| `pkg/utilities/task_executor` | Task/Tasker, prioridades, WorkerPool/BatchWorkPool, timeouts, callbacks y métricas | concurrency; compatibilidad task_executor aparte | Rediseñar: map y buffers de tamaño total, any y goroutine por tarea no equivalen al pool acotado; preservar ID/prioridad mediante contratos explícitos |
+| `pkg/utilities/task_executor` | Task/Tasker, prioridades, WorkerPool/BatchWorkPool, timeouts, callbacks y métricas | concurrency; legado congelado | Deprecated sin wrapper ni equivalencia falsa; timeout puede retornar con tarea viva; retirada en release de migración. Ver [migración](../modules/concurrency.md) |
 | `pkg/utilities/validation` | Validator custom not_empty, nombres JSON y singleton global | validation | Extraer instancia explícita; reemplazar dependencia en helpers por regla local pequeña; globals solo compatibilidad |
 | `preset/full` | Bundle amplio de providers actuales, excluye SQL/GORM/sqlc y concurrency | presets/full | No ampliar con todos los módulos nuevos silenciosamente; publicar footprint y selección explícita |
 | `preset/http` | Options de ensamblado HTTP con router/salud/log | presets/http | Mantener como conveniencia; nombre del preset no debe confundirse con cliente HTTP |
@@ -88,7 +88,7 @@ con su código dueño. Los paths destino son propuestos bajo
 |---|---|---|
 | Loader independiente | Hoy está dentro de engine y usa Viper | config + fuentes opcionales; conservar env/duración/unknown keys sin engine |
 | Utilities independiente | Helpers/app-profile están en raíz | utilities por paquetes puros; no traer logger/validator |
-| Admisión y orden por clave | No están en el prototipo Map | concurrency con contrato completo y tests de saturación/fairness |
+| Admisión y orden por clave | Implementados en el candidato, no en Map | Pool separado con tests de saturación, FIFO/round-robin y lifecycle; [evidencia](../modules/concurrency.md) |
 | Reintentos clasificados con full jitter | Hay retry genérico, resty y SDK, más Kafka lineal | retry + integraciones; presupuesto único y seguridad de replay |
 | Idempotencia durable | No hay store/claim/completion implementados | idempotency + postgres/mysql; unique keys, fingerprints y fencing |
 | Outbox/inbox | No hay implementación | outbox/inbox + stores por dialecto + publishers elegidos |

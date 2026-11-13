@@ -18,10 +18,11 @@ Not a runnable binary — consumed via `go get`.
 
 ## Modules
 
-The experimental [`concurrency`](concurrency/README.md) prototype provides bounded
+The [`concurrency`](concurrency/README.md) release candidate provides bounded
 pools, pipelines, fan-out/fan-in, batching and shared concurrency limits using
 only the standard library. It imports none of the framework. It is not yet the
-approved production API. The [modularization strategy](docs/modularization.md)
+published stable API; [validation evidence](docs/modules/concurrency.md) records
+E6/E7 still pending. The [modularization strategy](docs/modularization.md)
 defines configuration, utilities, concurrency guarantees, composition and the
 complete package migration inventory before further implementation.
 

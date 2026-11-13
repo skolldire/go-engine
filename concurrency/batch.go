@@ -5,33 +5,47 @@ import (
 	"time"
 )
 
-// Batch groups up to size items and flushes the final partial batch on input
-// closure. maxWait bounds the age of a partial batch before it is offered to
-// the consumer; a slow consumer still applies backpressure. Zero disables the
-// timer. Cancellation discards the pending batch. Every emitted slice has
-// independent storage. Memory is bounded by size * (buffer + 1) items, excluding
-// the caller's input buffer and batches already owned by the consumer.
-func Batch[T any](ctx context.Context, input <-chan T, size int, maxWait time.Duration, buffer int) (<-chan []T, error) {
-	if ctx == nil || input == nil || size <= 0 || maxWait < 0 || buffer < 0 {
-		return nil, ErrInvalidConfig
+type BatchConfig struct {
+	Size           int           `json:"size" yaml:"size" mapstructure:"size"`
+	MaxWait        time.Duration `json:"max_wait" yaml:"max_wait" mapstructure:"max_wait"`
+	Buffer         int           `json:"buffer" yaml:"buffer" mapstructure:"buffer"`
+	MaxBatchWeight int64         `json:"max_batch_weight" yaml:"max_batch_weight" mapstructure:"max_batch_weight"`
+}
+
+func Batch[T any](ctx context.Context, input <-chan T, cfg BatchConfig, weight func(T) int64) (<-chan StreamResult[[]T], error) {
+	if ctx == nil || input == nil || cfg.Size <= 0 || cfg.MaxWait < 0 || cfg.Buffer < 0 || cfg.MaxBatchWeight <= 0 || weight == nil {
+		return nil, invalid("batch", "invalid context, input, weight or limits")
 	}
-	output := make(chan []T, buffer)
+	out := make(chan StreamResult[[]T], cfg.Buffer)
 	go func() {
-		defer close(output)
-		timer := time.NewTimer(time.Hour)
-		timer.Stop()
-		defer timer.Stop()
+		defer close(out)
+		var timer *time.Timer
 		var tick <-chan time.Time
+		if cfg.MaxWait > 0 {
+			timer = time.NewTimer(cfg.MaxWait)
+			timer.Stop()
+			defer timer.Stop()
+		}
 		var batch []T
-		flush := func() bool {
+		var total int64
+		emit := func(result StreamResult[[]T]) bool {
 			select {
 			case <-ctx.Done():
 				return false
-			case output <- batch:
+			case out <- result:
+				return true
+			}
+		}
+		flush := func() bool {
+			if !emit(StreamResult[[]T]{Value: batch}) {
+				return false
 			}
 			batch = nil
-			timer.Stop()
+			total = 0
 			tick = nil
+			if timer != nil {
+				timer.Stop()
+			}
 			return true
 		}
 		for {
@@ -45,26 +59,42 @@ func Batch[T any](ctx context.Context, input <-chan T, size int, maxWait time.Du
 				if !flush() {
 					return
 				}
-			case value, ok := <-input:
+			case v, ok := <-input:
 				if !ok {
 					if len(batch) > 0 {
 						flush()
 					}
 					return
 				}
+				w := weight(v)
+				if w <= 0 {
+					emit(StreamResult[[]T]{Err: invalid("weight", "must be positive")})
+					return
+				}
+				if w > cfg.MaxBatchWeight {
+					emit(StreamResult[[]T]{Err: ErrJobTooLarge})
+					return
+				}
+				if len(batch) > 0 && w > cfg.MaxBatchWeight-total {
+					if !flush() {
+						return
+					}
+				}
 				if len(batch) == 0 {
-					batch = make([]T, 0, size)
-					if maxWait > 0 {
-						timer.Reset(maxWait)
+					if timer != nil {
+						timer.Reset(cfg.MaxWait)
 						tick = timer.C
 					}
 				}
-				batch = append(batch, value)
-				if len(batch) == size && !flush() {
-					return
+				batch = append(batch, v)
+				total += w
+				if len(batch) == cfg.Size || total == cfg.MaxBatchWeight {
+					if !flush() {
+						return
+					}
 				}
 			}
 		}
 	}()
-	return output, nil
+	return out, nil
 }

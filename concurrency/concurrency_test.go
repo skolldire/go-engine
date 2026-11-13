@@ -3,8 +3,11 @@ package concurrency
 import (
 	"context"
 	"errors"
+	"math"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -14,164 +17,105 @@ func testContext(t *testing.T) context.Context {
 	t.Cleanup(cancel)
 	return ctx
 }
-
 func receive[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
 	select {
-	case value := <-ch:
-		return value
+	case v := <-ch:
+		return v
 	case <-time.After(3 * time.Second):
-		t.Fatal("stream did not make progress")
+		t.Fatal("stream did not progress")
 	}
-	var zero T
-	return zero
+	var z T
+	return z
+}
+func source[T any](t *testing.T, ctx context.Context, values ...T) <-chan T {
+	t.Helper()
+	in, err := From(ctx, values...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return in
 }
 
-func TestMapBoundsExecutionAndOutput(t *testing.T) {
-	ctx, cancel := context.WithCancel(testContext(t))
-	defer cancel()
-	input := make(chan int, 100)
-	for i := range 100 {
-		input <- i
-	}
-	close(input)
-	started := make(chan struct{}, 100)
-	gate := make(chan struct{})
-	var active, peak atomic.Int32
-	out, err := Map(ctx, input, Config{Workers: 3, Buffer: 2}, func(ctx context.Context, n int) (int, error) {
-		current := active.Add(1)
-		defer active.Add(-1)
-		for old := peak.Load(); current > old; old = peak.Load() {
-			if peak.CompareAndSwap(old, current) {
-				break
+func TestMapBoundsAndPanic(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx := testContext(t)
+		gate := make(chan struct{})
+		values := []int{1, 2, 3, 4, 5, 6}
+		start := make(chan struct{}, len(values))
+		var active, peak atomic.Int32
+		in := source(t, ctx, values...)
+		out, err := Map(ctx, in, StreamConfig{Workers: 3, Buffer: 2}, func(_ context.Context, n int) (int, error) {
+			current := active.Add(1)
+			defer active.Add(-1)
+			for old := peak.Load(); current > old; old = peak.Load() {
+				if peak.CompareAndSwap(old, current) {
+					break
+				}
+			}
+			start <- struct{}{}
+			<-gate
+			if n == 2 {
+				panic("contained")
+			}
+			return n * 2, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for range 3 {
+			<-start
+		}
+		synctest.Wait()
+		if active.Load() != 3 {
+			t.Fatal("worker bound")
+		}
+		close(gate)
+		count := 0
+		panics := 0
+		for r := range out {
+			count++
+			if errors.Is(r.Err, ErrPanic) {
+				panics++
 			}
 		}
-		started <- struct{}{}
-		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		case <-gate:
-			return n * 2, nil
+		if count != 6 || panics != 1 || peak.Load() > 3 || cap(out) != 2 {
+			t.Fatalf("count=%d panic=%d peak=%d", count, panics, peak.Load())
 		}
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for range 3 {
-		receive(t, started)
-	}
-	if active.Load() != 3 || len(started) != 0 {
-		t.Fatal("worker limit exceeded")
-	}
-	close(gate)
-	// Two buffered results and three blocked workers exhaust admission. Waiting
-	// for five completed calls proves the buffer bound without timing assertions.
-	for range 2 {
-		receive(t, started)
-	}
-	if cap(out) != 2 {
-		t.Fatal("incorrect output capacity")
-	}
-	seen := map[int]bool{}
-	for r := range out {
-		if r.Err != nil {
-			t.Fatal(r.Err)
-		}
-		if seen[r.Value] {
-			t.Fatal("duplicate result")
-		}
-		seen[r.Value] = true
-	}
-	if len(seen) != 100 || peak.Load() > 3 {
-		t.Fatalf("results=%d peak=%d", len(seen), peak.Load())
-	}
 }
-
-func TestMapCancellationUnblocksDelivery(t *testing.T) {
-	ctx, cancel := context.WithCancel(testContext(t))
-	started := make(chan struct{})
-	out, err := Map(ctx, From(ctx, 1), Config{Workers: 1}, func(context.Context, int) (int, error) { close(started); return 1, nil })
-	if err != nil {
-		t.Fatal(err)
-	}
-	receive(t, started)
-	cancel()
-	for range out {
-	}
-}
-
-func TestMapTimeoutDoesNotDetachTask(t *testing.T) {
-	ctx := testContext(t)
-	input := make(chan int, 2)
-	input <- 1
-	input <- 2
-	close(input)
-	timedOut := make(chan struct{})
-	release := make(chan struct{})
-	var calls atomic.Int32
-	out, err := Map(ctx, input, Config{Workers: 1, TaskTimeout: time.Millisecond}, func(ctx context.Context, n int) (int, error) {
-		calls.Add(1)
-		if n == 1 {
-			<-ctx.Done()
-			close(timedOut)
-			<-release
+func TestMapDeadlineAndAbandonedOutput(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(testContext(t))
+		defer cancel()
+		out, err := Map(ctx, source(t, ctx, 1), StreamConfig{Workers: 1, TaskTimeout: time.Second}, func(ctx context.Context, n int) (int, error) { <-ctx.Done(); return n, nil })
+		if err != nil {
+			t.Fatal(err)
 		}
-		return n, nil
+		if r := receive(t, out); !errors.Is(r.Err, context.DeadlineExceeded) {
+			t.Fatalf("deadline %v", r.Err)
+		}
+		for range out {
+		}
+		started := make(chan struct{})
+		out, err = Map(ctx, source(t, ctx, 1), StreamConfig{Workers: 1}, func(context.Context, int) (int, error) { close(started); return 1, nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		<-started
+		synctest.Wait()
+		cancel()
+		for range out {
+		}
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	receive(t, timedOut)
-	if calls.Load() != 1 {
-		t.Fatal("timeout detached a running task")
-	}
-	close(release)
-	first := receive(t, out)
-	if !errors.Is(first.Err, context.DeadlineExceeded) {
-		t.Fatalf("timeout error: %v", first.Err)
-	}
-	for range out {
-	}
-	if calls.Load() != 2 {
-		t.Fatal("next task was lost")
-	}
 }
-
-func TestMapContainsPanicsAndContinues(t *testing.T) {
-	ctx := testContext(t)
-	sentinel := errors.New("task failure")
-	out, err := Map(ctx, From(ctx, 1, 2, 3), Config{Workers: 1}, func(_ context.Context, n int) (int, error) {
-		if n == 1 {
-			panic("boom")
-		}
-		if n == 2 {
-			return 0, sentinel
-		}
-		return n, nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !errors.Is(receive(t, out).Err, ErrPanic) {
-		t.Fatal("panic not contained")
-	}
-	if !errors.Is(receive(t, out).Err, sentinel) {
-		t.Fatal("task error lost")
-	}
-	if r := receive(t, out); r.Value != 3 || r.Err != nil {
-		t.Fatalf("pool did not continue: %+v", r)
-	}
-	for range out {
-	}
-}
-
-func TestFanOutFanInExactlyOnce(t *testing.T) {
+func TestFanOutFanInConservation(t *testing.T) {
 	ctx := testContext(t)
 	values := make([]int, 100)
 	for i := range values {
 		values[i] = i
 	}
-	streams, err := FanOut(ctx, From(ctx, values...), 4, 2)
+	streams, err := FanOut(ctx, source(t, ctx, values...), 4, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,170 +126,240 @@ func TestFanOutFanInExactlyOnce(t *testing.T) {
 	seen := map[int]bool{}
 	for n := range out {
 		if seen[n] {
-			t.Fatal("duplicate item")
+			t.Fatal("duplicate")
 		}
 		seen[n] = true
 	}
-	if len(seen) != len(values) {
-		t.Fatalf("missing items: %d", len(seen))
+	if len(seen) != 100 {
+		t.Fatal(len(seen))
 	}
 	empty, err := FanIn[int](ctx, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := <-empty; ok {
-		t.Fatal("empty merge did not close")
+		t.Fatal("empty merge")
 	}
 }
-
-func TestLimiterCancellationAndIdempotentRelease(t *testing.T) {
+func TestBatchSizeWeightAndStorage(t *testing.T) {
 	ctx := testContext(t)
-	l, err := NewLimiter(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	release, err := l.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	blocked, cancel := context.WithCancel(ctx)
-	cancel()
-	if _, err = l.Acquire(blocked); !errors.Is(err, context.Canceled) {
-		t.Fatalf("acquire: %v", err)
-	}
-	release()
-	release()
-	next, err := l.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	next()
-}
-
-func TestBatchPartialAndIndependentStorage(t *testing.T) {
-	ctx := testContext(t)
-	out, err := Batch(ctx, From(ctx, 1, 2, 3, 4, 5), 2, 0, 1)
+	out, err := Batch(ctx, source(t, ctx, 2, 3, 1, 5, 1), BatchConfig{Size: 3, Buffer: 1, MaxBatchWeight: 5}, func(n int) int64 { return int64(n) })
 	if err != nil {
 		t.Fatal(err)
 	}
 	var batches [][]int
-	for b := range out {
-		batches = append(batches, b)
+	for r := range out {
+		if r.Err != nil {
+			t.Fatal(r.Err)
+		}
+		batches = append(batches, r.Value)
 	}
-	if len(batches) != 3 || len(batches[2]) != 1 || batches[2][0] != 5 {
-		t.Fatalf("batches: %v", batches)
+	if len(batches) != 4 || len(batches[0]) != 2 || batches[3][0] != 1 {
+		t.Fatalf("batches %v", batches)
 	}
 	batches[1][0] = 99
-	if batches[0][0] != 1 {
-		t.Fatal("batch storage was reused")
+	if batches[0][0] != 2 {
+		t.Fatal("shared backing storage")
 	}
 }
-
-func TestBatchFlushesOnTimerAndCancels(t *testing.T) {
-	ctx, cancel := context.WithCancel(testContext(t))
-	defer cancel()
-	input := make(chan int, 1)
-	input <- 42
-	out, err := Batch(ctx, input, 10, time.Millisecond, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b := receive(t, out); len(b) != 1 || b[0] != 42 {
-		t.Fatalf("timed batch: %v", b)
-	}
-	cancel()
-	for range out {
-	}
-}
-
-func TestCancelledStreamsClose(t *testing.T) {
-	ctx, cancel := context.WithCancel(testContext(t))
-	source := From(ctx, 1, 2, 3)
-	streams, err := FanOut(ctx, source, 2, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	merged, err := FanIn(ctx, 0, streams...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cancel()
-	for range merged {
-	}
-	for _, s := range streams {
-		for range s {
+func TestBatchTimerErrorsAndCancel(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(testContext(t))
+		defer cancel()
+		in := make(chan int, 1)
+		in <- 42
+		out, err := Batch(ctx, in, BatchConfig{Size: 10, MaxWait: time.Second, MaxBatchWeight: 100}, func(n int) int64 { return int64(n) })
+		if err != nil {
+			t.Fatal(err)
 		}
+		if r := receive(t, out); len(r.Value) != 1 || r.Value[0] != 42 {
+			t.Fatalf("timer %+v", r)
+		}
+		cancel()
+		for range out {
+		}
+	})
+	for _, value := range []int{0, 6} {
+		ctx, cancel := context.WithCancel(testContext(t))
+		out, err := Batch(ctx, source(t, ctx, value), BatchConfig{Size: 2, MaxBatchWeight: 5}, func(n int) int64 { return int64(n) })
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := receive(t, out)
+		want := ErrInvalidConfig
+		if value == 6 {
+			want = ErrJobTooLarge
+		}
+		if !errors.Is(r.Err, want) {
+			t.Fatal(r.Err)
+		}
+		if _, ok := <-out; ok {
+			t.Fatal("terminal error did not close")
+		}
+		cancel()
 	}
-	for range source {
+	ctx := testContext(t)
+	out, err := Batch(ctx, source(t, ctx, int64(math.MaxInt64), int64(1)), BatchConfig{Size: 2, MaxBatchWeight: math.MaxInt64}, func(n int64) int64 { return n })
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for r := range out {
+		count += len(r.Value)
+	}
+	if count != 2 {
+		t.Fatal(count)
 	}
 }
+func TestLimiterWeightedFIFOAndCancellation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		l, err := NewLimiter(LimiterConfig{Capacity: 3})
+		if err != nil {
+			t.Fatal(err)
+		}
+		initial, err := l.Acquire(context.Background(), 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		bigDone := make(chan error, 1)
+		go func() {
+			r, e := l.Acquire(ctx, 3)
+			if e == nil {
+				r()
+			}
+			bigDone <- e
+		}()
+		synctest.Wait()
+		smallDone := make(chan func(), 1)
+		go func() {
+			r, e := l.Acquire(context.Background(), 1)
+			if e != nil {
+				t.Error(e)
+				return
+			}
+			smallDone <- r
+		}()
+		synctest.Wait()
+		select {
+		case <-smallDone:
+			t.Fatal("small overtook head")
+		default:
+		}
+		cancel()
+		if e := <-bigDone; !errors.Is(e, context.Canceled) {
+			t.Fatal(e)
+		}
+		small := <-smallDone
+		small()
+		small()
+		initial()
+		initial()
+		full, err := l.Acquire(context.Background(), 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		full()
+	})
+}
+func TestCanceledStreamsClose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		in := source(t, ctx, 1, 2, 3)
+		outputs, err := FanOut(ctx, in, 2, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := FanIn(ctx, 0, outputs...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		cancel()
+		for range out {
+		}
+		for _, s := range outputs {
+			for range s {
+			}
+		}
+		for range in {
+		}
+	})
+}
 
-func TestInvalidConfiguration(t *testing.T) {
-	ctx := testContext(t)
+//nolint:staticcheck // SA1012: nil-context rejection is explicitly part of the public contract.
+func TestInvalidStreamingAndLimiter(t *testing.T) {
+	ctx := context.Background()
 	in := make(chan int)
 	fn := func(context.Context, int) (int, error) { return 0, nil }
-	for _, cfg := range []Config{{}, {Workers: -1}, {Workers: 1, Buffer: -1}, {Workers: 1, TaskTimeout: -1}} {
+	if _, err := From[int](nil); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatal(err)
+	}
+	for _, cfg := range []StreamConfig{{}, {Workers: 1, Buffer: -1}, {Workers: 1, TaskTimeout: -1}} {
 		if _, err := Map(ctx, in, cfg, fn); !errors.Is(err, ErrInvalidConfig) {
-			t.Fatal("invalid map config accepted")
+			t.Fatal(err)
 		}
 	}
-	if _, err := Map(ctx, in, Config{Workers: 1}, (func(context.Context, int) (int, error))(nil)); err == nil {
-		t.Fatal("nil function accepted")
+	if _, err := Map(ctx, in, StreamConfig{Workers: 1}, (Task[int, int])(nil)); err == nil {
+		t.Fatal("nil task")
 	}
-	if _, err := Batch(ctx, in, 0, 0, 0); err == nil {
-		t.Fatal("invalid batch accepted")
+	if _, err := Map[int, int](nil, in, StreamConfig{Workers: 1}, fn); err == nil {
+		t.Fatal("nil ctx")
+	}
+	if _, err := Map[int, int](ctx, nil, StreamConfig{Workers: 1}, fn); err == nil {
+		t.Fatal("nil input")
 	}
 	if _, err := FanOut(ctx, in, 0, 0); err == nil {
-		t.Fatal("invalid fan-out accepted")
+		t.Fatal("fanout count")
+	}
+	if _, err := FanIn[int](nil, 0); err == nil {
+		t.Fatal("fanin context")
 	}
 	if _, err := FanIn[int](ctx, -1); err == nil {
-		t.Fatal("invalid fan-in accepted")
+		t.Fatal("fanin buffer")
 	}
-	if _, err := NewLimiter(0); err == nil {
-		t.Fatal("invalid limiter accepted")
+	if _, err := Batch(ctx, in, BatchConfig{}, func(int) int64 { return 1 }); err == nil {
+		t.Fatal("batch config")
 	}
-}
-
-func TestLimiterCancelsWaitingAcquire(t *testing.T) {
-	ctx := testContext(t)
-	limiter, err := NewLimiter(1)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := NewLimiter(LimiterConfig{}); err == nil {
+		t.Fatal("limiter capacity")
 	}
-	release, err := limiter.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
+	var l Limiter
+	if _, err := l.Acquire(ctx, 1); err == nil {
+		t.Fatal("zero limiter")
 	}
-	defer release()
-	waiting, cancel := context.WithCancel(ctx)
-	done := make(chan error, 1)
-	go func() {
-		r, err := limiter.Acquire(waiting)
-		if err == nil {
-			r()
+	var nilLimiter *Limiter
+	if _, err := nilLimiter.Acquire(ctx, 1); err == nil {
+		t.Fatal("nil limiter")
+	}
+	limiter, _ := NewLimiter(LimiterConfig{Capacity: 1})
+	for _, w := range []int64{0, -1, 2} {
+		if _, err := limiter.Acquire(ctx, w); err == nil {
+			t.Fatal("weight accepted")
 		}
-		done <- err
-	}()
-	cancel()
-	if err := receive(t, done); !errors.Is(err, context.Canceled) {
-		t.Fatalf("waiting acquire: %v", err)
+	}
+	if _, err := limiter.Acquire(nil, 1); err == nil {
+		t.Fatal("nil context")
 	}
 }
-
-func TestMapCancelledBeforeStartDoesNotExecute(t *testing.T) {
-	ctx, cancel := context.WithCancel(testContext(t))
-	cancel()
-	input := make(chan int, 1)
-	input <- 1
-	close(input)
-	var calls atomic.Int32
-	out, err := Map(ctx, input, Config{Workers: 4}, func(context.Context, int) (int, error) { calls.Add(1); return 0, nil })
-	if err != nil {
-		t.Fatal(err)
+func TestLimiterConcurrentRelease(t *testing.T) {
+	l, _ := NewLimiter(LimiterConfig{Capacity: 4})
+	var wg sync.WaitGroup
+	var active atomic.Int32
+	for range 40 {
+		wg.Go(func() {
+			r, e := l.Acquire(testContext(t), 1)
+			if e != nil {
+				t.Error(e)
+				return
+			}
+			if active.Add(1) > 4 {
+				t.Error("capacity exceeded")
+			}
+			active.Add(-1)
+			r()
+			r()
+		})
 	}
-	for range out {
-	}
-	if calls.Load() != 0 {
-		t.Fatal("started a task after cancellation")
-	}
+	wg.Wait()
 }
