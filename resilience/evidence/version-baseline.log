@@ -1,0 +1,13 @@
+module github.com/skolldire/go-engine/config/viper
+
+go 1.27.4
+
+require (
+	github.com/skolldire/go-engine/config v0.0.0
+	github.com/spf13/viper v1.21.0
+)
+
+replace github.com/skolldire/go-engine/config => ..
+
+require (
+v0.22.0

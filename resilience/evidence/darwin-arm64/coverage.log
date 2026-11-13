@@ -1,0 +1,12 @@
+ok  	github.com/skolldire/go-engine/resilience	0.178s	coverage: 96.0% of statements
+github.com/skolldire/go-engine/resilience/resilience.go:29:	Error		100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:30:	Unwrap		100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:48:	DefaultConfig	100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:51:	Validate	100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:80:	Wrap		100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:145:	budget		100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:151:	admit		100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:174:	admissionError	100.0%
+github.com/skolldire/go-engine/resilience/resilience.go:177:	enrichContext	87.5%
+github.com/skolldire/go-engine/resilience/resilience.go:191:	settleBudget	62.5%
+total:								(statements)	96.0%

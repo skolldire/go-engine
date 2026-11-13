@@ -1,0 +1,18 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/skolldire/go-engine/pkg/utilities/resilience
+cpu: Apple M1 Max
+BenchmarkBoundarySuccess-10    	 5627524	       104.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundarySuccess-10    	 5781490	       105.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundarySuccess-10    	 5769780	       104.7 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/pkg/utilities/resilience	2.078s
+goos: darwin
+goarch: arm64
+pkg: github.com/skolldire/go-engine/resilience
+cpu: Apple M1 Max
+BenchmarkBoundarySuccess-10    	 4298090	       130.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundarySuccess-10    	 4623513	       128.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundarySuccess-10    	 4773840	       127.5 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/resilience	1.931s

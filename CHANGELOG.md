@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- Add independent resilience candidate, approved D39 and closed D32; see resilience/RELEASE_NOTES.md.
+
 - Add independent ratelimit candidate with approved D38; see ratelimit/RELEASE_NOTES.md.
 
 - Add independent circuitbreaker candidate with approved D37; see circuitbreaker/RELEASE_NOTES.md.

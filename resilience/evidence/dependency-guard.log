@@ -1,0 +1,6 @@
+go: writing stat cache: mkdir /Users/seven/go/pkg/mod/cache/download/github.com/skolldire/go-engine/client: operation not permitted
+go: writing stat cache: mkdir /Users/seven/go/pkg/mod/cache/download/github.com/skolldire/go-engine/retry: operation not permitted
+go: writing stat cache: mkdir /Users/seven/go/pkg/mod/cache/download/github.com/skolldire/go-engine/ratelimit: operation not permitted
+go: writing stat cache: mkdir /Users/seven/go/pkg/mod/cache/download/github.com/skolldire/go-engine/concurrency: operation not permitted
+go: writing stat cache: mkdir /Users/seven/go/pkg/mod/cache/download/github.com/skolldire/go-engine/circuitbreaker: operation not permitted
+resilience: stdlib + five base modules only, no inverse dependency

@@ -1,0 +1,15 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/3 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 3/3 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 137206 (45733/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 6s, execs: 274019 (45604/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 9s, execs: 413205 (46391/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 12s, execs: 553448 (46742/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 15s, execs: 693022 (46532/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 18s, execs: 826823 (44591/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 21s, execs: 965787 (46325/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 24s, execs: 1106826 (47021/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 27s, execs: 1244501 (45881/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 30s, execs: 1392044 (49178/sec), new interesting: 25 (total: 28)
+fuzz: elapsed: 30s, execs: 1392044 (0/sec), new interesting: 25 (total: 28)
+PASS
+ok  	github.com/skolldire/go-engine/resilience	30.107s

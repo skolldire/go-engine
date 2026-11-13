@@ -333,3 +333,5 @@ Retry candidate: see [retry/MIGRATION.md](retry/MIGRATION.md). Legacy retries re
 Circuitbreaker candidate: see [circuitbreaker/MIGRATION.md](circuitbreaker/MIGRATION.md). Legacy circuit_breaker/resilience remain unchanged; new classification and recovery semantics are explicit.
 
 Ratelimit candidate: see [ratelimit/MIGRATION.md](ratelimit/MIGRATION.md). Local rate admission is distinct from concurrency limits and SDK throttling policies.
+
+Resilience candidate: see [resilience/MIGRATION.md](resilience/MIGRATION.md). The approved composition uses retry outside per-attempt rate, concurrency and breaker; legacy behavior is unchanged.
