@@ -1,0 +1,33 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/skolldire/go-engine/ratelimit
+cpu: Apple M1 Max
+BenchmarkAllowSuccess-10         	 5849750	       102.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllowSuccess-10         	 5912293	       101.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllowSuccess-10         	 5860857	       102.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllowRejected-10        	 5813062	       102.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllowRejected-10        	 5926213	       101.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllowRejected-10        	 5927628	       103.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWaitImmediate-10        	 5835016	       102.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWaitImmediate-10        	 5834485	       103.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWaitImmediate-10        	 5788767	       104.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkInvalid-10              	 7851458	        74.98 ns/op	      64 B/op	       2 allocs/op
+BenchmarkInvalid-10              	 8008555	        75.31 ns/op	      64 B/op	       2 allocs/op
+BenchmarkInvalid-10              	 7892624	        75.56 ns/op	      64 B/op	       2 allocs/op
+BenchmarkRefill/partial-10       	12198913	        49.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRefill/partial-10       	12158690	        48.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRefill/partial-10       	12159604	        49.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRefill/saturated-10     	14957324	        43.65 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRefill/saturated-10     	14749760	        43.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRefill/saturated-10     	14818930	        43.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkQueueCancellation-10    	  179925	      3317 ns/op	     992 B/op	      17 allocs/op
+BenchmarkQueueCancellation-10    	  183968	      3232 ns/op	     992 B/op	      17 allocs/op
+BenchmarkQueueCancellation-10    	  187362	      3221 ns/op	     992 B/op	      17 allocs/op
+BenchmarkConcurrent-10           	 2194030	       276.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrent-10           	 2285253	       268.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrent-10           	 2142014	       263.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndependent-10          	35067297	        15.12 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndependent-10          	31972077	        15.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndependent-10          	40134339	        17.69 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/ratelimit	17.309s

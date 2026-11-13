@@ -1,0 +1,5 @@
+ratelimit: stdlib-only runtime and tests
+ratelimit minimal: passed; timed refill/FIFO checked by go test
+ok  	example.com/ratelimit-minimal	1.013s
+ratelimit composed: client + retry + rate + breaker passed
+ok  	example.com/ratelimit-composed	1.015s

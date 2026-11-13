@@ -1,0 +1,62 @@
+=== RUN   TestStressConcurrentAdmissions
+    qualification_test.go:87: 32000 mixed Wait/Allow/cancel calls; admitted calls=18298 weight=36874 elapsed=36.746s bound=36874
+    qualification_test.go:89: goroutineleak profile: total 0
+        
+--- PASS: TestStressConcurrentAdmissions (0.27s)
+=== RUN   TestStressTimersAndHeadWakeups
+    qualification_test.go:173: goroutineleak profile: total 0
+        
+    qualification_test.go:174: timers allocated across live queues=20 (one each); head notifications=320; canceled waiters=480; no nonhead broadcast
+--- PASS: TestStressTimersAndHeadWakeups (0.01s)
+=== RUN   TestStressReleasedWaiters
+    qualification_test.go:250: goroutineleak profile: total 0
+        
+    qualification_test.go:251: 480 canceled waits/64KiB payloads, 480 nodes and 30 long-delay timers reclaimed; heap baseline=248096 peak=248096
+--- PASS: TestStressReleasedWaiters (0.03s)
+=== RUN   TestStressIndependentInstances
+    qualification_test.go:517: goroutineleak profile: total 0
+        
+    qualification_test.go:518: 32 independent instances, 16000 weighted waits
+--- PASS: TestStressIndependentInstances (0.07s)
+=== RUN   TestStressConcurrentAdmissions
+    qualification_test.go:87: 32000 mixed Wait/Allow/cancel calls; admitted calls=18301 weight=36889 elapsed=36.761s bound=36889
+    qualification_test.go:89: goroutineleak profile: total 0
+        
+--- PASS: TestStressConcurrentAdmissions (0.28s)
+=== RUN   TestStressTimersAndHeadWakeups
+    qualification_test.go:173: goroutineleak profile: total 0
+        
+    qualification_test.go:174: timers allocated across live queues=20 (one each); head notifications=320; canceled waiters=480; no nonhead broadcast
+--- PASS: TestStressTimersAndHeadWakeups (0.01s)
+=== RUN   TestStressReleasedWaiters
+    qualification_test.go:250: goroutineleak profile: total 0
+        
+    qualification_test.go:251: 480 canceled waits/64KiB payloads, 480 nodes and 30 long-delay timers reclaimed; heap baseline=268376 peak=269160
+--- PASS: TestStressReleasedWaiters (0.04s)
+=== RUN   TestStressIndependentInstances
+    qualification_test.go:517: goroutineleak profile: total 0
+        
+    qualification_test.go:518: 32 independent instances, 16000 weighted waits
+--- PASS: TestStressIndependentInstances (0.07s)
+=== RUN   TestStressConcurrentAdmissions
+    qualification_test.go:87: 32000 mixed Wait/Allow/cancel calls; admitted calls=18303 weight=36884 elapsed=36.756s bound=36884
+    qualification_test.go:89: goroutineleak profile: total 0
+        
+--- PASS: TestStressConcurrentAdmissions (0.29s)
+=== RUN   TestStressTimersAndHeadWakeups
+    qualification_test.go:173: goroutineleak profile: total 0
+        
+    qualification_test.go:174: timers allocated across live queues=20 (one each); head notifications=320; canceled waiters=480; no nonhead broadcast
+--- PASS: TestStressTimersAndHeadWakeups (0.01s)
+=== RUN   TestStressReleasedWaiters
+    qualification_test.go:250: goroutineleak profile: total 0
+        
+    qualification_test.go:251: 480 canceled waits/64KiB payloads, 480 nodes and 30 long-delay timers reclaimed; heap baseline=269976 peak=272664
+--- PASS: TestStressReleasedWaiters (0.04s)
+=== RUN   TestStressIndependentInstances
+    qualification_test.go:517: goroutineleak profile: total 0
+        
+    qualification_test.go:518: 32 independent instances, 16000 weighted waits
+--- PASS: TestStressIndependentInstances (0.07s)
+PASS
+ok  	github.com/skolldire/go-engine/ratelimit	2.222s

@@ -4,7 +4,7 @@ MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/nul
 # adapter families, then the preset that composes all of them. `go.work` binds
 # them together for local development, so a change to the core is visible to
 # every family without a tagged release in between.
-MODULES := . circuitbreaker retry client config config/viper concurrency aws messaging http \
+MODULES := . ratelimit circuitbreaker retry client config config/viper concurrency aws messaging http \
     database/sql database/sqlc database/redis database/mongodb database/memcached \
     preset/full example
 
@@ -16,7 +16,7 @@ FAMILY_MODULES := aws messaging http \
 .PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
 
 ## all: the checks a change must pass before it is pushed
-all: lint lint-arch lint-docs check-modules check-concurrency check-config check-client-deps check-client check-retry-deps check-retry check-circuitbreaker-deps check-circuitbreaker test example
+all: lint lint-arch lint-docs check-modules check-concurrency check-config check-client-deps check-client check-retry-deps check-retry check-circuitbreaker-deps check-circuitbreaker check-ratelimit-deps check-ratelimit test example
 
 
 clean:
@@ -157,6 +157,7 @@ example-e2e:
 	@cd example && go test -tags e2e ./... -count=1 -v
 
 lint-arch:
+	@./scripts/check-ratelimit-deps.sh
 	@./scripts/check-circuitbreaker-deps.sh
 	@./scripts/check-retry-deps.sh
 	@./scripts/check-client-deps.sh
@@ -206,6 +207,7 @@ HTTP_ONLY_MODULES = 19
 
 ## lint-deps: reports the external dependency footprint of every module
 lint-deps:
+	@./scripts/check-ratelimit-deps.sh
 	@./scripts/check-circuitbreaker-deps.sh
 	@./scripts/check-retry-deps.sh
 	@./scripts/check-client-deps.sh
@@ -335,3 +337,17 @@ check-circuitbreaker-fuzz:
 	@./scripts/check-circuitbreaker-production.sh fuzz
 check-circuitbreaker-bench:
 	@./scripts/check-circuitbreaker-production.sh bench
+
+.PHONY: check-ratelimit-deps check-ratelimit check-ratelimit-quick check-ratelimit-stress check-ratelimit-fuzz check-ratelimit-bench
+check-ratelimit-deps:
+	@./scripts/check-ratelimit-deps.sh
+check-ratelimit:
+	@./scripts/check-ratelimit-module.sh
+check-ratelimit-quick:
+	@./scripts/check-ratelimit-production.sh quick
+check-ratelimit-stress:
+	@./scripts/check-ratelimit-production.sh stress
+check-ratelimit-fuzz:
+	@./scripts/check-ratelimit-production.sh fuzz
+check-ratelimit-bench:
+	@./scripts/check-ratelimit-production.sh bench

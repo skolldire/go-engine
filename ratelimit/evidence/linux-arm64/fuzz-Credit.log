@@ -1,0 +1,15 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/2 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 2/2 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 134360 (44786/sec), new interesting: 113 (total: 115)
+fuzz: elapsed: 6s, execs: 275971 (47201/sec), new interesting: 114 (total: 116)
+fuzz: elapsed: 9s, execs: 415937 (46651/sec), new interesting: 114 (total: 116)
+fuzz: elapsed: 12s, execs: 556620 (46862/sec), new interesting: 115 (total: 117)
+fuzz: elapsed: 15s, execs: 693036 (45505/sec), new interesting: 117 (total: 119)
+fuzz: elapsed: 18s, execs: 829279 (45408/sec), new interesting: 117 (total: 119)
+fuzz: elapsed: 21s, execs: 959157 (43303/sec), new interesting: 119 (total: 121)
+fuzz: elapsed: 24s, execs: 1101136 (47316/sec), new interesting: 119 (total: 121)
+fuzz: elapsed: 27s, execs: 1240560 (46473/sec), new interesting: 119 (total: 121)
+fuzz: elapsed: 30s, execs: 1381097 (46852/sec), new interesting: 119 (total: 121)
+fuzz: elapsed: 30s, execs: 1381097 (0/sec), new interesting: 119 (total: 121)
+PASS
+ok  	github.com/skolldire/go-engine/ratelimit	30.091s

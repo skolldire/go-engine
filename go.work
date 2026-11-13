@@ -9,6 +9,7 @@ use (
 	./client
 	./circuitbreaker
 	./retry
+	./ratelimit
 	./config
 	./config/viper
 	./concurrency

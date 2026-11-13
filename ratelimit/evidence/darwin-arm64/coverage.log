@@ -1,0 +1,13 @@
+ok  	github.com/skolldire/go-engine/ratelimit	0.251s	coverage: 98.3% of statements
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:20:	Error		0.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:21:	Unwrap		100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:28:	Validate	100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:61:	New		100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:72:	valid		100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:73:	Allow		100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:89:	Wait		100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:152:	remove		100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:174:	contextError	85.7%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:185:	refill		100.0%
+github.com/skolldire/go-engine/ratelimit/ratelimit.go:211:	delay		100.0%
+total:								(statements)	98.3%

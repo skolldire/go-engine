@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- Add independent ratelimit candidate with approved D38; see ratelimit/RELEASE_NOTES.md.
+
 - Add independent circuitbreaker candidate with approved D37; see circuitbreaker/RELEASE_NOTES.md.
 
 - Add independent retry candidate with approved D36 semantics; see retry/RELEASE_NOTES.md.
