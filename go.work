@@ -6,6 +6,7 @@ go 1.27.4
 use (
 	.
 	./aws
+	./client
 	./config
 	./config/viper
 	./concurrency

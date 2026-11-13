@@ -1,0 +1,29 @@
+=== RUN   TestStressConcurrentChains
+    qualification_test.go:79: goroutineleak profile: total 0
+        
+--- PASS: TestStressConcurrentChains (0.11s)
+=== RUN   TestStressAbandonedChains
+    qualification_test.go:139: goroutineleak profile: total 0
+        
+    qualification_test.go:140: 960 abandoned chains/payloads of 64KiB, heap baseline=168456 peak=168456
+--- PASS: TestStressAbandonedChains (0.02s)
+=== RUN   TestStressConcurrentChains
+    qualification_test.go:79: goroutineleak profile: total 0
+        
+--- PASS: TestStressConcurrentChains (0.13s)
+=== RUN   TestStressAbandonedChains
+    qualification_test.go:139: goroutineleak profile: total 0
+        
+    qualification_test.go:140: 960 abandoned chains/payloads of 64KiB, heap baseline=182072 peak=182072
+--- PASS: TestStressAbandonedChains (0.07s)
+=== RUN   TestStressConcurrentChains
+    qualification_test.go:79: goroutineleak profile: total 0
+        
+--- PASS: TestStressConcurrentChains (0.14s)
+=== RUN   TestStressAbandonedChains
+    qualification_test.go:139: goroutineleak profile: total 0
+        
+    qualification_test.go:140: 960 abandoned chains/payloads of 64KiB, heap baseline=194552 peak=194552
+--- PASS: TestStressAbandonedChains (0.04s)
+PASS
+ok  	github.com/skolldire/go-engine/client	1.517s

@@ -1,0 +1,15 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/5 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 5/5 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 281720 (93843/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 6s, execs: 597519 (105266/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 9s, execs: 907954 (103490/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 12s, execs: 1223228 (105112/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 15s, execs: 1540032 (105568/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 18s, execs: 1860569 (106846/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 21s, execs: 2179688 (106373/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 24s, execs: 2493082 (104465/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 27s, execs: 2809180 (105366/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 30s, execs: 3130934 (107281/sec), new interesting: 2 (total: 7)
+fuzz: elapsed: 30s, execs: 3130934 (0/sec), new interesting: 2 (total: 7)
+PASS
+ok  	github.com/skolldire/go-engine/client	30.244s

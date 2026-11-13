@@ -1,0 +1,16 @@
+Go 1.27.4; macOS ARM64 Apple M1 Max and Linux ARM64; no AMD64 execution.
+client/v0.1.0 proposed; E1-E5 local complete, E6/E7 deferred; no stable publication.
+Source snapshot ../SOURCE.sha256: Go source/tests, go.mod and module docs, excluding execution evidence/manifest.
+Mac: scripts/check-client-production.sh all, default fuzz 30s/target x2 workers, benchmarks 500ms x3 without race.
+Quick: GOWORK=off GOPROXY=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly, race x20 default/1/4 and go vet.
+Stress: CLIENT_STRESS=1, TestStress x3 with race and logs, weak pointers/heap/goroutineleak.
+Linux: same quick/stress/fuzz and standalone checks, --network none --read-only --rm, 4CPU/4GiB, tmpfs 3GiB executable.
+Image sha256:e432b43af23a9328d56a7c499be0476810aa344acbcf65fc7c455d4ff5a40602.
+Toolchain official archive SHA256 3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92.
+Cached dependency archive is only for D26 inverse queries; client/consumers import no SDK and require only client.
+root-checks: make lint lint-arch lint-deps lint-docs check-client check-config check-concurrency.
+workspace-regression: make test, every module, race count1; local httptest/grpc listeners authorized outside sandbox.
+legacy-client-regression: go test -race -count=1 ./pkg/core/client/...
+legacy-comparison-bench and typed-comparison-bench run sequentially after other campaigns, 500ms x3, same fixtures/flags.
+gorelease: external binary, exact candidate-source copy outside git, -base=none -version=v0.1.0, exit0, no previous release.
+No agent commit, push, tag or index change. Evidence is inside the versionable client module, not ignored docs/.

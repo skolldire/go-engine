@@ -1,0 +1,9 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/skolldire/go-engine/client
+cpu: Apple M1 Max
+BenchmarkTypedBoundaryComparison-10    	40241306	        14.75 ns/op	      16 B/op	       1 allocs/op
+BenchmarkTypedBoundaryComparison-10    	41392512	        14.54 ns/op	      16 B/op	       1 allocs/op
+BenchmarkTypedBoundaryComparison-10    	38333352	        15.20 ns/op	      16 B/op	       1 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/client	1.954s

@@ -1,0 +1,5 @@
+client: stdlib-only runtime/tests; D26 inverse dependency boundaries pass
+minimal: Do/Chain typed result, original context/error and validation OK
+?   	example.com/client-minimal	[no test files]
+composed: injected in-memory I/O, two middleware, deadline and original cause OK
+?   	example.com/client-composed	[no test files]

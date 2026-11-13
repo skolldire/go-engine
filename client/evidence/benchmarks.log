@@ -1,0 +1,51 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/skolldire/go-engine/client
+cpu: Apple M1 Max
+BenchmarkScalar/operation-10           	250407040	         2.779 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/operation-10           	255923380	         2.242 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/operation-10           	285856078	         2.080 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/terminal-10            	283382284	         2.107 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/terminal-10            	280432801	         2.171 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/terminal-10            	285753804	         2.074 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/do/none-10             	44116836	        13.27 ns/op	      16 B/op	       1 allocs/op
+BenchmarkScalar/do/none-10             	44107239	        14.75 ns/op	      16 B/op	       1 allocs/op
+BenchmarkScalar/do/none-10             	41817432	        13.96 ns/op	      16 B/op	       1 allocs/op
+BenchmarkScalar/chain/1-10             	184020762	         3.281 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/chain/1-10             	175741089	         3.431 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/chain/1-10             	168317070	         3.438 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/do/1-10                	23520994	        27.62 ns/op	      40 B/op	       2 allocs/op
+BenchmarkScalar/do/1-10                	23100948	        26.23 ns/op	      40 B/op	       2 allocs/op
+BenchmarkScalar/do/1-10                	24424207	        26.36 ns/op	      40 B/op	       2 allocs/op
+BenchmarkScalar/chain/4-10             	86094540	         7.052 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/chain/4-10             	83684925	         7.219 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/chain/4-10             	85281276	         7.218 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/do/4-10                	 9433034	        63.40 ns/op	     112 B/op	       5 allocs/op
+BenchmarkScalar/do/4-10                	 9275116	       131.9 ns/op	     112 B/op	       5 allocs/op
+BenchmarkScalar/do/4-10                	 7130932	        80.37 ns/op	     112 B/op	       5 allocs/op
+BenchmarkScalar/chain/16-10            	28221736	        21.68 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/chain/16-10            	27781743	        21.92 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/chain/16-10            	26802415	        22.49 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScalar/do/16-10               	 3076328	       200.1 ns/op	     400 B/op	      17 allocs/op
+BenchmarkScalar/do/16-10               	 2866990	       244.1 ns/op	     400 B/op	      17 allocs/op
+BenchmarkScalar/do/16-10               	 1600569	       323.9 ns/op	     400 B/op	      17 allocs/op
+BenchmarkStruct/chain/0-10             	275803262	         2.175 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/0-10             	273335961	         2.261 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/0-10             	271933719	         2.260 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/1-10             	169835594	         3.498 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/1-10             	173383470	         3.476 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/1-10             	169094940	         3.486 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/4-10             	85431032	         7.066 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/4-10             	85216172	         7.757 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/4-10             	74666334	         7.416 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/16-10            	25588671	        24.22 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/16-10            	26354269	        22.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStruct/chain/16-10            	25807744	        24.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrentChain-10            	582102766	         1.304 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrentChain-10            	528715489	         1.116 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConcurrentChain-10            	574558546	         1.406 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTypedBoundaryComparison-10    	32643765	        17.88 ns/op	      16 B/op	       1 allocs/op
+BenchmarkTypedBoundaryComparison-10    	39822679	        15.63 ns/op	      16 B/op	       1 allocs/op
+BenchmarkTypedBoundaryComparison-10    	37704823	        15.61 ns/op	      16 B/op	       1 allocs/op
+PASS
+ok  	github.com/skolldire/go-engine/client	28.814s

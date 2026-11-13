@@ -4,7 +4,7 @@ MODULE_NAME := $(shell basename $(shell git rev-parse --show-toplevel 2>/dev/nul
 # adapter families, then the preset that composes all of them. `go.work` binds
 # them together for local development, so a change to the core is visible to
 # every family without a tagged release in between.
-MODULES := . config config/viper concurrency aws messaging http \
+MODULES := . client config config/viper concurrency aws messaging http \
     database/sql database/sqlc database/redis database/mongodb database/memcached \
     preset/full example
 
@@ -16,7 +16,7 @@ FAMILY_MODULES := aws messaging http \
 .PHONY: all clean test lint lint-arch lint-deps lint-docs tidy check-modules smoke example example-e2e
 
 ## all: the checks a change must pass before it is pushed
-all: lint lint-arch lint-docs check-modules check-concurrency check-config test example
+all: lint lint-arch lint-docs check-modules check-concurrency check-config check-client-deps check-client test example
 
 
 clean:
@@ -157,6 +157,7 @@ example-e2e:
 	@cd example && go test -tags e2e ./... -count=1 -v
 
 lint-arch:
+	@./scripts/check-client-deps.sh
 	@./scripts/check-concurrency-deps.sh
 	@./scripts/check-config-deps.sh
 	@echo "==> Checking architectural constraints..."
@@ -203,6 +204,7 @@ HTTP_ONLY_MODULES = 19
 
 ## lint-deps: reports the external dependency footprint of every module
 lint-deps:
+	@./scripts/check-client-deps.sh
 	@./scripts/check-concurrency-deps.sh
 	@./scripts/check-config-deps.sh
 	@# Counting uses each package's real Module.Path, never a prefix of the
@@ -287,3 +289,17 @@ check-config-viper-fuzz:
 	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh fuzz
 check-config-viper-bench:
 	@CONFIG_MODULE=config/viper ./scripts/check-config-production.sh bench
+
+.PHONY: check-client-deps check-client check-client-quick check-client-stress check-client-fuzz check-client-bench
+check-client-deps:
+	@./scripts/check-client-deps.sh
+check-client:
+	@./scripts/check-client-module.sh
+check-client-quick:
+	@./scripts/check-client-production.sh quick
+check-client-stress:
+	@./scripts/check-client-production.sh stress
+check-client-fuzz:
+	@./scripts/check-client-production.sh fuzz
+check-client-bench:
+	@./scripts/check-client-production.sh bench

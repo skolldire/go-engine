@@ -1,0 +1,105 @@
+==> lint .
+0 issues.
+==> lint client
+0 issues.
+==> lint config
+0 issues.
+==> lint config/viper
+0 issues.
+==> lint concurrency
+0 issues.
+==> lint aws
+0 issues.
+==> lint messaging
+0 issues.
+==> lint http
+0 issues.
+==> lint database/sql
+0 issues.
+==> lint database/sqlc
+0 issues.
+==> lint database/redis
+0 issues.
+==> lint database/mongodb
+0 issues.
+==> lint database/memcached
+0 issues.
+==> lint preset/full
+0 issues.
+==> lint example
+0 issues.
+client: stdlib-only runtime/tests; D26 inverse dependency boundaries pass
+==> OK: concurrency runtime and tests are stdlib-only (GOWORK=off)
+config: selected versions and runtime/test imports match allowlist
+config/viper: selected versions and runtime/test imports match allowlist
+==> Checking architectural constraints...
+==> OK: no architectural violations found
+client: stdlib-only runtime/tests; D26 inverse dependency boundaries pass
+==> OK: concurrency runtime and tests are stdlib-only (GOWORK=off)
+config: selected versions and runtime/test imports match allowlist
+config/viper: selected versions and runtime/test imports match allowlist
+MODULE                       PACKAGES    MODULES
+.                                 262         50
+client                              0          0
+config                              2          1
+config/viper                       33         12
+concurrency                         0          0
+aws                               442         89
+messaging                         226         28
+http                               51         24
+database/sql                       57         23
+database/sqlc                      42         20
+database/redis                     66         25
+database/mongodb                  105         28
+database/memcached                 43         21
+preset/full                       582         99
+example                            60         23
+
+==> An HTTP-only consumer (pkg/engine + pkg/router) resolves:
+   github.com/fsnotify/fsnotify
+   github.com/go-chi/chi/v5
+   github.com/go-chi/cors
+   github.com/go-viper/mapstructure/v2
+   github.com/golang-jwt/jwt/v5
+   github.com/mitchellh/mapstructure
+   github.com/pelletier/go-toml/v2
+   github.com/pkg/errors
+   github.com/sagikazarmark/locafero
+   github.com/sirupsen/logrus
+   github.com/spf13/afero
+   github.com/spf13/cast
+   github.com/spf13/pflag
+   github.com/spf13/viper
+   github.com/subosito/gotenv
+   go.yaml.in/yaml/v3
+   golang.org/x/sync
+   golang.org/x/sys
+   golang.org/x/text
+    ---> 19 external Go modules
+self-test: clean fixtures pass ...... ok
+self-test: detects readme.md ...... ok
+self-test: detects example_test.go ...... ok
+self-test: detects getter.md ...... ok
+self-test: detects field.md ...... ok
+self-test: detects bare_marker.md ...... ok
+self-test passed
+OK: no documentation or example presents an API removed in v0.30.0
+client: stdlib-only runtime/tests; D26 inverse dependency boundaries pass
+minimal: Do/Chain typed result, original context/error and validation OK
+?   	example.com/client-minimal	[no test files]
+composed: injected in-memory I/O, two middleware, deadline and original cause OK
+?   	example.com/client-composed	[no test files]
+config: selected versions and runtime/test imports match allowlist
+config/viper: selected versions and runtime/test imports match allowlist
+minimal: JSON + env + references + seeded defaults + errors/cancellation OK
+?   	example.com/config-minimal	[no test files]
+composed: YAML base/override + env/Resolver decoded concurrency defaults; application constructed/executed/closed Pool OK
+?   	example.com/config-composed	[no test files]
+==> OK: concurrency runtime and tests are stdlib-only (GOWORK=off)
+==> standalone concurrency/minimal (offline, GOWORK=off)
+minimal: Pool/Future, streams, Batch, Limiter, cancellation OK
+?   	example.com/concurrency-minimal	[no test files]
+==> standalone concurrency/composed (offline, GOWORK=off)
+composed: pipeline, keyed retry, two pools and shared limiter OK
+?   	example.com/concurrency-composed	[no test files]
+==> OK: minimal and composed, only stdlib + concurrency

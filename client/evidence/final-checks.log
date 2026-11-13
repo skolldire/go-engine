@@ -1,0 +1,13 @@
+self-test: clean fixtures pass ...... ok
+self-test: detects readme.md ...... ok
+self-test: detects example_test.go ...... ok
+self-test: detects getter.md ...... ok
+self-test: detects field.md ...... ok
+self-test: detects bare_marker.md ...... ok
+self-test passed
+OK: no documentation or example presents an API removed in v0.30.0
+client: stdlib-only runtime/tests; D26 inverse dependency boundaries pass
+minimal: Do/Chain typed result, original context/error and validation OK
+?   	example.com/client-minimal	[no test files]
+composed: injected in-memory I/O, two middleware, deadline and original cause OK
+?   	example.com/client-composed	[no test files]

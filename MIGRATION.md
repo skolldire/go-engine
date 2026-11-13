@@ -318,3 +318,12 @@ The old reader may silently skip optional overlays; choose Required deliberately
 Comparative tests use a configcomparison build tag in pkg/engine without changing
 its production code, imports or module requirements. Benchmarks compare the actual
 legacy decoder with the new snapshot Decode using the same fixtures.
+
+## Experimental typed client candidate (not released)
+
+Independent github.com/skolldire/go-engine/client replaces no existing consumer
+in this iteration. Typed Operation/Handler/Middleware and explicit Chain terminal
+replace any-based calls and SafeTypeAssert in future migrations; Invocation uses
+Component instead of Client. Nil middleware now fails. Context/timeouts/logging/
+retry ownership is explicit; there is no mutable Use or implicit BaseConfig.
+See [client migration](client/MIGRATION.md) for before/after and D35 preconditions.
