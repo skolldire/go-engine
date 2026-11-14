@@ -22,3 +22,6 @@ logging	github.com/skolldire/go-engine/logging	tool	unreleased	-	production	stdl
 client/logging	github.com/skolldire/go-engine/client/logging	composition	unreleased	-	production	client
 resilience/integration	github.com/skolldire/go-engine/resilience/integration	harness	none	-	basic	resilience,client,retry,circuitbreaker,concurrency,ratelimit
 harness/config-engine-comparison	github.com/skolldire/go-engine/harness/config-engine-comparison	harness	none	-	basic	.,config,config/viper,github.com/spf13/viper
+telemetry/otel	github.com/skolldire/go-engine/telemetry/otel	tool	unreleased	-	production	go.opentelemetry.io/otel,go.opentelemetry.io/otel/trace,go.opentelemetry.io/otel/metric,go.opentelemetry.io/otel/sdk,go.opentelemetry.io/otel/sdk/metric
+client/otel	github.com/skolldire/go-engine/client/otel	composition	unreleased	-	production	client,go.opentelemetry.io/otel,go.opentelemetry.io/otel/trace,go.opentelemetry.io/otel/metric
+client/otel/integration	github.com/skolldire/go-engine/client/otel/integration	harness	none	-	basic	client,client/otel,telemetry/otel,go.opentelemetry.io/otel,go.opentelemetry.io/otel/trace,go.opentelemetry.io/otel/metric,go.opentelemetry.io/otel/sdk,go.opentelemetry.io/otel/sdk/metric

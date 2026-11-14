@@ -113,7 +113,11 @@ consumers(){
   cd "$base/$consumer"
   own=$(go list -m -f '{{.Path}}')
   allowed=$(printf '%s\n' "$module";dep_paths "$deps_column")
-  [[ "$consumer" == minimal ]] || allowed=$(printf '%s\n' "$allowed";composable_paths)
+  if [[ "$consumer" == composed ]];then
+   local consumer_extra
+   consumer_extra=$("$repo/scripts/modules.sh" consumer-deps "$dir")
+   allowed=$(printf '%s\n' "$allowed";composable_paths;printf '%s\n' "$consumer_extra")
+  fi
   boundary "$own" "$allowed"
   ! go list -m -f '{{.Path}}' all | grep -Fxq "$module" || exercised=1
   go run .

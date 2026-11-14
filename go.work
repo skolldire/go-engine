@@ -6,7 +6,10 @@ use (
 	./aws
 	./client
 	./client/logging
+	./client/otel
+	./client/otel/integration
 	./logging
+	./telemetry/otel
 	./circuitbreaker
 	./retry
 	./ratelimit

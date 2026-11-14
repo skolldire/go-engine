@@ -44,6 +44,7 @@ validate(){
  local bad=0 dir path kind track version checks deps actual required mod dep deptrack target item
  schema || bad=1
  overrides || bad=1
+ if ! GOWORK=off go run "$repo/scripts/modules/consumerdeps" "$repo";then bad=1;fi
  while IFS=$'\t' read -r dir path kind track version checks deps;do
   if [[ ! -f "$dir/go.mod" ]];then echo "VIOLATION: $dir missing go.mod" >&2;bad=1;continue;fi
   actual=$(awk -f scripts/modules/metadata.awk "$dir/go.mod" | awk -F '\t' '$1=="module"{print $2}')
@@ -121,6 +122,8 @@ case "$command" in
   records | awk -F '\t' -v t="$track" -v k="$kind" -v c="$checks" '(t==""||$4==t)&&(k==""||$3==k)&&(c==""||$6==c){print $1}' ;;
  override)
   [[ $# == 2 ]] || exit 2;override "$1" "$2" ;;
+ consumer-deps)
+  [[ $# == 1 ]] || exit 2;schema;GOWORK=off go run "$repo/scripts/modules/consumerdeps" "$repo" "$1" ;;
  get)
   [[ $# == 2 ]] || exit 2;schema;index=$(column "$2");records | awk -F '\t' -v d="$1" -v c="$index" '$1==d{print $c;found=1} END{exit !found}' ;;
  resolve)
@@ -131,5 +134,5 @@ case "$command" in
   schema;records | awk -F '\t' 'BEGIN{print "| Directory | Module | Kind | Track | Version | Checks | Deps |";print "|---|---|---|---|---|---|---|"}{printf "| %s | %s | %s | %s | %s | %s | %s |\n",$1,$2,$3,$4,$5,$6,$7}' ;;
  matrix)
   schema;records | awk -F '\t' 'BEGIN{printf "{\"include\":["}{name=$1;gsub(/\//,"-",name);printf "%s{\"dir\":\"%s\",\"name\":\"%s\"}",sep,$1,name;sep=","}END{print "]}"}' ;;
- *)echo 'usage: modules.sh dirs|get|override|resolve|validate|table|matrix|lint-lists' >&2;exit 2 ;;
+ *)echo 'usage: modules.sh dirs|get|override|consumer-deps|resolve|validate|table|matrix|lint-lists' >&2;exit 2 ;;
 esac

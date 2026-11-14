@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- Independent client/otel candidate (D46): API-only logical spans, one duration histogram, explicit failure policy and SDK harness; generic composed-only external dependency declarations.
+- Independent telemetry/otel candidate (D45): native API providers, explicit sampling/limits, transferred lifecycle and revised native environment Resource merge; not released.
 - D43 approved corrections: consumer-side resilience interfaces and ErrRejected, additive circuitbreaker.Run, isolated integration/config comparison harnesses, restored master docs and a single logging clock.
 - D44 approved policy: slog is the library standard; logging/logrus leaves the plan and unreleased/independent Logrus declarations/graphs are rejected.
 

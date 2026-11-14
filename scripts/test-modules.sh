@@ -32,6 +32,59 @@ old_run() {
 new_run() { (cd "$1" && bash scripts/check-module.sh "$2" "$3");}
 expect_fail() { local label=$1;shift;if "$@" > "$results/$label.log" 2>&1;then echo "FAIL: $label unexpectedly passed" >&2;return 1;fi;echo "PASS rejection $label";}
 case "$mode" in
+ consumer-deps)
+ snapshot "$workspace/repo";cd "$workspace/repo"
+ ./scripts/modules.sh validate
+ ./scripts/check-module.sh client/otel consumers > "$results/consumer-deps-declared.log" 2>&1
+ cp scripts/modules/consumer-deps.tsv "$workspace/consumer-deps.tsv"
+ inject_sdk(){
+  local location=$1
+  cp "$location/go.mod" "$workspace/mutant.mod";cp "$location/go.sum" "$workspace/mutant.sum"
+  cat examples/standalone/client/otel/composed/go.sum >> "$location/go.sum"
+  printf 'package %s\nimport _ "go.opentelemetry.io/otel/sdk/trace"\n' "$2" > "$location/zz_consumerdeps_mutant_test.go"
+  (cd "$location" && GOWORK=off go mod edit -require=go.opentelemetry.io/otel/sdk@v1.47.0 -require=golang.org/x/sys@v0.50.0 -require=go.yaml.in/yaml/v3@v3.0.6 && GOWORK=off GOFLAGS= go mod tidy)
+ }
+ restore_sdk(){ cp "$workspace/mutant.mod" "$1/go.mod";cp "$workspace/mutant.sum" "$1/go.sum";rm "$1/zz_consumerdeps_mutant_test.go"; }
+ inject_sdk client/otel otel
+ expect_fail consumer-deps-sdk-wrapper ./scripts/check-module.sh client/otel deps
+ grep -q 'forbidden direct import' "$results/consumer-deps-sdk-wrapper.log"
+ restore_sdk client/otel
+ inject_sdk examples/standalone/client/otel/minimal main
+ expect_fail consumer-deps-sdk-minimal ./scripts/check-module.sh client/otel consumers
+ grep -q 'forbidden direct import' "$results/consumer-deps-sdk-minimal.log"
+ restore_sdk examples/standalone/client/otel/minimal
+ printf '# no consumer declarations\n' > scripts/modules/consumer-deps.tsv
+ expect_fail consumer-deps-sdk-undeclared ./scripts/modules.sh validate
+ grep -q 'undeclared external direct import' "$results/consumer-deps-sdk-undeclared.log"
+ cp "$workspace/consumer-deps.tsv" scripts/modules/consumer-deps.tsv
+ awk -F '\t' -v OFS='\t' '!/^#/{$3=$3 ",golang.org/x/sys"}{print}' "$workspace/consumer-deps.tsv" > scripts/modules/consumer-deps.tsv
+ expect_fail consumer-deps-unused ./scripts/modules.sh validate
+ grep -q 'unused declaration' "$results/consumer-deps-unused.log"
+ awk -F '\t' -v OFS='\t' '!/^#/{$3=$3 ",github.com/sirupsen/logrus"}{print}' "$workspace/consumer-deps.tsv" > scripts/modules/consumer-deps.tsv
+ expect_fail consumer-deps-logrus ./scripts/modules.sh validate
+ grep -q 'logrus is prohibited' "$results/consumer-deps-logrus.log"
+ for consumer in minimal module;do
+  awk -F '\t' -v OFS='\t' -v c="$consumer" '!/^#/{$2=c}{print}' "$workspace/consumer-deps.tsv" > scripts/modules/consumer-deps.tsv
+  expect_fail "consumer-deps-$consumer-entry" ./scripts/modules.sh validate
+  grep -q 'only composed' "$results/consumer-deps-$consumer-entry.log"
+ done
+ for entry in 'go.opentelemetry.io/otel/sdk*' github.com/skolldire/go-engine/client;do
+  awk -F '\t' -v OFS='\t' -v d="$entry" '!/^#/{$3=d}{print}' "$workspace/consumer-deps.tsv" > scripts/modules/consumer-deps.tsv
+  expect_fail "consumer-deps-bad-path-${entry//\//_}" ./scripts/modules.sh validate
+ done
+ awk -F '\t' -v OFS='\t' '!/^#/{$1="no-such-module"}{print}' "$workspace/consumer-deps.tsv" > scripts/modules/consumer-deps.tsv
+ expect_fail consumer-deps-missing-module ./scripts/modules.sh validate
+ cp "$workspace/consumer-deps.tsv" scripts/modules/consumer-deps.tsv
+ cp examples/standalone/client/otel/composed/go.mod "$workspace/composed.mod"
+ (cd examples/standalone/client/otel/composed && GOWORK=off go mod edit -droprequire=go.opentelemetry.io/otel/sdk)
+ expect_fail consumer-deps-missing-require ./scripts/modules.sh validate
+ grep -q 'declared dependency absent from go.mod' "$results/consumer-deps-missing-require.log"
+ cp "$workspace/composed.mod" examples/standalone/client/otel/composed/go.mod
+ mv examples/standalone/client/otel/composed "$workspace/composed"
+ expect_fail consumer-deps-missing-directory ./scripts/modules.sh validate
+ mv "$workspace/composed" examples/standalone/client/otel/composed
+ ./scripts/modules.sh validate
+ echo 'composed-only external declarations: positive baseline and 12 rejection cases passed' ;;
  decisions)
  snapshot "$workspace/repo";cd "$workspace/repo"
  ./scripts/modules.sh validate

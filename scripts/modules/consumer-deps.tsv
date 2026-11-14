@@ -1,0 +1,2 @@
+# module-dir	consumer	external module paths (comma separated, exact; composed only)
+client/otel	composed	go.opentelemetry.io/otel/sdk,go.opentelemetry.io/otel/sdk/metric

@@ -2,6 +2,14 @@
 
 This guide lists the breaking changes and how to adapt.
 
+## Experimental client/otel candidate (not released)
+
+See [client/otel/MIGRATION.md](client/otel/MIGRATION.md): typed API-provider middleware, Internal logical spans, one seconds histogram and optional caller IsFailure. Provider lifecycle remains with the assembler; the wrapper/tests do not import the SDK. Legacy client instrumentation stays unchanged.
+
+## Experimental telemetry/otel candidate (not released)
+
+See [telemetry/otel/MIGRATION.md](telemetry/otel/MIGRATION.md): explicit processor/reader injection, API providers, parent-based sampling with zero respected, native span-only value-length limits and single-attempt shutdown. OTel v1.47.0 merges Resource environment attributes with Config taking precedence. Legacy telemetry remains unchanged.
+
 ## Experimental concurrency candidate (not released)
 
 The standalone `github.com/skolldire/go-engine/concurrency` candidate replaces
