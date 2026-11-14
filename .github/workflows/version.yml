@@ -36,7 +36,7 @@ jobs:
       # first line with "golangci-lint: command not found", so the release job
       # could never have got as far as tagging.
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           check-latest: true
