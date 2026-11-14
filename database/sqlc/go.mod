@@ -7,7 +7,7 @@ go 1.27.4
 replace github.com/skolldire/go-engine => ../../
 
 require (
-	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/skolldire/go-engine v0.30.0
 	github.com/stretchr/testify v1.12.1
 )
