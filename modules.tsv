@@ -31,3 +31,5 @@ router/errors	github.com/skolldire/go-engine/router/errors	tool	unreleased	-	pro
 router	github.com/skolldire/go-engine/router	tool	unreleased	-	production	stdlib
 router/chi	github.com/skolldire/go-engine/router/chi	composition	unreleased	-	production	router,github.com/go-chi/chi/v5
 router/operations	github.com/skolldire/go-engine/router/operations	composition	unreleased	-	production	health
+auth/jwt	github.com/skolldire/go-engine/auth/jwt	tool	unreleased	-	production	github.com/golang-jwt/jwt/v5
+auth/jwt/http	github.com/skolldire/go-engine/auth/jwt/http	composition	unreleased	-	production	auth/jwt

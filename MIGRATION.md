@@ -2,6 +2,10 @@
 
 This guide lists the breaking changes and how to adapt.
 
+## Experimental L3 JWT candidates (not released)
+
+See [auth/jwt/MIGRATION.md](auth/jwt/MIGRATION.md) and [auth/jwt/http/MIGRATION.md](auth/jwt/http/MIGRATION.md) for explicit issuer/audience/claim names, lazy key cache, borrowed HTTP client and HTTP assembly changes. Legacy router/Cognito code remains unchanged.
+
 ## Experimental L2 router candidates (not released)
 
 See [router/MIGRATION.md](router/MIGRATION.md), [router/chi/MIGRATION.md](router/chi/MIGRATION.md) and [router/operations/MIGRATION.md](router/operations/MIGRATION.md). Explicit host policy, middleware, Freeze/server lifecycle and separate operational endpoints replace implicit assembly; legacy production remains unchanged.

@@ -1,2 +1,3 @@
 # module-dir	consumer	external module paths (comma separated, exact; composed only)
 client/otel	composed	go.opentelemetry.io/otel/sdk,go.opentelemetry.io/otel/sdk/metric
+auth/jwt/http	composed	github.com/golang-jwt/jwt/v5

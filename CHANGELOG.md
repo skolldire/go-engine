@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- L3 D52 candidate: provider-neutral asymmetric auth/jwt verifier, explicit claims, bounded coalesced JWKS refresh and safe HTTP middleware with JSON claim copies (D52.3), independent consumers and validated error boundaries; not released.
+
 - L2 D51/D51.1/D51.2 candidates: stdlib neutral router with explicit host/proxy/CORS policy and server, optional chi adapter, and separate health/pprof/metrics operations handler; not released.
 
 - Independent router/errors candidate (D49): caller classification, safe Problem Details JSON, explicit request IDs and observable write failures; not released.
