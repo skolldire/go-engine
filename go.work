@@ -10,6 +10,8 @@ use (
 	./client/otel/integration
 	./logging
 	./telemetry/otel
+	./utilities
+	./health
 	./circuitbreaker
 	./retry
 	./ratelimit

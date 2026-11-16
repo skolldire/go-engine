@@ -2,6 +2,14 @@
 
 This guide lists the breaking changes and how to adapt.
 
+## Experimental health candidate (not released)
+
+See [health/MIGRATION.md](health/MIGRATION.md): explicit validated registry, Ready probe versus Check diagnostic, unique bounded registration, persistent slots for uncooperative checks and private errors/PanicError. Logging, drivers and HTTP endpoints are caller or later-module responsibilities; legacy production remains unchanged.
+
+## Experimental utilities candidate (not released)
+
+See [utilities/MIGRATION.md](utilities/MIGRATION.md): explicit validated profile parsing, rune-based truncation, package text, standard-library replacements and ordered callbacks. Legacy helpers/profile production and consumers remain unchanged.
+
 ## Experimental client/otel candidate (not released)
 
 See [client/otel/MIGRATION.md](client/otel/MIGRATION.md): typed API-provider middleware, Internal logical spans, one seconds histogram and optional caller IsFailure. Provider lifecycle remains with the assembler; the wrapper/tests do not import the SDK. Legacy client instrumentation stays unchanged.
