@@ -28,3 +28,6 @@ client/otel/integration	github.com/skolldire/go-engine/client/otel/integration	h
 utilities	github.com/skolldire/go-engine/utilities	tool	unreleased	-	production	stdlib
 health	github.com/skolldire/go-engine/health	tool	unreleased	-	production	stdlib
 router/errors	github.com/skolldire/go-engine/router/errors	tool	unreleased	-	production	stdlib
+router	github.com/skolldire/go-engine/router	tool	unreleased	-	production	stdlib
+router/chi	github.com/skolldire/go-engine/router/chi	composition	unreleased	-	production	router,github.com/go-chi/chi/v5
+router/operations	github.com/skolldire/go-engine/router/operations	composition	unreleased	-	production	health

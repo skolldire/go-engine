@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- L2 D51/D51.1/D51.2 candidates: stdlib neutral router with explicit host/proxy/CORS policy and server, optional chi adapter, and separate health/pprof/metrics operations handler; not released.
+
 - Independent router/errors candidate (D49): caller classification, safe Problem Details JSON, explicit request IDs and observable write failures; not released.
 
 - Independent health candidate (D47): frozen bounded registry, persistent execution slots, private diagnostic causes and local PanicError/Goexit recovery; endpoints and drivers remain outside the module.

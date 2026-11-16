@@ -2,6 +2,10 @@
 
 This guide lists the breaking changes and how to adapt.
 
+## Experimental L2 router candidates (not released)
+
+See [router/MIGRATION.md](router/MIGRATION.md), [router/chi/MIGRATION.md](router/chi/MIGRATION.md) and [router/operations/MIGRATION.md](router/operations/MIGRATION.md). Explicit host policy, middleware, Freeze/server lifecycle and separate operational endpoints replace implicit assembly; legacy production remains unchanged.
+
 ## Experimental router/errors candidate (not released)
 
 See [router/errors/MIGRATION.md](router/errors/MIGRATION.md): explicit public classification, safe fallback, request ID accessor and write error handling. Legacy handlers remain unchanged.

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 )
 
@@ -81,6 +82,8 @@ func ServeListener(ctx context.Context, c ServerConfig, ln net.Listener, h http.
 	if ctx.Err() != nil {
 		return ln.Close()
 	}
+	ln = &ownedListener{Listener: ln}
+	defer func() { _ = ln.Close() }()
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: c.ReadHeaderTimeout, ReadTimeout: c.ReadTimeout, WriteTimeout: c.WriteTimeout, IdleTimeout: c.IdleTimeout, MaxHeaderBytes: c.MaxHeaderBytes}
 	done := make(chan error, 1)
 	go func() {
@@ -110,3 +113,13 @@ func ServeListener(ctx context.Context, c ServerConfig, ln net.Listener, h http.
 		return errors.Join(shutdownErr, <-done)
 	}
 }
+
+// ServeTLS may fail before Serve takes ownership (for example loading a key).
+// This wrapper lets all shutdown/startup paths close the borrowed listener once.
+type ownedListener struct {
+	net.Listener
+	once sync.Once
+	err  error
+}
+
+func (l *ownedListener) Close() error { l.once.Do(func() { l.err = l.Listener.Close() }); return l.err }
