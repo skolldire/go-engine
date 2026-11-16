@@ -2,6 +2,10 @@
 
 This guide lists the breaking changes and how to adapt.
 
+## Experimental router/errors candidate (not released)
+
+See [router/errors/MIGRATION.md](router/errors/MIGRATION.md): explicit public classification, safe fallback, request ID accessor and write error handling. Legacy handlers remain unchanged.
+
 ## Experimental health candidate (not released)
 
 See [health/MIGRATION.md](health/MIGRATION.md): explicit validated registry, Ready probe versus Check diagnostic, unique bounded registration, persistent slots for uncooperative checks and private errors/PanicError. Logging, drivers and HTTP endpoints are caller or later-module responsibilities; legacy production remains unchanged.

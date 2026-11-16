@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- Independent router/errors candidate (D49): caller classification, safe Problem Details JSON, explicit request IDs and observable write failures; not released.
+
 - Independent health candidate (D47): frozen bounded registry, persistent execution slots, private diagnostic causes and local PanicError/Goexit recovery; endpoints and drivers remain outside the module.
 - Independent utilities candidate (D48): pure profile/text/collections/pointers, explicit scope input, rune-safe truncation and stdlib migration map; not released.
 - Independent client/otel candidate (D46): API-only logical spans, one duration histogram, explicit failure policy and SDK harness; generic composed-only external dependency declarations.

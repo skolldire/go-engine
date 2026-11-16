@@ -27,3 +27,4 @@ client/otel	github.com/skolldire/go-engine/client/otel	composition	unreleased	-	
 client/otel/integration	github.com/skolldire/go-engine/client/otel/integration	harness	none	-	basic	client,client/otel,telemetry/otel,go.opentelemetry.io/otel,go.opentelemetry.io/otel/trace,go.opentelemetry.io/otel/metric,go.opentelemetry.io/otel/sdk,go.opentelemetry.io/otel/sdk/metric
 utilities	github.com/skolldire/go-engine/utilities	tool	unreleased	-	production	stdlib
 health	github.com/skolldire/go-engine/health	tool	unreleased	-	production	stdlib
+router/errors	github.com/skolldire/go-engine/router/errors	tool	unreleased	-	production	stdlib
