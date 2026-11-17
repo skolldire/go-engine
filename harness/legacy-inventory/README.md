@@ -18,7 +18,7 @@ An identifier is an exported constant, variable, type or function, or an exporte
 
 ## What `check` verifies
 
-A matrix row is a Markdown table row whose first cell is the identifier in backticks and whose fourth cell is one of `MIGRADO`, `MIGRADO CON RUPTURA`, `PLANIFICADO`, `HUECO`, `DESCARTE PROPUESTO`. Rows whose identifier starts with `cap:` are capabilities. They have no declaration to compare against and are only counted.
+A matrix row is a Markdown table row whose first cell is the identifier in backticks and whose fourth cell is one of `MIGRADO`, `MIGRADO CON RUPTURA`, `PLANIFICADO`, `HUECO`, `DESCARTE PROPUESTO`, `DESCARTE APROBADO` (D56). Rows whose identifier starts with `cap:` are capabilities. They have no declaration to compare against and are only counted.
 
 `check` fails (exit 1) when an identifier has no row, has more than one, a row names something that is not an exported legacy identifier, or a status is unknown. It prints the count per status for identifiers and capabilities. It does not judge whether a status is right; that is the matrix's evidence column.
 

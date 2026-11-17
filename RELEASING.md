@@ -375,3 +375,67 @@ Lotes restantes propuestos, pendientes de aprobación:
 | L7 | limpieza | Retirada del código heredado, al final |
 
 L7 solo puede empezar cuando toda fila sea MIGRADO, MIGRADO CON RUPTURA (con su identificador en la guía) o DESCARTE APROBADO y el usuario haya creado el tag final heredado. El catálogo declara v0.30.0 coordinated, pero ese tag todavía no existe; el último publicado es v0.22.0.
+
+## D56 — decisiones aprobadas para el cierre de L6
+
+Registradas por instrucción del usuario el 2026-11-17. Las once decisiones están aprobadas; no son pendientes ni prueba de implementación/publicación. Esta sección prevalece sobre las propuestas históricas L6.
+
+| Decisión | Resolución aprobada |
+|---|---|
+| D56.1 | Descartar todos los grupos propuestos por L6: helpers reemplazados por stdlib; checkers concretos de health y helpers OTel; logrusadapter (D44), task_executor→concurrency; pkg/testutil y http/pkg/testutil; EnableLogging/WithResilience; conmutador/no-op del engine. Métodos envoltorio AWS (s3/sqs/sns/ses/ssm/cognito/dynamo), Redis/Memcached/MongoDB: **descarte aprobado: usar cliente nativo** (D07). Adaptadores conservan constructor, Config validada, health, acceso nativo y valor propio (consumo SQS con visibilidad/ack, presign S3, consumidores Kafka/RabbitMQ, cierre gRPC acotado). Descartar pkg/integration/cloud, pkg/integration/observability e integration/aws/*; L18 retirado, sin consumidores reales de la abstracción multi-cloud. |
+| D56.2 | Builder nuevo con engine.Stack LIFO explícita; providers son funciones sin estado; variables Go sustituyen Get[T]/ComponentNames. Sin lifecycle compartido (D26). Implementación L20 sigue siendo requisito. |
+| D56.3 | Tras L7 raíz sin Go/go.mod; engine nuevo en github.com/skolldire/go-engine/engine. go get del path raíz mantiene la última versión heredada. No se elimina ahora la raíz. |
+| D56.4 | Último release heredado v0.30.0 para los10 tags de release-plan.sh. Usuario los crea/publica con version.yml desde master sin módulos nuevos. feature/split debe aceptar esa versión ya publicada sin desactivar el preflight de versiones futuras; ajuste pendiente antes del retiro, sin crear tags aquí. |
+| D56.5 | Versiones nuevas aprobadas: v0.1.0 para todos los módulos nuevos y v1.0.0 para concurrency. Publicación L21 en orden de dependencias, bases client/retry/config/httpclient/auth/jwt primero. La aprobación E6 no prueba publicación/E7; no se promociona el catálogo ni se reescriben requires/publica nada en este preflight bloqueado. |
+| D56.6 | Ola3b aprobada para L9–L17. No equivale a lotes implementados/commiteados. |
+| D56.7 | Instrumentación HTTP de servidor mediante receta de otelhttp del ecosistema, sin módulo propio. pkg/telemetry/otel.NewMiddleware se clasifica MIGRADO CON RUPTURA y enlaza guía que nombra ese identificador. |
+| D56.8 | Instancias con nombre como mapa: redis: {instances: {cache: ...}}; herramienta de conversión de archivos heredados. Sin fuente de compatibilidad para listas. Implementación/conversor L10 pendiente, se reclasifica el antiguo HUECO como PLANIFICADO. |
+| D56.9 | D33: MariaDB en database/mysql, Flavor(mysql\|mariadb), default mysql y Capabilities(flavor). SQLite en database/sqlite con modernc.org/sqlite sin CGO; TxLock=immediate, Pool.MaxOpen=1 cuando ReadOnly=false; segundo pool ReadOnly con TxLock=deferred para lecturas paralelas. Implementación pendiente. |
+| D56.10 | AWS migra solo operaciones con uso demostrado más semántica propia D56.1; resto por cliente nativo. Descartar wrappers no afirma que sus consumidores ya estén migrados. |
+| D56.11 | Quitar testkit/logging, testkit/context y testkit/httpclient/resty de ola6. Se conservan los testkits de adaptadores que queden en L19. |
+
+
+## Limpieza (L7)
+
+Preflight 2026-11-17, rama feature/split, HEAD e57ebf2b8d32399c3097b1462442196fe06c747e. Estado inicial `git status --porcelain` vacío, antes de registrar D56. Este preflight solo documenta decisiones/reclasificación y reconoce DESCARTE APROBADO en el harness; no autoriza borrar nada ni afirma cierre de lotes/publicación. Versiones aprobadas D56.5 pendientes de promoción/publicación por L21, sin cambiar catálogo/requires para fingir ese requisito.
+
+Conteo vigente D56 (identificadores/capacidades):
+
+| Estado | Identificadores | Capacidades | Total |
+|---|---:|---:|---:|
+| MIGRADO | 9 | 1 | 10 |
+| MIGRADO CON RUPTURA | 207 | 20 | 227 |
+| PLANIFICADO | 557 | 31 | 588 |
+| HUECO | 0 | 0 | 0 |
+| DESCARTE PROPUESTO | 0 | 0 | 0 |
+| DESCARTE APROBADO | 298 | 7 | 305 |
+| **Total** | **1071** | **59** | **1130** |
+
+Comprobaciones de entrada y resultado final se registran a continuación. Las secciones L6 anteriores conservan la instantánea histórica, no decisiones todavía abiertas.
+
+### Resultado de las condiciones de entrada
+
+**L7 BLOQUEADO. No se borró ningún archivo/directorio y no se preparó ningún commit de retirada.** Aprobar D56 no es demostrar migraciones implementadas ni publicar versiones.
+
+| Condición obligatoria | Resultado observado | Evidencia / acción |
+|---|---|---|
+| Matriz sin PLANIFICADO/HUECO/DESCARTE PROPUESTO, check de inventario y guías por identificador | **NO SE CUMPLE** | Tras D56 quedan557 identificadores+31 capacidades PLANIFICADO (588 filas). Hay0 HUECO/0 DESCARTE PROPUESTO,305 descartes aprobados. Se conservan1.071 identificadores únicos+59 capacidades; eso no sustituye el inventario Go. La revisión exhaustiva de guías no se declara aprobada. |
+| L8/L9/L10/L10b/L10c/L11–L17/L19/L20/L21 cerrados y commiteados | **NO ACREDITADO / L20 ausente** | No existe engine/go.mod ni fila engine; tampoco presets/httpapi, database/atomic/mysql/sqlite, messaging/kafka, rpc/grpc, aws/config, outbox/inbox. La matriz conserva sus implementaciones como pendientes. HEAD es el cierre de auditoría L6, no prueba de L20/L21. No se afirma auditar cada commit de todos los lotes tras fallar la primera condición. |
+| Diez tags heredados remotos v0.30.0 | **NO VERIFICADO por parada de preflight** | No se ejecutó git ls-remote --tags tras detectar el bloqueo. Antes de un nuevo intento es obligatorio ejecutar `git ls-remote --tags origin` y cotejar exactamente el plan (incluyendo refs anotadas). No se da por existente ni ausente un tag remoto por la instantánea histórica L6. |
+| Publicación D56.5/L21 y consumidores contra tags reales E7 | **NO ACREDITADO** | Catálogo actual:10 coordinated,24 unreleased,5 none,0 independent. D56.5 aprueba versiones pero no demuestra publicación. No se ejecutan consumidores E7 ni se cambian tracks/requires para aparentarla. |
+| CI Linux de feature/split verde | **NO VERIFICADO por parada de preflight** | Ningún workflow consultado/ejecutado/dispatchado en esta comprobación. Se necesita resultado verde asociado al commit que vaya a limpiarse. No se atribuye resultado Linux. |
+| git status limpio y make all antes de retirar | **PARCIAL: limpio al entrar; make all NO EJECUTADO** | El estado inicial fue vacío antes de los cambios obligatorios de documentación D56. No se considera ese trabajo preparatorio como suciedad preexistente. make all se omite al fallar el gate1; no se declara aprobado. |
+
+Comando de inventario realmente intentado (sin cambiar el SDK ni dependencias):
+
+```sh
+(cd harness/legacy-inventory && GOWORK=off /private/tmp/go-engine-toolchain/go/bin/go run . check ../.. ../../docs/modularization/parity.md)
+```
+
+Exit1 de compilación: `package bufio is not in std`, igual para fmt/go/parser/io/os y otros. El binario responde `go version go1.27.4 darwin/arm64`, pero el GOROOT temporal contiene directorios de la biblioteca estándar vacíos (p.ej. src/fmt); no hay `go` alternativo en PATH. El harness **no se ejecutó**, no es un fallo de exhaustividad ni un check aprobado. Log local `/private/tmp/go-engine-l7-preflight/inventory-check.log`; no es entregable versionado. No se instala/restaura una toolchain como parte de un retiro ya bloqueado.
+
+Checks estáticos realmente ejecutados: conteo1130 filas,1071 identificadores únicos/59 capacidades, sin duplicados; conteo por estado; `git diff --check` pasa. El harness acepta ahora DESCARTE APROBADO además de los estados históricos; no se cambió la comparación bidireccional ni se elimina PLANIFICADO para hacer pasar L7. La receta D56.7 se contrastó con el código ya instalado otelhttp v0.72.0 (NewHandler/WithTracerProvider/WithMeterProvider); no se añadió require ni se actualizó dependencia.
+
+Cambios preparatorios limitados a RELEASING.md, matriz local ignorada docs/modularization/parity.md, harness/legacy-inventory (estado/README) y receta versionable telemetry/otel/MIGRATION.md. El descarte de wrappers mantiene pendientes los constructores/config/clientes nativos/health/lifecycle y semánticas propias que aún no están implementados; los consumidores heredados no se migraron por reclasificar. La regla D56.4 de aceptar el release final ya publicado queda registrada pero su ajuste de código se difiere al gate con los tags realmente acreditados; no se rebaja hoy el preflight de versiones futuras.
+
+Lista de commits preparados: **ninguno de retirada**. No se toca example/presets/familias/providers/pkg/harness de comparación, go.mod/go.sum raíz, go.work, modules.tsv ni workflows. Sin git add/reset/checkout/commit/push/tag, sin reescritura de historial. No archivos con " 2" tocados. Antes de L7 deben cerrarse los lotes y588 filas pendientes, documentar las rupturas, restaurar una toolchain completa y acreditar tags/E7/CI/make all. La aprobación de las11 decisiones ya está registrada y no se vuelve a pedir.

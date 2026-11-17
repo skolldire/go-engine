@@ -252,7 +252,7 @@ func receiver(expr ast.Expr) string {
 // status in the fourth cell: | `pkg/path.Ident` | what | destination | STATUS | ...
 var rowPattern = regexp.MustCompile("^\\| `([^`]+)` \\|")
 
-var statuses = []string{"MIGRADO", "MIGRADO CON RUPTURA", "PLANIFICADO", "HUECO", "DESCARTE PROPUESTO"}
+var statuses = []string{"MIGRADO", "MIGRADO CON RUPTURA", "PLANIFICADO", "HUECO", "DESCARTE PROPUESTO", "DESCARTE APROBADO"}
 
 // check compares the matrix with the inventory in both directions and
 // prints the count per status. Rows whose identifier starts with "cap:"
