@@ -17,6 +17,7 @@ use (
 	./logging
 	./telemetry/otel
 	./utilities
+	./validation
 	./health
 	./circuitbreaker
 	./retry
@@ -25,6 +26,7 @@ use (
 	./resilience/integration
 	./config
 	./config/viper
+	./config/yaml
 	./concurrency
 	./database/memcached
 	./database/mongodb
@@ -33,7 +35,10 @@ use (
 	./database/sqlc
 	./example
 	./http
+	./httpclient
+	./httpclient/resty
 	./harness/config-engine-comparison
+	./harness/legacy-inventory
 	./messaging
 	./preset/full
 )

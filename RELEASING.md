@@ -323,3 +323,55 @@ All requested implementation and applicable local checks are complete. No task-s
 The user approved scripts/modules/consumer-deps.tsv for exact external module paths used directly by composed applications. modules.tsv continues to define each library's own boundary; this supplementary application data cannot widen the library/minimal permissions or admit repository modules, wildcard paths or Logrus. The reader validates both directions against consumer go.mod and source/test imports, including unused/missing entries and missing directories. See scripts/modules/README.md for the schema and commands. client/otel composed uses this for SDK capture/ManualReader assembly while the wrapper and minimal remain API-only.
 
 `scripts/test-modules.sh consumer-deps` passed the positive baseline and12 rejection cases in a disposable current-worktree snapshot: wrapper/minimal SDK, undeclared SDK composed, unused/Logrus/minimal/module/wildcard/repository/unknown-owner/missing-require/missing-directory entries. Existing unit/matrix and D43/D44 decision mutations also passed. This change does not approve versions, tracks, tags or release workflow changes; detailed module evidence is in client/otel/RELEASE_NOTES.md.
+
+## Wave 2 closed (L1–L5)
+
+Wave 2 is complete with lot L5. Its modules are implemented, registered in `modules.tsv` and `go.work`, covered by independent consumers and verified locally; none is released. Every row is `unreleased` with version `-`, and each module's proposed v0.1.0 awaits explicit approval (E6). Consumers against real tags (E7) are deferred until tags exist.
+
+| Lot | Decision | Modules |
+|---|---|---|
+| L1 | D49 | `router/errors` |
+| L2 | D51 | `router`, `router/chi`, `router/operations` |
+| L3 | D52 | `auth/jwt`, `auth/jwt/http` |
+| L4 | D53 | `httpclient`, `httpclient/resty` |
+| L5 | D54, D55 | `validation`, `config/yaml` |
+
+Each module's `RELEASE_NOTES.md` holds its approved contract, internal decisions and executed evidence. Closing the wave approves no version, creates no tag and dispatches no workflow. Three distribution impediments are recorded and remain open until the module each depends on is published: gorelease cannot resolve the unpublished sibling of `auth/jwt/http` (`auth/jwt`), of `httpclient/resty` (`httpclient`) and of `config/yaml` (`config`). The legacy packages these modules replace (`pkg/router`, `http/pkg/rest`, `pkg/utilities/validation` and the Viper-based YAML loading) are unchanged and supported; no consumer has been migrated.
+
+## Auditoría de paridad (L6)
+
+Auditoría del código heredado frente a los módulos nuevos, previa a la limpieza (L7). Es un documento de trabajo local; aquí solo queda su resumen. No cambia código, catálogo de módulos publicables ni versiones. Su único añadido versionado es el harness `harness/legacy-inventory` (kind harness, track none), que inventaría los identificadores exportados de los módulos coordinated y de `example` y comprueba que la matriz los cubre todos.
+
+Alcance: 67 paquetes y 1.071 identificadores exportados, más 59 capacidades que no son identificadores (comportamientos del engine, claves YAML de los providers y comportamientos fijados por tests). La comprobación de exhaustividad pasa.
+
+| Estado | Identificadores | Capacidades |
+|---|---:|---:|
+| MIGRADO | 9 | 1 |
+| MIGRADO CON RUPTURA | 208 | 20 |
+| PLANIFICADO | 757 | 33 |
+| HUECO | 1 | 1 |
+| DESCARTE PROPUESTO | 96 | 4 |
+
+La ola 2 cubre el núcleo transversal; los adaptadores de servicios (AWS, mensajería, gRPC, NoSQL, SQL) y el builder siguen pendientes. Los dos huecos sin destino son las instancias con nombre de la configuración YAML heredada y la instrumentación HTTP de servidor. Solo 84 de las 208 filas con ruptura tienen su identificador nombrado en la guía de migración enlazada; las demás están documentadas a nivel de paquete.
+
+Lotes restantes propuestos, pendientes de aprobación:
+
+| Lote | Ola | Contenido |
+|---|---|---|
+| L8 | 3 | `presets/httpapi` y ejemplo HTTP sin engine |
+| L9 | 3b | Exportadores OTLP y middleware HTTP de servidor |
+| L10 | 3b | Instancias con nombre en la configuración; MIGRATION de `concurrency` |
+| L10b | 3 | Tablas por identificador en las guías de migración de la ola 2 |
+| L11 | 4 | `database/atomic`, `database/postgres`, `database/mysql` |
+| L12 | 4 | `database/gorm` y dialectores |
+| L13 | 5 | `idempotency`, `outbox`, `inbox` y sus stores |
+| L14 | 3b | `database/redis`, `database/memcached`, `database/mongodb` |
+| L15 | 3b | `messaging/kafka`, `messaging/rabbitmq` |
+| L16 | 3b | `rpc/grpc` |
+| L17a / L17b | 3b | `aws/config` y clientes por servicio |
+| L18 | 3b | Fachada `integration/cloud` e `integration/aws`, o su descarte |
+| L19 | 6 | Testkits de adaptadores |
+| L20 | 7 | `engine`, `engine/providers/*`, presets y ejemplo ensamblado |
+| L7 | limpieza | Retirada del código heredado, al final |
+
+L7 solo puede empezar cuando toda fila sea MIGRADO, MIGRADO CON RUPTURA (con su identificador en la guía) o DESCARTE APROBADO y el usuario haya creado el tag final heredado. El catálogo declara v0.30.0 coordinated, pero ese tag todavía no existe; el último publicado es v0.22.0.

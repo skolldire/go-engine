@@ -10,6 +10,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Experimental (not released)
 
+- L5 D54/D55 candidates, closing wave 2: `validation` for structs with injected rules, no global validator and errors without values; `config/yaml`, a strict YAML source for `config` with bounded alias expansion and exact numbers, independent of Viper; not released.
+
+- L4 D53 candidates: stdlib `httpclient` for a single origin with bounded transport, response size limit, whole-request timeout and explicit redirects, plus the optional `httpclient/resty` adapter with resty retry off; resilience and observability composed from outside, independent consumers; not released.
+
 - L3 D52 candidate: provider-neutral asymmetric auth/jwt verifier, explicit claims, bounded coalesced JWKS refresh and safe HTTP middleware with JSON claim copies (D52.3), independent consumers and validated error boundaries; not released.
 
 - L2 D51/D51.1/D51.2 candidates: stdlib neutral router with explicit host/proxy/CORS policy and server, optional chi adapter, and separate health/pprof/metrics operations handler; not released.

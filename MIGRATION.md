@@ -2,6 +2,14 @@
 
 This guide lists the breaking changes and how to adapt.
 
+## Experimental L5 validation and config/yaml candidates (not released)
+
+See [validation/MIGRATION.md](validation/MIGRATION.md): an injected `Validator` instead of the global one, `not_empty` registered as a rule, and `Errors` without field values in place of the library's errors. See [config/yaml/MIGRATION.md](config/yaml/MIGRATION.md) for moving a YAML file from a Viper-based loader: keys keep their case, duplicates and custom tags are errors. Legacy `pkg/utilities/validation`, its AWS consumers and `config/viper` remain unchanged.
+
+## Experimental L4 httpclient candidates (not released)
+
+See [httpclient/MIGRATION.md](httpclient/MIGRATION.md) and [httpclient/resty/MIGRATION.md](httpclient/resty/MIGRATION.md): explicit transport limits and response size, single-origin rule, non-2xx as a response with `CheckStatus`, and retry, breaker and logging composed through `resilience` and `client/logging`. Legacy `http/pkg/rest` and `http/provider/rest` remain unchanged.
+
 ## Experimental L3 JWT candidates (not released)
 
 See [auth/jwt/MIGRATION.md](auth/jwt/MIGRATION.md) and [auth/jwt/http/MIGRATION.md](auth/jwt/http/MIGRATION.md) for explicit issuer/audience/claim names, lazy key cache, borrowed HTTP client and HTTP assembly changes. Legacy router/Cognito code remains unchanged.

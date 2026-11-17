@@ -33,3 +33,8 @@ router/chi	github.com/skolldire/go-engine/router/chi	composition	unreleased	-	pr
 router/operations	github.com/skolldire/go-engine/router/operations	composition	unreleased	-	production	health
 auth/jwt	github.com/skolldire/go-engine/auth/jwt	tool	unreleased	-	production	github.com/golang-jwt/jwt/v5
 auth/jwt/http	github.com/skolldire/go-engine/auth/jwt/http	composition	unreleased	-	production	auth/jwt
+httpclient	github.com/skolldire/go-engine/httpclient	tool	unreleased	-	production	stdlib
+httpclient/resty	github.com/skolldire/go-engine/httpclient/resty	composition	unreleased	-	production	httpclient,github.com/go-resty/resty/v2
+validation	github.com/skolldire/go-engine/validation	tool	unreleased	-	production	github.com/go-playground/validator/v10
+config/yaml	github.com/skolldire/go-engine/config/yaml	source	unreleased	-	production	config,go.yaml.in/yaml/v3
+harness/legacy-inventory	github.com/skolldire/go-engine/harness/legacy-inventory	harness	none	-	basic	stdlib
