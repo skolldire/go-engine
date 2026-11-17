@@ -1,0 +1,17 @@
+# httpapi — experimental
+
+D58 version2 assembles frozen API and isolated operations handlers without engine, environment lookup or external resource ownership. Construct DefaultConfig, explicitly set Router.AllowedHosts/Server.Listen and, when enabled, OperationsRouter.AllowedHosts/OperationsServer.Listen. Supply Routes, borrowed Health and mandatory OnPanic when recovery is enabled. New performs no network or handler/health/ID callbacks; caller middleware factories execute synchronously and their panics propagate.
+
+API order: host/proxy/CORS policy → request ID → recovery → cooperative request timeout → caller middleware → route. Operations uses only its own policy and middleware. There is no implicit authentication, logging, compression or telemetry. Recovery sees the request ID but cannot cover failures before its position or replace committed responses. ErrAbortHandler propagates. A timeout only cancels context, never writes504.
+
+Defaults: operations/health/ping enabled, pprof off; request ID enabled, incoming IDs untrusted, header X-Request-ID; recovery enabled; request timeout0. Server defaults come from router, operations write timeout45s; listeners/allowlists remain required. Zero write timeout means unlimited and passes cross-budget validation. Positive write timeout must exceed API request timeout or profiling duration as applicable. Disabled operations fields/dependencies are ignored.
+
+Config.Validate delegates tool validation in field order, then request-ID/timeout and cross-budgets. New validates dependencies and every route before factories. ConfigError wraps ErrInvalidConfig and delegated errors remain accessible. Configuration and slices are copied; handlers/callbacks/resources are borrowed. Getter server configurations are values. Handler exposes no mutable mux.
+
+Run opens both listeners before serving, closes the first if the second bind fails, cancels/drains both on failure and joins causes. RunListeners transfers ownership even for invalid/repeated calls; never reuse transferred listeners. Nil ctx/listener mismatch is ErrInvalidCall. Invalid arguments do not consume the execution slot; valid attempted startup does. Subsequent execution returns ErrAlreadyStarted. A canceled valid call closes supplied listeners without serving. A private bind-function seam tests second-bind rollback without racing for a freed port. No signal handling, hooks or external resource close. Noncooperative borrowed handlers cannot be forcibly terminated; server deadlines and callback cooperation remain meaningful limitations.
+
+Manual serving is also supported: pass Handler/OperationsHandler and their server-value getters to router.ServeListener, coordinating cancellation in your application. Run provides that coordination when desired. Signal.NotifyContext belongs to main. After Run returns, close resources you own; never close borrowed stdout/loggers merely because HTTP stopped.
+
+See the independent minimal/composed consumers and examples/standalone/app-http. The example uses memory orders, caller-owned health/logging/error responses, no drivers or legacy packages. OnPanic must publish only a generic problem and handle writer failures without a second response. D56.7 instrumentation remains an explicit ecosystem otelhttp recipe. Version0.1.0 is approved by D56.5, publication/E7 remain L21.
+
+See RELEASE_NOTES.md for actual executed checks and outstanding validation; this candidate is not yet fully validated or published.

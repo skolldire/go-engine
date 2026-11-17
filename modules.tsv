@@ -38,3 +38,5 @@ httpclient/resty	github.com/skolldire/go-engine/httpclient/resty	composition	unr
 validation	github.com/skolldire/go-engine/validation	tool	unreleased	-	production	github.com/go-playground/validator/v10
 config/yaml	github.com/skolldire/go-engine/config/yaml	source	unreleased	-	production	config,go.yaml.in/yaml/v3
 harness/legacy-inventory	github.com/skolldire/go-engine/harness/legacy-inventory	harness	none	-	basic	stdlib
+presets/httpapi	github.com/skolldire/go-engine/presets/httpapi	preset	unreleased	-	production	router,router/operations
+examples/standalone/app-http	github.com/skolldire/go-engine/examples/standalone/app-http	harness	none	-	basic	presets/httpapi,router,router/errors,health,logging

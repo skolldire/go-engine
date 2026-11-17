@@ -26,7 +26,9 @@ type ServerConfig struct {
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, ShutdownTimeout: 15 * time.Second, MaxHeaderBytes: 1 << 20}
 }
-func validateServer(c ServerConfig) error {
+
+// Validate checks literal server fields in declaration order without I/O.
+func (c ServerConfig) Validate() error {
 	fields := []struct {
 		name    string
 		invalid bool
@@ -51,7 +53,7 @@ func validateServe(ctx context.Context, c ServerConfig, h http.Handler) error {
 	if ctx == nil {
 		return fmt.Errorf("%w: ctx", ErrInvalidCall)
 	}
-	if err := validateServer(c); err != nil {
+	if err := c.Validate(); err != nil {
 		return err
 	}
 	if nilPointer(h) {
@@ -98,20 +100,23 @@ func ServeListener(ctx context.Context, c ServerConfig, ln net.Listener, h http.
 		}
 		done <- err
 	}()
+	var serveErr error
+	finished := false
 	select {
-	case err := <-done:
-		return err
+	case serveErr = <-done:
+		finished = true
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.ShutdownTimeout)
-		defer cancel()
-		shutdownErr := srv.Shutdown(shutdownCtx)
-		// Shutdown closes the listener even when handlers outlive its deadline.
-		// Close terminates remaining connections after an unsuccessful graceful drain.
-		if shutdownErr != nil {
-			shutdownErr = errors.Join(shutdownErr, srv.Close())
-		}
-		return errors.Join(shutdownErr, <-done)
 	}
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.ShutdownTimeout)
+	defer cancel()
+	shutdownErr := srv.Shutdown(shutdownCtx)
+	if shutdownErr != nil {
+		shutdownErr = errors.Join(shutdownErr, srv.Close())
+	}
+	if !finished {
+		serveErr = <-done
+	}
+	return errors.Join(serveErr, shutdownErr)
 }
 
 // ServeTLS may fail before Serve takes ownership (for example loading a key).
@@ -123,3 +128,6 @@ type ownedListener struct {
 }
 
 func (l *ownedListener) Close() error { l.once.Do(func() { l.err = l.Listener.Close() }); return l.err }
+
+// validateServer preserves the original internal call sites used by regression fixtures.
+func validateServer(c ServerConfig) error { return c.Validate() }

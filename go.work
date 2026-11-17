@@ -2,6 +2,8 @@ go 1.27.4
 
 // Workspace membership mirrors modules.tsv; modules.sh validate enforces equality.
 use (
+	./presets/httpapi
+	./examples/standalone/app-http
 	./auth/jwt/http
 	./auth/jwt
 	./router

@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -335,5 +336,74 @@ func TestPreconfiguredTLSListener(t *testing.T) {
 	}
 	if e != nil || string(body) != "tls" {
 		t.Fatal(string(body), e)
+	}
+}
+
+// A listener failure after admission must drain that server as well as its peer.
+type failAfterActive struct {
+	conn            net.Conn
+	entered, closed chan struct{}
+	taken           bool
+	once            sync.Once
+	cause           error
+}
+
+func (l *failAfterActive) Accept() (net.Conn, error) {
+	if !l.taken {
+		l.taken = true
+		return l.conn, nil
+	}
+	<-l.entered
+	return nil, l.cause
+}
+func (l *failAfterActive) Close() error   { l.once.Do(func() { close(l.closed) }); return nil }
+func (l *failAfterActive) Addr() net.Addr { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
+func TestAcceptFailureDrainsAdmitted(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		server, client := net.Pipe()
+		defer client.Close()
+		entered, release := make(chan struct{}), make(chan struct{})
+		cause := errors.New("accept failed")
+		ln := &failAfterActive{conn: server, entered: entered, closed: make(chan struct{}), cause: cause}
+		cfg := DefaultServerConfig()
+		cfg.Listen = "127.0.0.1:0"
+		done := make(chan error, 1)
+		go func() {
+			done <- ServeListener(context.Background(), cfg, ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				close(entered)
+				<-release
+				_, _ = io.WriteString(w, "drained")
+			}))
+		}()
+		go func() {
+			_, _ = io.WriteString(client, "GET / HTTP/1.1\r\nHost: example.test\r\nConnection: close\r\n\r\n")
+		}()
+		<-ln.closed
+		close(release)
+		body, e := io.ReadAll(client)
+		if e != nil || !strings.Contains(string(body), "drained") {
+			t.Fatal(string(body), e)
+		}
+		if e := <-done; !errors.Is(e, cause) {
+			t.Fatal(e)
+		}
+	})
+}
+func TestPublicServerValidateEquivalence(t *testing.T) {
+	c := DefaultServerConfig()
+	c.Listen = "127.0.0.1:0"
+	for _, edit := range []func(*ServerConfig){func(*ServerConfig) {}, func(c *ServerConfig) { c.Listen = "" }, func(c *ServerConfig) { c.TLSKeyFile = "key" }, func(c *ServerConfig) { c.ReadHeaderTimeout = 0 }} {
+		cfg := c
+		edit(&cfg)
+		old, current := validateServer(cfg), cfg.Validate()
+		if (old == nil) != (current == nil) {
+			t.Fatal(old, current)
+		}
+		if old != nil {
+			var a, b *ConfigError
+			if !errors.As(old, &a) || !errors.As(current, &b) || a.Field != b.Field || a.Reason != b.Reason {
+				t.Fatal(old, current)
+			}
+		}
 	}
 }
