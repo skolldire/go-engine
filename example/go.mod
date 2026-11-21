@@ -3,7 +3,7 @@ module github.com/skolldire/go-engine/example
 go 1.27.4
 
 require (
-	github.com/moby/moby/api v1.56.1
+	github.com/moby/moby/api v1.57.0
 	github.com/rabbitmq/amqp091-go v1.16.0
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/skolldire/go-engine v0.30.0
